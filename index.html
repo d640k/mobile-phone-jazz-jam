@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#14161a">
+<title>Jazz Jam</title>
+<style>
+:root{--bg:#14161a;--panel:#1e2128;--line:#2e333c;--text:#ece9e2;--dim:#8d929b;--accent:#e3a94b;--guide:#5fb7a6;--white:#f4f1ea;--black:#1b1b1d}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:var(--bg);color:var(--text);font:15px/1.3 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;overflow:hidden;overscroll-behavior:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+#app{display:flex;flex-direction:column;height:100vh;height:100dvh;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
+#top{flex:1 1 auto;display:flex;flex-direction:column;min-height:0;padding:8px 10px 6px;gap:7px}
+.row{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+button,select{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 10px;min-height:36px;touch-action:manipulation}
+button.on{border-color:var(--accent);color:var(--accent)}
+button.muted{opacity:.4;text-decoration:line-through}
+#play{background:var(--accent);color:#1d1508;border:none;font-weight:700;min-width:70px}
+#play.playing{background:#cf6550;color:#fff}
+#bpm{min-width:46px;text-align:center;font-variant-numeric:tabular-nums;font-weight:700}
+.sp{flex:1}
+#now{display:flex;align-items:baseline;gap:14px;min-height:40px}
+#cur{font-size:34px;font-weight:800;color:var(--accent);letter-spacing:-.5px}
+#next{font-size:18px;color:var(--dim)}
+#pos{margin-left:auto;color:var(--dim);font-variant-numeric:tabular-nums;font-size:13px}
+#grid{flex:1;min-height:0;overflow-y:auto;display:grid;grid-template-columns:repeat(4,1fr);gap:4px;align-content:start;-webkit-overflow-scrolling:touch}
+.cell{background:var(--panel);border-radius:6px;padding:5px 7px;font-size:14px;display:flex;gap:8px;min-height:32px;align-items:center;border:1px solid transparent;white-space:nowrap;overflow:hidden}
+.cell.cur{border-color:var(--accent);background:#2b2517}
+.cell .rep{color:var(--dim)}
+#strip{display:flex;gap:6px;align-items:center;padding:4px 10px;background:var(--panel);border-top:1px solid var(--line)}
+#strip button{min-height:32px;padding:4px 10px}
+#octlbl{min-width:52px;text-align:center;color:var(--dim);font-size:13px}
+#kb{flex:0 0 42%;position:relative;touch-action:none;background:#000;overflow:hidden}
+.k{position:absolute;top:0}
+.w{background:var(--white);height:100%;border-right:1px solid #bdb7aa;border-radius:0 0 7px 7px}
+.b{background:var(--black);height:60%;z-index:2;border-radius:0 0 5px 5px;box-shadow:inset 0 -4px 0 #333}
+.w.down{background:#f2cd85}.b.down{background:#9a7430}
+.lbl{position:absolute;bottom:6px;left:0;right:0;text-align:center;font-size:11px;color:#8a857a;pointer-events:none}
+.dot{position:absolute;left:50%;width:12px;height:12px;margin-left:-6px;border-radius:50%;pointer-events:none;display:none}
+.w .dot{bottom:24px}.b .dot{bottom:10px}
+.k[data-tone="ct"] .dot{display:block;background:var(--accent);opacity:.75}
+.k[data-tone="gt"] .dot{display:block;background:var(--guide)}
+#sheet{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10;display:flex;justify-content:center;align-items:flex-start;padding:env(safe-area-inset-top) 0 0}
+#sheet[hidden]{display:none}
+.sheetin{background:var(--bg);border:1px solid var(--line);border-radius:0 0 12px 12px;width:100%;max-width:640px;max-height:100%;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px;-webkit-user-select:text;user-select:text}
+.sheetin h2{font-size:17px}
+textarea{width:100%;min-height:150px;font:16px/1.5 ui-monospace,Menlo,monospace;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px;resize:vertical}
+.help{font-size:13px;color:var(--dim);line-height:1.45}
+.err{color:#e8806b;font-size:13px}
+.sl{display:grid;grid-template-columns:70px 1fr 44px;align-items:center;gap:8px;font-size:14px}
+.sl span:last-child{text-align:right;color:var(--dim);font-variant-numeric:tabular-nums}
+input[type=range]{width:100%;accent-color:var(--accent)}
+#startOverlay{position:fixed;inset:0;z-index:20;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:20px}
+#startOverlay button{font-size:20px;padding:14px 34px;background:var(--accent);color:#1d1508;border:none;font-weight:700}
+#startOverlay p{color:var(--dim);font-size:14px;max-width:320px}
+@media (max-height:500px){
+  #top{padding:5px 8px 4px;gap:4px}
+  button,select{min-height:32px;padding:4px 8px;font-size:14px}
+  #now{min-height:30px}#cur{font-size:26px}#next{font-size:15px}
+  .cell{min-height:26px;font-size:13px;padding:3px 6px}
+  #kb{flex-basis:46%}
+  #strip{padding:2px 8px}#strip button{min-height:28px}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="top">
+    <div class="row">
+      <button id="play">Play</button>
+      <button id="slower" aria-label="Slower">−</button>
+      <span id="bpm">140</span>
+      <button id="faster" aria-label="Faster">+</button>
+      <span class="sp"></span>
+      <button id="mDr" class="on">Drums</button>
+      <button id="mBs" class="on">Bass</button>
+      <button id="mCp" class="on">Comp</button>
+      <button id="chartBtn">Chart</button>
+    </div>
+    <div id="now"><span id="cur">—</span><span id="next"></span><span id="pos"></span></div>
+    <div id="grid"></div>
+  </div>
+  <div id="strip">
+    <button id="octDn" aria-label="Octave down">◀</button>
+    <span id="octlbl">C4</span>
+    <button id="octUp" aria-label="Octave up">▶</button>
+    <span class="sp"></span>
+    <button id="tonesBtn" class="on">Tones</button>
+    <button id="susBtn">Sustain</button>
+  </div>
+  <div id="kb"></div>
+</div>
+
+<div id="sheet" hidden>
+  <div class="sheetin">
+    <div class="row"><h2>Chart</h2><span class="sp"></span><button id="done">Done</button></div>
+    <div class="row">
+      <select id="preset"><option value="">Load a preset…</option></select>
+    </div>
+    <textarea id="chartText" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off"></textarea>
+    <div id="errs" class="err"></div>
+    <div class="help">
+      Bars are separated by <b>|</b> or new lines. Up to 4 chords per bar (1 chord = whole bar, 2 = half each).
+      <b>%</b> repeats the previous bar. <b>/</b> holds the chord for a beat.
+      [Labels in brackets] are ignored.<br>
+      Examples: Cmaj7 C6 C69 Dm7 D-7 Dm6 Dm(maj7) G7 G9 G13 G7b9 G7#9 G7alt G7#11 G7sus4 Bø Bm7b5 Ebdim7 Caug Bb/D
+    </div>
+    <div class="sl"><span>Tempo</span><input id="sTempo" type="range" min="40" max="320" step="1"><span id="vTempo"></span></div>
+    <div class="sl"><span>Swing</span><input id="sSwing" type="range" min="50" max="72" step="1"><span id="vSwing"></span></div>
+    <div class="sl"><span>Drums</span><input id="sDr" type="range" min="0" max="100"><span id="vDr"></span></div>
+    <div class="sl"><span>Bass</span><input id="sBs" type="range" min="0" max="100"><span id="vBs"></span></div>
+    <div class="sl"><span>Comp</span><input id="sCp" type="range" min="0" max="100"><span id="vCp"></span></div>
+    <div class="sl"><span>Keys</span><input id="sKy" type="range" min="0" max="100"><span id="vKy"></span></div>
+    <label class="row help"><input id="cCount" type="checkbox"> One-bar count-in</label>
+  </div>
+</div>
+
+<div id="startOverlay">
+  <button id="startBtn">Tap to start</button>
+  <p>Phones only allow sound after a tap. If you hear nothing on iPhone, check the silent switch.</p>
+</div>
+
+<script>
+/*CORE-START*/
+// ---------- Chord parsing ----------
+const NOTE={C:0,D:2,E:4,F:5,G:7,A:9,B:11};
+const acc=a=>a==='#'||a==='♯'?1:(a==='b'||a==='♭'?-1:0);
+const KINDS={
+  maj7:{arp:[0,4,7,11],guide:[4,11],comp:[4,11,2,7],scale:[0,2,4,5,7,9,11]},
+  maj6:{arp:[0,4,7,9],guide:[4,9],comp:[4,9,2,7],scale:[0,2,4,5,7,9,11]},
+  m7:{arp:[0,3,7,10],guide:[3,10],comp:[3,10,2,7],scale:[0,2,3,5,7,9,10]},
+  m6:{arp:[0,3,7,9],guide:[3,9],comp:[3,9,2,7],scale:[0,2,3,5,7,9,11]},
+  mmaj7:{arp:[0,3,7,11],guide:[3,11],comp:[3,11,2,7],scale:[0,2,3,5,7,9,11]},
+  m7b5:{arp:[0,3,6,10],guide:[3,10],comp:[3,10,6,5],scale:[0,2,3,5,6,8,10]},
+  dim:{arp:[0,3,6,9],guide:[3,9],comp:[0,3,6,9],scale:[0,2,3,5,6,8,9,11]},
+  dom:{arp:[0,4,7,10],guide:[4,10],comp:[4,10,2,9],scale:[0,2,4,5,7,9,10]},
+  sus:{arp:[0,5,7,10],guide:[5,10],comp:[5,10,2,9],scale:[0,2,4,5,7,9,10]},
+  aug:{arp:[0,4,8,10],guide:[4,10],comp:[4,8,10,2],scale:[0,2,4,6,8,10]},
+};
+function classify(raw){
+  const q=raw.replace(/[()\s]/g,'');
+  let kind;
+  if(/^[øØ]/.test(q)||/^(min|mi|m|-)7?b5/.test(q)) kind='m7b5';
+  else if(/^(dim|o|°)/.test(q)) kind='dim';
+  else if(/^(maj|Maj|MAJ|Δ|\^|M(?!in|i))/.test(q)) kind=/6/.test(q)?'maj6':'maj7';
+  else if(/^(min|Min|mi|Mi|m|-)/.test(q)){
+    const r=q.replace(/^(min|Min|mi|Mi|m|-)/,'');
+    if(/^(maj|Maj|M|Δ|\^)/.test(r)) kind='mmaj7';
+    else if(/6/.test(r)) kind='m6';
+    else if(/7|9|11|13/.test(r)) kind='m7';
+    else if(r==='') kind='m6';
+    else return null;
+  }
+  else if(/sus/.test(q)) kind='sus';
+  else if(/^(\+|aug)/.test(q)) kind='aug';
+  else if(/6/.test(q)&&!/7/.test(q)) kind='maj6';
+  else if(/7|9|11|13|alt/.test(q)) kind='dom';
+  else if(q===''||/^(add9|add2|2)$/.test(q)) kind='maj6';
+  else return null;
+  const k=KINDS[kind];
+  const c={kind,arp:[...k.arp],guide:[...k.guide],comp:[...k.comp],scale:[...k.scale]};
+  if(kind==='maj7'&&/#11/.test(q)) c.comp=[4,11,2,6];
+  if(kind==='dom'){
+    if(/alt/.test(q)){c.comp=[4,10,3,8];c.scale=[0,1,3,4,6,8,10];c.arp=[0,4,8,10];}
+    else{
+      const b9=/b9/.test(q),s9=/#9/.test(q),b13=/b13|#5|\+5/.test(q),s11=/#11/.test(q);
+      if(b9){c.comp[2]=1;c.scale=[0,1,3,4,6,7,9,10];}
+      if(s9){if(b9)c.comp[3]=3;else c.comp[2]=3;c.scale=[0,1,3,4,6,8,10];}
+      if(b13){if(!(b9&&s9))c.comp[3]=8;c.arp=[0,4,8,10];if(!b9&&!s9)c.scale=[0,2,4,6,8,10];}
+      if(s11&&!b13){c.comp[3]=6;c.scale=[0,2,4,6,7,9,10];}
+    }
+  }
+  return c;
+}
+function parseChord(sym){
+  const r=/^([A-G])([#b♯♭]?)(.*)$/.exec(sym);
+  if(!r) return null;
+  const root=(NOTE[r[1]]+acc(r[2])+12)%12;
+  let rest=r[3],bass=root;
+  const sl=rest.lastIndexOf('/');
+  if(sl>=0){
+    const b=/^([A-G])([#b♯♭]?)$/.exec(rest.slice(sl+1));
+    if(b){bass=(NOTE[b[1]]+acc(b[2])+12)%12;rest=rest.slice(0,sl);}
+  }
+  const q=classify(rest);
+  if(!q) return null;
+  return Object.assign({sym,root,bass},q);
+}
+// ---------- Chart parsing ----------
+// Returns {bars:[[display tokens]], segs:[{chord,start,len}], segOfBeat:[], beats, errors}
+function parseChart(text){
+  const errors=[];
+  const clean=text.replace(/\[[^\]]*\]/g,' ');
+  const rawBars=clean.split(/[|\n]/).map(s=>s.trim()).filter(s=>s.length);
+  const bars=[],segs=[],segOfBeat=[];
+  let prevTokens=null,lastChord=null;
+  for(const rb of rawBar
