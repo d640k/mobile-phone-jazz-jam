@@ -51,6 +51,10 @@ textarea{width:100%;min-height:150px;font:16px/1.5 ui-monospace,Menlo,monospace;
 .err{color:#e8806b;font-size:13px}
 .sl{display:grid;grid-template-columns:70px 1fr 44px;align-items:center;gap:8px;font-size:14px}
 .sl span:last-child{text-align:right;color:var(--dim);font-variant-numeric:tabular-nums}
+#songName{flex:1;min-width:0;font-family:inherit;font-size:16px;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 10px;min-height:36px}
+#mySongs,#preset{flex:1;min-width:0}
+#title:empty{display:none}
+#title{color:var(--dim);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 input[type=range]{width:100%;accent-color:var(--accent)}
 #startOverlay{position:fixed;inset:0;z-index:20;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;text-align:center;padding:20px}
 #startOverlay button{font-size:20px;padding:14px 34px;background:var(--accent);color:#1d1508;border:none;font-weight:700}
@@ -79,6 +83,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
       <button id="mCp" class="on">Comp</button>
       <button id="chartBtn">Chart</button>
     </div>
+    <div id="title"></div>
     <div id="now"><span id="cur">—</span><span id="next"></span><span id="pos"></span></div>
     <div id="grid"></div>
   </div>
@@ -97,8 +102,15 @@ input[type=range]{width:100%;accent-color:var(--accent)}
   <div class="sheetin">
     <div class="row"><h2>Chart</h2><span class="sp"></span><button id="done">Done</button></div>
     <div class="row">
+      <select id="mySongs"><option value="">My songs…</option></select>
       <select id="preset"><option value="">Load a preset…</option></select>
     </div>
+    <div class="row">
+      <input id="songName" type="text" placeholder="Song name" autocomplete="off" autocorrect="off" maxlength="60">
+      <button id="saveSong">Save</button>
+      <button id="delSong">Delete</button>
+    </div>
+    <div id="songMsg" class="help"></div>
     <textarea id="chartText" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off"></textarea>
     <div id="errs" class="err"></div>
     <div class="help">
@@ -345,7 +357,7 @@ const PRESETS={
 };
 
 // ---------- State & storage ----------
-const store={get(k,d){try{const v=localStorage.getItem('jj_'+k);return v==null?d:JSON.parse(v);}catch(e){return d;}},set(k,v){try{localStorage.setItem('jj_'+k,JSON.stringify(v));}catch(e){}}};
+const store={get(k,d){try{const v=localStorage.getItem('jj_'+k);return v==null?d:JSON.parse(v);}catch(e){return d;}},set(k,v){try{localStorage.setItem('jj_'+k,JSON.stringify(v));return true;}catch(e){return false;}}};
 const S={
   chart:store.get('chart',PRESETS["Blues in F"]),
   bpm:store.get('bpm',140),swing:store.get('swing',62),
@@ -353,6 +365,8 @@ const S={
   mute:store.get('mute',{dr:false,bs:false,cp:false}),
   countIn:store.get('countIn',true),tones:store.get('tones',true),
   oct:store.get('oct',null),
+  songName:store.get('songName',''),
+  songs:store.get('songs',{}), // name -> {chart,bpm,swing,saved}
 };
 let song=parseChart(S.chart);
 
@@ -628,15 +642,53 @@ function wireKeyboard(){
 // sheet
 function openSheet(){
   $('chartText').value=S.chart;$('errs').textContent=song.errors.join(' · ');
+  $('songName').value=S.songName;songMsg('');refreshSongList();
   $('sheet').hidden=false;
 }
 function closeSheet(){
+  setSongName($('songName').value.trim());
   S.chart=$('chartText').value;store.set('chart',S.chart);
   song=parseChart(S.chart);renderGrid();
   if(!P.playing)showBeat(null);
   if(song.errors.length){$('errs').textContent=song.errors.join(' · ');}
   if(!song.segs.length){stop();}
   $('sheet').hidden=true;
+}
+// saved songs (stored in this browser's localStorage)
+function songMsg(t){$('songMsg').textContent=t;}
+function setSongName(n){S.songName=n;store.set('songName',n);$('title').textContent=n;}
+function refreshSongList(){
+  const sel=$('mySongs'),names=Object.keys(S.songs).sort((a,b)=>a.localeCompare(b));
+  sel.innerHTML='';
+  const o0=document.createElement('option');o0.value='';o0.textContent=names.length?`My songs (${names.length})…`:'My songs (none yet)';sel.appendChild(o0);
+  names.forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n;sel.appendChild(o);});
+}
+function setSlider(id,val){const s=$('s'+id);s.value=val;s.dispatchEvent(new Event('input'));}
+function saveSong(){
+  const name=$('songName').value.trim();
+  if(!name){songMsg('Give the song a name first.');$('songName').focus();return;}
+  const chart=$('chartText').value;
+  if(!parseChart(chart).segs.length){songMsg('Nothing to save: the chart is empty.');return;}
+  if(S.songs[name]&&name!==S.songName&&!confirm(`Replace the saved “${name}”?`))return;
+  S.songs[name]={chart,bpm:S.bpm,swing:S.swing,saved:Date.now()};
+  if(!store.set('songs',S.songs)){delete S.songs[name];songMsg('Couldn’t save: this browser is blocking storage.');return;}
+  setSongName(name);refreshSongList();
+  songMsg(`Saved “${name}” (tempo ${S.bpm}, swing ${S.swing}%).`);
+}
+function loadSong(name){
+  const s=S.songs[name];if(!s)return;
+  $('chartText').value=s.chart;$('songName').value=name;
+  if(s.bpm)setSlider('Tempo',s.bpm);
+  if(s.swing)setSlider('Swing',s.swing);
+  $('errs').textContent=parseChart(s.chart).errors.join(' · ');
+  songMsg(`Loaded “${name}”. Tap Done to play it.`);
+}
+function deleteSong(){
+  const name=$('songName').value.trim();
+  if(!S.songs[name]){songMsg('No saved song with that name.');return;}
+  if(!confirm(`Delete “${name}”?`))return;
+  delete S.songs[name];store.set('songs',S.songs);refreshSongList();
+  songMsg(`Deleted “${name}”. The chart stays in the editor until you change it.`);
 }
 function bindSlider(id,get,set,fmt){
   const s=$('s'+id),v=$('v'+id);
@@ -656,7 +708,10 @@ function init(){
   $('chartBtn').onclick=openSheet;$('done').onclick=closeSheet;
   const sel=$('preset');
   Object.keys(PRESETS).forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n;sel.appendChild(o);});
-  sel.onchange=()=>{if(sel.value){$('chartText').value=PRESETS[sel.value];$('errs').textContent=parseChart(PRESETS[sel.value]).errors.join(' · ');}sel.value='';};
+  sel.onchange=()=>{if(sel.value){$('chartText').value=PRESETS[sel.value];$('songName').value=sel.value;songMsg('');$('errs').textContent=parseChart(PRESETS[sel.value]).errors.join(' · ');}sel.value='';};
+  const ms=$('mySongs');ms.onchange=()=>{if(ms.value)loadSong(ms.value);ms.value='';};
+  $('saveSong').onclick=saveSong;$('delSong').onclick=deleteSong;
+  refreshSongList();$('title').textContent=S.songName;
   $('chartText').addEventListener('input',()=>{$('errs').textContent=parseChart($('chartText').value).errors.join(' · ');});
   bindSlider('Tempo',()=>S.bpm,v=>setBpm(v));
   bindSlider('Swing',()=>S.swing,v=>{S.swing=v;store.set('swing',v);},v=>v===50?'straight':v+'%');
