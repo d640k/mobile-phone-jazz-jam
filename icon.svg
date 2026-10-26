@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#14161a"/>
+  <!-- beamed eighth notes -->
+  <g fill="#e3a94b">
+    <ellipse cx="196" cy="214" rx="30" ry="22" transform="rotate(-20 196 214)"/>
+    <ellipse cx="306" cy="194" rx="30" ry="22" transform="rotate(-20 306 194)"/>
+    <rect x="215" y="100" width="12" height="112"/>
+    <rect x="325" y="80" width="12" height="112"/>
+    <polygon points="215,100 337,80 337,108 215,128"/>
+  </g>
+  <!-- keyboard -->
+  <g>
+    <rect x="116" y="270" width="280" height="130" rx="10" fill="#f4f1ea"/>
+    <g stroke="#bdb7aa" stroke-width="3">
+      <line x1="156" y1="270" x2="156" y2="400"/>
+      <line x1="196" y1="270" x2="196" y2="400"/>
+      <line x1="236" y1="270" x2="236" y2="400"/>
+      <line x1="276" y1="270" x2="276" y2="400"/>
+      <line x1="316" y1="270" x2="316" y2="400"/>
+      <line x1="356" y1="270" x2="356" y2="400"/>
+    </g>
+    <g fill="#1b1b1d">
+      <rect x="142" y="270" width="28" height="78" rx="4"/>
+      <rect x="182" y="270" width="28" height="78" rx="4"/>
+      <rect x="262" y="270" width="28" height="78" rx="4"/>
+      <rect x="302" y="270" width="28" height="78" rx="4"/>
+      <rect x="342" y="270" width="28" height="78" rx="4"/>
+    </g>
+    <rect x="236" y="270" width="40" height="130" fill="#e3a94b" opacity=".55"/>
+    <rect x="262" y="270" width="14" height="78" fill="#1b1b1d"/>
+  </g>
+</svg>
