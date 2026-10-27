@@ -114,6 +114,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
       <button id="delSong">Delete</button>
     </div>
     <div id="songMsg" class="help"></div>
+    <div class="row help"><label>Style <select id="style"><option value="swing">Swing</option><option value="bossa">Bossa nova</option></select></label><span id="styleNote"></span></div>
     <textarea id="chartText" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off"></textarea>
     <div id="errs" class="err"></div>
     <div class="help">
@@ -358,6 +359,9 @@ const PRESETS={
   "Rhythm changes A section (Bb)":"| Bbmaj7 G7 | Cm7 F7 | Dm7 G7 | Cm7 F7 |\n| Fm7 Bb7 | Ebmaj7 Edim7 | Dm7 G7 | Cm7 F7 |",
   "Autumn-style minor progression (Gm)":"[A] | Cm7 | F7 | Bbmaj7 | Ebmaj7 |\n| Am7b5 | D7 | Gm6 | % |\n[B] | Am7b5 | D7 | Gm6 | % |\n| Cm7 | F7 | Bbmaj7 | Ebmaj7 |\n| Am7b5 | D7 | Gm7 C7 | Fm7 Bb7 |\n| Ebmaj7 | Am7b5 D7 | Gm6 | % |",
   "Modal vamp (D dorian / Eb dorian)":"| Dm7 | % | % | % |\n| % | % | % | % |\n| Ebm7 | % | % | % |\n| Dm7 | % | % | % |",
+  "Bossa: 16-bar minor (Cm)":{style:"bossa",bpm:140,chart:"| Cm7 | % | Fm7 | % |\n| Dø | G7b9 | Cm7 | % |\n| Ebm7 | Ab7 | Dbmaj7 | % |\n| Dø | G7b9 | Cm7 | Dø G7b9 |"},
+  "Bossa: major with turnaround (F)":{style:"bossa",bpm:130,chart:"| Fmaj7 | % | Gm7 | C7 |\n| Fmaj7 | Bbmaj7 | Am7 D7b9 | Gm7 C7 |"},
+  "Bossa: ii–V–I in C":{style:"bossa",bpm:130,chart:"| Dm7 | G7 | Cmaj7 | % |\n| Dm7 | G7 | Cmaj7 | A7b9 |"},
 };
 
 // ---------- State & storage ----------
@@ -370,7 +374,7 @@ const S={
   mute:store.get('mute',{dr:false,bs:false,cp:false}),
   countIn:store.get('countIn',true),tones:store.get('tones',true),
   oct:store.get('oct',null),
-  songName:store.get('songName',''),
+  songName:store.get('songName',''),style:store.get('style','swing'),
   songs:store.get('songs',{}), // name -> {chart,bpm,swing,saved}
 };
 let song=parseChart(S.chart);
@@ -382,7 +386,9 @@ const SMP_DEF={
   kick:{K:0.79,trim:-8,files:{"kick_v1_1":-24.4,"kick_v1_2":-22.8,"kick_v2_1":-13.4,"kick_v2_2":-13.6,"kick_v3_1":-1.4,"kick_v3_2":-1.0}},
   snare:{K:1.0,trim:-9,files:{"snare_1":-25.3,"snare_2":-18.9,"snare_3":-12.6,"snare_4":-8.1,"snare_5":-1.0}},
   hat:{K:0.95,trim:-18,files:{"hat_v1_1":-8.4,"hat_v1_2":-8.4,"hat_v2_1":-1.0,"hat_v2_2":-1.9}},
-  crash:{K:1.67,trim:-12,files:{"crash_v2":-10.7,"crash_v3":-1.0}}
+  crash:{K:1.67,trim:-12,files:{"crash_v2":-10.7,"crash_v3":-1.0}},
+  chh:{K:1.6,trim:-18,files:{"chh_v1_1":-16.5,"chh_v1_2":-13.3,"chh_v2_1":-3.4,"chh_v2_2":-3.9,"chh_v3_1":-2.0,"chh_v3_2":-1.0}},
+  xstick:{K:1.11,trim:-14,files:{"xstick_1":-20.6,"xstick_2":-9.3,"xstick_3":-1.0}}
 };
 const SMP={},SMP_OUT={};const SG=2.8;
 function useS(inst){return S.samples&&SMP[inst]&&SMP[inst].length>0;}
@@ -538,7 +544,7 @@ busCp=mk(0.3,-0.2,true);busKy=mk(0.25,0.1,true);
   DR.crashSLP=ctx.createBiquadFilter();DR.crashSLP.type='lowpass';DR.crashSLP.Q.value=0.5;
   const out=(pan,via)=>{const p=makePan(pan);p.connect(busDr);if(via){via.connect(p);return via;}return p;};
   SMP_OUT.ride=DR.rideLP;SMP_OUT.crash=out(-0.4,DR.crashSLP);
-  SMP_OUT.kick=out(0);SMP_OUT.snare=out(-0.1);SMP_OUT.hat=out(-0.35);
+  SMP_OUT.kick=out(0);SMP_OUT.snare=out(-0.1);SMP_OUT.hat=out(-0.35);SMP_OUT.chh=out(-0.35);SMP_OUT.xstick=out(-0.1);
   loadSamples();loadBass();
   applyVolumes();
   const sb=ctx.createBufferSource();sb.buffer=ctx.createBuffer(1,1,22050);sb.connect(ctx.destination);sb.start(0);
@@ -589,6 +595,8 @@ function tone(t,v,f0,f1,tau){
   o.connect(g);g.connect(busDr);o.start(t);o.stop(t+tau*6+0.05);
 }
 function snare(t,v){if(useS('snare')){playSmp('snare',t,v);return;}noiseHit(t,v,'bandpass',1900,0.6,0.07);tone(t,v*0.5,190,165,0.04);}
+function chh(t,v){if(useS('chh')){playSmp('chh',t,v);return;}DR.hat.gain.setValueAtTime(v*0.8,t);DR.hat.gain.setTargetAtTime(0,t+0.001,0.03);}
+function xstick(t,v){if(useS('xstick')){playSmp('xstick',t,v);return;}noiseHit(t,v*0.6,'bandpass',3200,1.2,0.02);tone(t,v*0.5,1700,1550,0.025);}
 function brushTap(t,v){noiseHit(t,v,'bandpass',2200,0.7,0.08);tone(t,v*0.25,185,170,0.035);}
 function kick(t,v){if(useS('kick')){playSmp('kick',t,v);return;}tone(t,v,105,48,0.09);}
 function click(t,accent){
@@ -646,7 +654,7 @@ function start(){
   if(!song.segs.length){openSheet();return;}
   initAudio();
   P.playing=true;P.step=0;P.nextTime=ctx.currentTime+0.08;
-  P.countSteps=S.countIn?8:0;P.walker=makeWalker();P.compPrev=null;P.compPlan=null;P.uiQ=[];
+  P.countSteps=S.countIn?8:0;P.walker=makeWalker();P.compPrev=null;P.compPlan=null;P.bossaComp=null;P.bRoot=null;P.uiQ=[];
   P.timer=setInterval(tick,25);tick();
   $('play').textContent='Stop';$('play').classList.add('playing');
   try{navigator.wakeLock&&navigator.wakeLock.request('screen').then(l=>P.lock=l).catch(()=>{});}catch(e){}
@@ -661,9 +669,64 @@ function tick(){
   const beatDur=60/S.bpm;
   while(P.nextTime<ctx.currentTime+0.12){
     scheduleStep(P.step,P.nextTime,beatDur);
-    const sw=S.swing/100;
+    const sw=S.style==='bossa'?0.5:S.swing/100;
     P.nextTime+=(P.step%2===1?(1-sw):sw)*beatDur;
     P.step++;
+  }
+}
+// ---------- Bossa nova ----------
+const CLAVE=[0,3,6,10,13];                  // cross-stick: 2-bar bossa clave on straight eighths
+const BOSSA_KICK={0:0.3,3:0.17,4:0.26,7:0.17};
+const BOSSA_COMP=[                          // 2-bar comping cycles: [eighth slot 0-15, length in eighths]
+  [[0,2],[3,2],[6,2],[10,2],[13,2]],
+  [[0,1],[2,2],[5,2],[9,2],[12,1],[14,2]],
+  [[0,3],[3,2],[7,2],[10,3],[14,2]],
+  [[2,2],[5,3],[8,2],[11,2],[13,2]],
+];
+function planBossa(song,bar){
+  const plan=new Map();
+  for(const [s,d] of BOSSA_COMP[Math.floor(Math.random()*BOSSA_COMP.length)])plan.set(s,d);
+  const B=bar*4,covered=new Set([...plan.keys()].map(s=>hitSeg(song,B*2+s).si));
+  for(let b=B;b<B+8;b++){                   // make sure every chord in the 2 bars gets voiced
+    const bb=b%song.beats,si=song.segOfBeat[bb];
+    if(song.segs[si].start!==bb||covered.has(si))continue;
+    const st=(b-B)*2;
+    if(st>0&&!plan.has(st-1))plan.set(st-1,3);else plan.set(st,2);
+    covered.add(si);
+  }
+  return plan;
+}
+function bossaRoot(ch){
+  let r=nearest(ch.bass,P.bRoot??38);
+  if(r>45)r-=12;if(r<BLO)r+=12;
+  P.bRoot=r;return r;
+}
+function bossaFifth(r){return r+7<=45?r+7:r-5;}
+function scheduleBossa(gs,t,beatDur){
+  const beat=Math.floor(gs/2)%song.beats,s8=gs%8,s16=gs%16,bar=Math.floor(beat/4);
+  const H=ms=>T(t+rnd(-ms,ms)/1000);
+  if(DR.swLast){DR.sweep.gain.setValueAtTime(DR.swLast,t);DR.sweep.gain.linearRampToValueAtTime(0,t+0.2);DR.swLast=0;}
+  // drums: closed hi-hat eighths, cross-stick clave, soft kick
+  chh(H(3),(s8%2===0?0.4:0.3)*rnd(0.88,1.08));
+  if(CLAVE.includes(s16))xstick(H(3),0.45*rnd(0.9,1.08));
+  if(BOSSA_KICK[s8])kick(H(3),BOSSA_KICK[s8]*rnd(0.85,1.1));
+  // bass: root (dotted quarter) + fifth (eighth), twice a bar; new chords get their root
+  const si=song.segOfBeat[beat],seg=song.segs[si],ch=seg.chord;
+  const starts=gs%2===0&&seg.start===beat;
+  let bn=null,len=0,vel=0;
+  if(s8===0||((s8===2||s8===4||s8===6)&&starts)){bn=bossaRoot(ch);len=s8===2||s8===6?0.9:1.45;vel=s8===0?0.56:0.5;}
+  else if(s8===3||s8===7){const r=P.bRoot??bossaRoot(ch);bn=s8===3?bossaFifth(r):r;len=0.45;vel=0.4;}
+  else if(s8===4){bn=bossaFifth(P.bRoot??bossaRoot(ch));len=1.45;vel=0.48;}
+  if(bn!==null){bassNote(bn,T(t-0.002),beatDur*len,vel*rnd(0.92,1.05));P.lastBass=bn;}
+  if(gs%2===0)P.uiQ.push({t,beat,bar});
+  // comping: syncopated 2-bar cycle, anticipating chord changes
+  if(s16===0||!P.bossaComp)P.bossaComp=s16===0?planBossa(song,bar):null;
+  if(P.bossaComp&&P.bossaComp.has(s16)){
+    const {si:csi,remain}=hitSeg(song,beat*2+(gs%2));
+    const l=Math.min(P.bossaComp.get(s16),remain);
+    const v=voicingFor(song.segs[csi].chord,P.compPrev);P.compPrev=v;
+    const cv=rnd(0.15,0.21),t0=T(t+rnd(0,0.006)),rt=t+l*beatDur/2*0.85;
+    v.forEach((m,i)=>epNote(m,t0+i*rnd(0.001,0.004),cv*rnd(0.92,1.05),busCp).releaseAt(rt));
   }
 }
 // last-bar fills: eighth slot -> velocity
@@ -676,6 +739,7 @@ function scheduleStep(s,t,beatDur){
   }
   const gs=s-P.countSteps;
   if(!song.beats)return;
+  if(S.style==='bossa'){scheduleBossa(gs,t,beatDur);return;}
   const beat=Math.floor(gs/2)%song.beats;
   const s8=gs%8, bar=Math.floor(beat/4), nBars=song.bars.length;
   const lastBar=bar===nBars-1;
@@ -851,7 +915,13 @@ function closeSheet(){
 }
 // saved songs (stored in this browser's localStorage)
 function songMsg(t){$('songMsg').textContent=t;}
-function setSongName(n){S.songName=n;store.set('songName',n);$('title').textContent=n;}
+function updateTitle(){$('title').textContent=[S.songName,S.style==='bossa'?'Bossa nova':''].filter(Boolean).join(' · ');}
+function setSongName(n){S.songName=n;store.set('songName',n);updateTitle();}
+function setStyle(v){
+  S.style=v==='bossa'?'bossa':'swing';store.set('style',S.style);$('style').value=S.style;
+  $('styleNote').textContent=S.style==='bossa'?'Straight eighths; the Swing slider and drum style don’t apply.':'';
+  P.bossaComp=null;P.compPlan=null;if(ctx)silenceDrums();updateTitle();
+}
 function refreshSongList(){
   const sel=$('mySongs'),names=Object.keys(S.songs).sort((a,b)=>a.localeCompare(b));
   sel.innerHTML='';
@@ -865,16 +935,17 @@ function saveSong(){
   const chart=$('chartText').value;
   if(!parseChart(chart).segs.length){songMsg('Nothing to save: the chart is empty.');return;}
   if(S.songs[name]&&name!==S.songName&&!confirm(`Replace the saved “${name}”?`))return;
-  S.songs[name]={chart,bpm:S.bpm,swing:S.swing,saved:Date.now()};
+  S.songs[name]={chart,bpm:S.bpm,swing:S.swing,style:S.style,saved:Date.now()};
   if(!store.set('songs',S.songs)){delete S.songs[name];songMsg('Couldn’t save: this browser is blocking storage.');return;}
   setSongName(name);refreshSongList();
-  songMsg(`Saved “${name}” (tempo ${S.bpm}, swing ${S.swing}%).`);
+  songMsg(S.style==='bossa'?`Saved “${name}” (bossa nova, tempo ${S.bpm}).`:`Saved “${name}” (tempo ${S.bpm}, swing ${S.swing}%).`);
 }
 function loadSong(name){
   const s=S.songs[name];if(!s)return;
   $('chartText').value=s.chart;$('songName').value=name;
   if(s.bpm)setSlider('Tempo',s.bpm);
   if(s.swing)setSlider('Swing',s.swing);
+  setStyle(s.style||'swing');
   $('errs').textContent=parseChart(s.chart).errors.join(' · ');
   songMsg(`Loaded “${name}”. Tap Done to play it.`);
 }
@@ -902,10 +973,19 @@ function init(){
   $('chartBtn').onclick=openSheet;$('done').onclick=closeSheet;
   const sel=$('preset');
   Object.keys(PRESETS).forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n;sel.appendChild(o);});
-  sel.onchange=()=>{if(sel.value){$('chartText').value=PRESETS[sel.value];$('songName').value=sel.value;songMsg('');$('errs').textContent=parseChart(PRESETS[sel.value]).errors.join(' · ');}sel.value='';};
+  sel.onchange=()=>{
+    if(sel.value){
+      const pv=PRESETS[sel.value],chart=typeof pv==='string'?pv:pv.chart;
+      $('chartText').value=chart;$('songName').value=sel.value;songMsg('');
+      setStyle(typeof pv==='string'?'swing':pv.style);if(pv.bpm)setSlider('Tempo',pv.bpm);
+      $('errs').textContent=parseChart(chart).errors.join(' · ');
+    }
+    sel.value='';
+  };
+  $('style').onchange=e=>setStyle(e.target.value);setStyle(S.style);
   const ms=$('mySongs');ms.onchange=()=>{if(ms.value)loadSong(ms.value);ms.value='';};
   $('saveSong').onclick=saveSong;$('delSong').onclick=deleteSong;
-  refreshSongList();$('title').textContent=S.songName;
+  refreshSongList();updateTitle();
   $('chartText').addEventListener('input',()=>{$('errs').textContent=parseChart($('chartText').value).errors.join(' · ');});
   bindSlider('Tempo',()=>S.bpm,v=>setBpm(v));
   bindSlider('Swing',()=>S.swing,v=>{S.swing=v;store.set('swing',v);},v=>v===50?'straight':v+'%');
