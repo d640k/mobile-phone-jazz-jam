@@ -131,6 +131,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
     <div class="sl"><span>Cymbal tone</span><input id="sCy" type="range" min="0" max="100"><span id="vCy"></span></div>
     <div class="sl"><span>Room</span><input id="sRv" type="range" min="0" max="100"><span id="vRv"></span></div>
     <div class="row help"><label>Drums <select id="drumStyle"><option value="auto">Auto (brushes under 110)</option><option value="ride">Sticks &amp; ride</option><option value="brushes">Brushes</option></select></label><label class="row"><input id="cTrem" type="checkbox"> Keys tremolo</label></div>
+    <label class="row help"><input id="cSmp" type="checkbox"> Recorded drums (ride, kick, snare, hi-hat, crash)</label>
     <label class="row help"><input id="cCount" type="checkbox"> One-bar count-in</label>
   </div>
 </div>
@@ -364,7 +365,7 @@ const S={
   chart:store.get('chart',PRESETS["Blues in F"]),
   bpm:store.get('bpm',140),swing:store.get('swing',62),
   vol:Object.assign({dr:70,bs:85,cp:55,ky:80,rv:35,cy:50},store.get('vol',{})),
-  drumStyle:store.get('drumStyle','auto'),trem:store.get('trem',false),
+  drumStyle:store.get('drumStyle','auto'),samples:store.get('samples',true),trem:store.get('trem',false),
   mute:store.get('mute',{dr:false,bs:false,cp:false}),
   countIn:store.get('countIn',true),tones:store.get('tones',true),
   oct:store.get('oct',null),
@@ -372,6 +373,44 @@ const S={
   songs:store.get('songs',{}), // name -> {chart,bpm,swing,saved}
 };
 let song=parseChart(S.chart);
+
+// ---------- Drum samples (Virtuosity Drums, CC0; see drums/README.md) ----------
+// files: name -> peak dB of that layer. Velocity picks the closest-sounding layer, then fine-tunes its gain.
+const SMP_DEF={
+  ride:{K:0.91,trim:-10,files:{"ride_v1_1":-19.4,"ride_v1_2":-19.2,"ride_v1_3":-17.5,"ride_v2_1":-3.9,"ride_v2_2":-7.9,"ride_v2_3":-6.6,"ride_v3_1":-2.3,"ride_v3_2":-1.0,"ride_v3_3":-2.0}},
+  kick:{K:0.79,trim:-8,files:{"kick_v1_1":-24.4,"kick_v1_2":-22.8,"kick_v2_1":-13.4,"kick_v2_2":-13.6,"kick_v3_1":-1.4,"kick_v3_2":-1.0}},
+  snare:{K:1.0,trim:-9,files:{"snare_1":-25.3,"snare_2":-18.9,"snare_3":-12.6,"snare_4":-8.1,"snare_5":-1.0}},
+  hat:{K:0.95,trim:-18,files:{"hat_v1_1":-8.4,"hat_v1_2":-8.4,"hat_v2_1":-1.0,"hat_v2_2":-1.9}},
+  crash:{K:1.67,trim:-12,files:{"crash_v2":-10.7,"crash_v3":-1.0}}
+};
+const SMP={},SMP_OUT={};const SG=2.8;
+function useS(inst){return S.samples&&SMP[inst]&&SMP[inst].length>0;}
+function onsetOf(buf){
+  const d=buf.getChannelData(0),n=Math.min(d.length,Math.floor(buf.sampleRate*0.2));
+  let pk=0;for(let i=0;i<n;i++)pk=Math.max(pk,Math.abs(d[i]));
+  for(let i=0;i<n;i++)if(Math.abs(d[i])>pk*0.02)return Math.max(0,i/buf.sampleRate-0.0005);
+  return 0;
+}
+function loadSamples(){
+  for(const [inst,d] of Object.entries(SMP_DEF)){
+    SMP[inst]=[];
+    for(const [name,db] of Object.entries(d.files)){
+      fetch('drums/'+name+'.mp3').then(r=>{if(!r.ok)throw new Error(r.status);return r.arrayBuffer();})
+        .then(b=>new Promise((ok,no)=>ctx.decodeAudioData(b,ok,no)))
+        .then(buf=>{SMP[inst].push({buf,db,off:onsetOf(buf)});})
+        .catch(()=>{}); // missing or undecodable: that piece keeps its synth sound
+    }
+  }
+}
+function playSmp(inst,t,v){
+  const d=SMP_DEF[inst],tgt=20*Math.log10(Math.max(1e-4,v*d.K));
+  let best=null,bd=1e9;
+  for(const s of SMP[inst]){const dd=Math.abs(s.db-tgt)+Math.random()*1.5;if(dd<bd){bd=dd;best=s;}}
+  const g=Math.min(2,Math.max(0.3,Math.pow(10,(tgt-best.db)/20)))*Math.pow(10,d.trim/20)*SG;
+  const src=ctx.createBufferSource();src.buffer=best.buf;
+  const gn=ctx.createGain();gn.gain.value=g;
+  src.connect(gn);gn.connect(SMP_OUT[inst]);src.start(t,best.off);
+}
 
 // ---------- Audio ----------
 let ctx,master,busDr,busBs,busCp,busKy,revIn,revOut,epTrem,noiseBuf;
@@ -455,6 +494,12 @@ function initAudio(){
   const swBP=ctx.createBiquadFilter();swBP.type='bandpass';swBP.frequency.value=3000;swBP.Q.value=0.6;
   nz.connect(swBP);DR.swF=swBP.frequency;
   DR.sweep=vca(-0.1);swBP.connect(DR.sweep);
+  // sample outputs: ride shares the tone control (but skips the synth's harsh-band dip)
+  DR.crashSLP=ctx.createBiquadFilter();DR.crashSLP.type='lowpass';DR.crashSLP.Q.value=0.5;
+  const out=(pan,via)=>{const p=makePan(pan);p.connect(busDr);if(via){via.connect(p);return via;}return p;};
+  SMP_OUT.ride=DR.rideLP;SMP_OUT.crash=out(-0.4,DR.crashSLP);
+  SMP_OUT.kick=out(0);SMP_OUT.snare=out(-0.1);SMP_OUT.hat=out(-0.35);
+  loadSamples();
   applyVolumes();
   const sb=ctx.createBufferSource();sb.buffer=ctx.createBuffer(1,1,22050);sb.connect(ctx.destination);sb.start(0);
   if(ctx.state!=='running')ctx.resume();
@@ -468,16 +513,17 @@ function applyVolumes(){
   busKy.gain.value=v(S.vol.ky,false);
   revOut.gain.value=Math.pow(S.vol.rv/100,1.2)*1.6;
   epTrem.gain.value=S.trem?0.55:0;
-  const lp=3000*Math.pow(2,S.vol.cy/100*2); // 3 kHz (dark) .. 12 kHz (bright)
-  DR.rideLP.frequency.value=lp;DR.crashLP.frequency.value=Math.min(16000,lp*1.3);
+  const lp=3000*Math.pow(2,S.vol.cy/100*2.74); // 3 kHz (dark) .. 20 kHz (open)
+  DR.rideLP.frequency.value=lp;DR.crashLP.frequency.value=DR.crashSLP.frequency.value=Math.min(20000,lp*1.3);
 }
 function brushes(){return S.drumStyle==='brushes'||(S.drumStyle!=='ride'&&S.bpm<110);}
 function ride(t,v){
+  if(useS('ride')){playSmp('ride',t,v);return;}
   DR.ping.gain.setValueAtTime(v,t);DR.ping.gain.setTargetAtTime(0,t+0.002,0.035);
   DR.wash.gain.setTargetAtTime(v*1.15,t,0.004);DR.wash.gain.setTargetAtTime(0,t+0.012,0.55);
 }
-function hat(t,v){DR.hat.gain.setValueAtTime(v,t);DR.hat.gain.setTargetAtTime(0,t+0.001,0.02);}
-function crash(t,v){DR.crash.gain.setValueAtTime(v,t);DR.crash.gain.setTargetAtTime(0,t+0.005,0.85);}
+function hat(t,v){if(useS('hat')){playSmp('hat',t,v);return;}DR.hat.gain.setValueAtTime(v,t);DR.hat.gain.setTargetAtTime(0,t+0.001,0.02);}
+function crash(t,v){if(useS('crash')){playSmp('crash',t,v);return;}DR.crash.gain.setValueAtTime(v,t);DR.crash.gain.setTargetAtTime(0,t+0.005,0.85);}
 // one brush stroke across a beat: swells then fades, with the pitch of the swish moving
 function sweep(t,dur,v){
   const g=DR.sweep.gain;
@@ -502,9 +548,9 @@ function tone(t,v,f0,f1,tau){
   g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(v,t+0.003);g.gain.setTargetAtTime(0,t+0.004,tau);
   o.connect(g);g.connect(busDr);o.start(t);o.stop(t+tau*6+0.05);
 }
-function snare(t,v){noiseHit(t,v,'bandpass',1900,0.6,0.07);tone(t,v*0.5,190,165,0.04);}
+function snare(t,v){if(useS('snare')){playSmp('snare',t,v);return;}noiseHit(t,v,'bandpass',1900,0.6,0.07);tone(t,v*0.5,190,165,0.04);}
 function brushTap(t,v){noiseHit(t,v,'bandpass',2200,0.7,0.08);tone(t,v*0.25,185,170,0.035);}
-function kick(t,v){tone(t,v,105,48,0.09);}
+function kick(t,v){if(useS('kick')){playSmp('kick',t,v);return;}tone(t,v,105,48,0.09);}
 function click(t,accent){
   const o=ctx.createOscillator(),g=ctx.createGain();o.type='square';o.frequency.value=accent?2100:1500;
   g.gain.setValueAtTime(0.25,t);g.gain.exponentialRampToValueAtTime(0.0001,t+0.04);
@@ -825,6 +871,7 @@ function init(){
   for(const [id,k] of [['Dr','dr'],['Bs','bs'],['Cp','cp'],['Ky','ky'],['Rv','rv'],['Cy','cy']])
     bindSlider(id,()=>S.vol[k],v=>{S.vol[k]=v;store.set('vol',S.vol);applyVolumes();});
   $('drumStyle').value=S.drumStyle;$('drumStyle').onchange=e=>{S.drumStyle=e.target.value;store.set('drumStyle',S.drumStyle);if(ctx)silenceDrums();};
+  $('cSmp').checked=S.samples;$('cSmp').onchange=e=>{S.samples=e.target.checked;store.set('samples',S.samples);};
   $('cTrem').checked=S.trem;$('cTrem').onchange=e=>{S.trem=e.target.checked;store.set('trem',S.trem);applyVolumes();};
   $('cCount').checked=S.countIn;$('cCount').onchange=e=>{S.countIn=e.target.checked;store.set('countIn',S.countIn);};
   $('tonesBtn').classList.toggle('on',S.tones);
