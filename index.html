@@ -487,7 +487,16 @@ function initAudio(){
     if(trem&&p.pan)epTrem.connect(p.pan);
     return g;
   };
-  busDr=mk(0.2,0);busBs=mk(0.06,0);busCp=mk(0.3,-0.2,true);busKy=mk(0.25,0.1,true);
+  busDr=mk(0.2,0);
+  // bass: presence EQ + gentle compression so it reads on small phone speakers
+  const bsOut=mk(0.06,0);busBs=ctx.createGain();
+  const bLo=ctx.createBiquadFilter();bLo.type='peaking';bLo.frequency.value=240;bLo.Q.value=0.9;bLo.gain.value=5;
+  const bMid=ctx.createBiquadFilter();bMid.type='peaking';bMid.frequency.value=800;bMid.Q.value=1;bMid.gain.value=4;
+  const bCmp=ctx.createDynamicsCompressor();bCmp.threshold.value=-20;bCmp.knee.value=8;bCmp.ratio.value=3;bCmp.attack.value=0.004;bCmp.release.value=0.15;
+  const bMk=ctx.createGain();bMk.gain.value=0.7;DR.bassMakeup=bMk;
+  busBs.connect(bLo);bLo.connect(bMid);bMid.connect(bCmp);bCmp.connect(bMk);bMk.connect(bsOut);
+  busBs.tap=bsOut;
+busCp=mk(0.3,-0.2,true);busKy=mk(0.25,0.1,true);
   // shared noise + metallic sources for cymbals and brushes
   noiseBuf=ctx.createBuffer(1,ctx.sampleRate*2,ctx.sampleRate);
   const nd=noiseBuf.getChannelData(0);for(let i=0;i<nd.length;i++)nd[i]=Math.random()*2-1;
@@ -538,7 +547,7 @@ function initAudio(){
 function applyVolumes(){
   if(!ctx)return;
   const v=(x,m)=>m?0:Math.pow(x/100,1.5);
-  busDr.gain.value=v(S.vol.dr,S.mute.dr)*1.6;
+  busDr.gain.value=v(S.vol.dr,S.mute.dr)*0.9;
   busBs.gain.value=v(S.vol.bs,S.mute.bs)*0.6;
   busCp.gain.value=v(S.vol.cp,S.mute.cp)*1.05;
   busKy.gain.value=v(S.vol.ky,false);
