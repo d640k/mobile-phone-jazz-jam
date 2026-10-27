@@ -55,7 +55,7 @@ button.muted{opacity:.4;text-decoration:line-through}
 textarea{width:100%;min-height:150px;font:16px/1.5 ui-monospace,Menlo,monospace;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px;resize:vertical}
 .help{font-size:13px;color:var(--dim);line-height:1.45}
 .err{color:#e8806b;font-size:13px}
-.sl{display:grid;grid-template-columns:70px 1fr 44px;align-items:center;gap:8px;font-size:14px}
+.sl{display:grid;grid-template-columns:96px 1fr 44px;align-items:center;gap:8px;font-size:14px}
 .sl span:last-child{text-align:right;color:var(--dim);font-variant-numeric:tabular-nums}
 #songName{flex:1;min-width:0;font-family:inherit;font-size:16px;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 10px;min-height:36px}
 #mySongs,#preset{flex:1;min-width:0}
@@ -128,6 +128,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
     <div class="sl"><span>Bass</span><input id="sBs" type="range" min="0" max="100"><span id="vBs"></span></div>
     <div class="sl"><span>Comp</span><input id="sCp" type="range" min="0" max="100"><span id="vCp"></span></div>
     <div class="sl"><span>Keys</span><input id="sKy" type="range" min="0" max="100"><span id="vKy"></span></div>
+    <div class="sl"><span>Cymbal tone</span><input id="sCy" type="range" min="0" max="100"><span id="vCy"></span></div>
     <div class="sl"><span>Room</span><input id="sRv" type="range" min="0" max="100"><span id="vRv"></span></div>
     <div class="row help"><label>Drums <select id="drumStyle"><option value="auto">Auto (brushes under 110)</option><option value="ride">Sticks &amp; ride</option><option value="brushes">Brushes</option></select></label><label class="row"><input id="cTrem" type="checkbox"> Keys tremolo</label></div>
     <label class="row help"><input id="cCount" type="checkbox"> One-bar count-in</label>
@@ -362,7 +363,7 @@ const store={get(k,d){try{const v=localStorage.getItem('jj_'+k);return v==null?d
 const S={
   chart:store.get('chart',PRESETS["Blues in F"]),
   bpm:store.get('bpm',140),swing:store.get('swing',62),
-  vol:Object.assign({dr:70,bs:85,cp:55,ky:80,rv:35},store.get('vol',{})),
+  vol:Object.assign({dr:70,bs:85,cp:55,ky:80,rv:35,cy:50},store.get('vol',{})),
   drumStyle:store.get('drumStyle','auto'),trem:store.get('trem',false),
   mute:store.get('mute',{dr:false,bs:false,cp:false}),
   countIn:store.get('countIn',true),tones:store.get('tones',true),
@@ -425,15 +426,20 @@ function initAudio(){
   [263,400,531,588,678,743,903,1087].forEach(f=>{const o=ctx.createOscillator();o.type='square';o.frequency.value=f;o.connect(metal);o.start();});
   const nzc=ctx.createGain();nzc.gain.value=0.16;nz.connect(nzc);
   const vca=(pan)=>{const g=ctx.createGain();g.gain.value=0;const p=makePan(pan);g.connect(p);p.connect(busDr);return g;};
-  // ride: long shimmering wash + short bright ping
-  const rBP=ctx.createBiquadFilter();rBP.type='bandpass';rBP.frequency.value=6500;rBP.Q.value=0.45;
-  const rHP=ctx.createBiquadFilter();rHP.type='highpass';rHP.frequency.value=3200;
-  const sh=ctx.createOscillator();sh.frequency.value=0.21;const shg=ctx.createGain();shg.gain.value=1100;sh.connect(shg);shg.connect(rBP.frequency);sh.start();
-  metal.connect(rBP);nzc.connect(rBP);rBP.connect(rHP);
-  DR.wash=vca(0.3);rHP.connect(DR.wash);
-  const ping=ctx.createGain();ping.gain.value=0.22;
-  [2795,3420,4157,5089,6232].forEach((f,i)=>{const o=ctx.createOscillator();o.frequency.value=f;const g=ctx.createGain();g.gain.value=1/(i+1.5);o.connect(g);g.connect(ping);o.start();});
-  DR.ping=vca(0.3);ping.connect(DR.ping);
+  // ride: smooth wash + soft stick ping, through a dip at the harsh 3-4 kHz zone and a tone control
+  const rBP=ctx.createBiquadFilter();rBP.type='bandpass';rBP.frequency.value=5200;rBP.Q.value=0.35;
+  const rHP=ctx.createBiquadFilter();rHP.type='highpass';rHP.frequency.value=2200;
+  const sh=ctx.createOscillator();sh.frequency.value=0.21;const shg=ctx.createGain();shg.gain.value=700;sh.connect(shg);shg.connect(rBP.frequency);sh.start();
+  const mlow=ctx.createGain();mlow.gain.value=0.4;metal.connect(mlow);
+  mlow.connect(rBP);nzc.connect(rBP);rBP.connect(rHP);
+  DR.wash=ctx.createGain();DR.wash.gain.value=0;rHP.connect(DR.wash);
+  const ping=ctx.createGain();ping.gain.value=0.16;
+  [1610,2330,3110,4020].forEach((f,i)=>{const o=ctx.createOscillator();o.frequency.value=f;const g=ctx.createGain();g.gain.value=1/(i+1.5);o.connect(g);g.connect(ping);o.start();});
+  DR.ping=ctx.createGain();DR.ping.gain.value=0;ping.connect(DR.ping);
+  const dip=ctx.createBiquadFilter();dip.type='peaking';dip.frequency.value=3400;dip.Q.value=1.2;dip.gain.value=-5;
+  DR.rideLP=ctx.createBiquadFilter();DR.rideLP.type='lowpass';DR.rideLP.Q.value=0.5;
+  const rPan=makePan(0.3);
+  DR.wash.connect(dip);DR.ping.connect(dip);dip.connect(DR.rideLP);DR.rideLP.connect(rPan);rPan.connect(busDr);
   // hi-hat foot chick
   const hHP=ctx.createBiquadFilter();hHP.type='highpass';hHP.frequency.value=7000;
   const hBP=ctx.createBiquadFilter();hBP.type='bandpass';hBP.frequency.value=9500;hBP.Q.value=0.8;
@@ -442,8 +448,9 @@ function initAudio(){
   // crash
   const cHP=ctx.createBiquadFilter();cHP.type='highpass';cHP.frequency.value=3800;
   const nzx=ctx.createGain();nzx.gain.value=0.35;nz.connect(nzx);
-  metal.connect(cHP);nzx.connect(cHP);
-  DR.crash=vca(-0.4);cHP.connect(DR.crash);
+  DR.crashLP=ctx.createBiquadFilter();DR.crashLP.type='lowpass';DR.crashLP.Q.value=0.5;
+  metal.connect(cHP);nzx.connect(cHP);cHP.connect(DR.crashLP);
+  DR.crash=vca(-0.4);DR.crashLP.connect(DR.crash);
   // brush sweep
   const swBP=ctx.createBiquadFilter();swBP.type='bandpass';swBP.frequency.value=3000;swBP.Q.value=0.6;
   nz.connect(swBP);DR.swF=swBP.frequency;
@@ -461,11 +468,13 @@ function applyVolumes(){
   busKy.gain.value=v(S.vol.ky,false);
   revOut.gain.value=Math.pow(S.vol.rv/100,1.2)*1.6;
   epTrem.gain.value=S.trem?0.55:0;
+  const lp=3000*Math.pow(2,S.vol.cy/100*2); // 3 kHz (dark) .. 12 kHz (bright)
+  DR.rideLP.frequency.value=lp;DR.crashLP.frequency.value=Math.min(16000,lp*1.3);
 }
 function brushes(){return S.drumStyle==='brushes'||(S.drumStyle!=='ride'&&S.bpm<110);}
 function ride(t,v){
-  DR.ping.gain.setValueAtTime(v,t);DR.ping.gain.setTargetAtTime(0,t+0.002,0.045);
-  DR.wash.gain.setValueAtTime(v*1.0,t);DR.wash.gain.setTargetAtTime(0,t+0.004,0.5);
+  DR.ping.gain.setValueAtTime(v,t);DR.ping.gain.setTargetAtTime(0,t+0.002,0.035);
+  DR.wash.gain.setTargetAtTime(v*1.15,t,0.004);DR.wash.gain.setTargetAtTime(0,t+0.012,0.55);
 }
 function hat(t,v){DR.hat.gain.setValueAtTime(v,t);DR.hat.gain.setTargetAtTime(0,t+0.001,0.02);}
 function crash(t,v){DR.crash.gain.setValueAtTime(v,t);DR.crash.gain.setTargetAtTime(0,t+0.005,0.85);}
@@ -813,7 +822,7 @@ function init(){
   $('chartText').addEventListener('input',()=>{$('errs').textContent=parseChart($('chartText').value).errors.join(' · ');});
   bindSlider('Tempo',()=>S.bpm,v=>setBpm(v));
   bindSlider('Swing',()=>S.swing,v=>{S.swing=v;store.set('swing',v);},v=>v===50?'straight':v+'%');
-  for(const [id,k] of [['Dr','dr'],['Bs','bs'],['Cp','cp'],['Ky','ky'],['Rv','rv']])
+  for(const [id,k] of [['Dr','dr'],['Bs','bs'],['Cp','cp'],['Ky','ky'],['Rv','rv'],['Cy','cy']])
     bindSlider(id,()=>S.vol[k],v=>{S.vol[k]=v;store.set('vol',S.vol);applyVolumes();});
   $('drumStyle').value=S.drumStyle;$('drumStyle').onchange=e=>{S.drumStyle=e.target.value;store.set('drumStyle',S.drumStyle);if(ctx)silenceDrums();};
   $('cTrem').checked=S.trem;$('cTrem').onchange=e=>{S.trem=e.target.checked;store.set('trem',S.trem);applyVolumes();};
