@@ -35,9 +35,10 @@ button.muted{opacity:.4;text-decoration:line-through}
 .cell{background:var(--panel);border-radius:6px;padding:5px 7px;font-size:14px;display:flex;gap:8px;min-height:32px;align-items:center;border:1px solid transparent;white-space:nowrap;overflow:hidden}
 .cell.cur{border-color:var(--accent);background:#2b2517}
 .cell .rep{color:var(--dim)}
-#strip{display:flex;gap:6px;align-items:center;padding:4px 10px;background:var(--panel);border-top:1px solid var(--line)}
-#strip button{min-height:32px;padding:4px 10px}
-#octlbl{min-width:52px;text-align:center;color:var(--dim);font-size:13px}
+#strip{display:flex;flex-wrap:wrap;gap:5px;align-items:center;padding:4px 10px;background:var(--panel);border-top:1px solid var(--line)}
+#strip button,#strip select{min-height:32px;padding:4px 7px}
+#strip .sp{flex:1 1 0;min-width:0}
+#octlbl{min-width:30px;text-align:center;color:var(--dim);font-size:13px}
 #kb{flex:0 0 42%;position:relative;touch-action:none;background:#000;overflow:hidden}
 .k{position:absolute;top:0}
 .w{background:var(--white);height:100%;border-right:1px solid #bdb7aa;border-radius:0 0 7px 7px}
@@ -95,6 +96,8 @@ input[type=range]{width:100%;accent-color:var(--accent)}
     <span id="octlbl">C4</span>
     <button id="octUp" aria-label="Octave up">▶</button>
     <span class="sp"></span>
+    <select id="keyInst" aria-label="Keyboard sound"><option value="piano">Piano</option><option value="rhodes">Rhodes</option><option value="organ">B3 organ</option><option value="synth">Synth EP</option></select>
+    <button id="leslieBtn" hidden>Leslie: slow</button>
     <button id="tonesBtn" class="on">Tones</button>
     <button id="susBtn">Sustain</button>
   </div>
@@ -374,7 +377,7 @@ const S={
   mute:store.get('mute',{dr:false,bs:false,cp:false}),
   countIn:store.get('countIn',true),tones:store.get('tones',true),
   oct:store.get('oct',null),
-  songName:store.get('songName',''),style:store.get('style','swing'),
+  songName:store.get('songName',''),keyInst:store.get('keyInst','piano'),leslieFast:false,style:store.get('style','swing'),
   songs:store.get('songs',{}), // name -> {chart,bpm,swing,saved}
 };
 let song=parseChart(S.chart);
@@ -449,6 +452,107 @@ function bassSmp(m,t,dur,v,dead){
   src.start(t,s.off);src.stop(t+dur+0.4);
 }
 
+// ---------- Keyboard instruments (what you play) ----------
+// Sampled: Salamander Grand Piano (CC BY 3.0) and jRhodes3d (CC BY-NC 4.0); see keys/README.md.
+// notes: MIDI -> loudness correction in dB (evens out the recordings)
+const KEYS_DEF={
+  piano:{rel:0.09,gain:1.35,notes:{"21":-2.3,"24":-1.2,"27":-1.7,"30":-1.4,"33":-0.1,"36":-0.6,"39":-1.0,"42":-1.6,"45":-0.6,"48":-1.4,"51":-1.8,"54":3.2,"57":3.5,"60":-4.1,"63":-0.5,"66":-1.7,"69":0.1,"72":4.4,"75":1.7,"78":-1.7,"81":1.3,"84":-0.0,"87":0.2,"90":2.0,"93":4.0,"96":2.5,"99":8.0,"102":6.4,"105":4.8,"108":7.7}},
+  rhodes:{rel:0.06,gain:0.53,notes:{"29":-0.3,"35":-1.1,"40":-0.5,"45":0.2,"50":-0.4,"55":0.4,"59":1.6,"62":0.3,"65":-2.4,"71":-0.1,"76":-1.6,"81":3.6,"86":1.6,"91":4.6,"96":8.0}},
+};
+const KEYS={};
+function keysReady(inst){const K=KEYS[inst];return !!K&&K.loaded===K.total;}
+function loadKeys(inst){
+  if(!KEYS_DEF[inst]||KEYS[inst])return;
+  const d=KEYS_DEF[inst],K=KEYS[inst]={map:{},loaded:0,total:Object.keys(d.notes).length};
+  for(const [m,db] of Object.entries(d.notes)){
+    fetch('keys/'+inst+'_'+m+'.mp3').then(r=>{if(!r.ok)throw new Error(r.status);return r.arrayBuffer();})
+      .then(b=>new Promise((ok,no)=>ctx.decodeAudioData(b,ok,no)))
+      .then(buf=>{K.map[m]={buf,off:onsetOf(buf),g:Math.pow(10,db/20)};K.loaded++;updateKeysLabel();})
+      .catch(()=>{});
+  }
+}
+function sampVoice(inst,m){
+  const K=KEYS[inst],d=KEYS_DEF[inst];
+  let best=null,bd=99;for(const k in K.map){const dd=Math.abs(m-k);if(dd<bd){bd=dd;best=+k;}}
+  const s=K.map[best],t=ctx.currentTime;
+  const src=ctx.createBufferSource();src.buffer=s.buf;src.playbackRate.value=Math.pow(2,(m-best)/12);
+  const g=ctx.createGain();g.gain.value=s.g*d.gain;src.connect(g);g.connect(busKy);src.start(t,s.off);
+  let done=false;
+  return{releaseNow(){if(done)return;done=true;const n=ctx.currentTime;g.gain.cancelScheduledValues(n);g.gain.setValueAtTime(g.gain.value,n);g.gain.setTargetAtTime(0,n,d.rel);src.stop(n+d.rel*10);}};
+}
+// Hammond-style organ: drawbars 888000000, 3rd-harmonic percussion (single trigger), key click,
+// mild tube drive and a two-rotor Leslie.
+const DRAWBARS=[[0.5,8],[1,8],[1.5,8]];   // [harmonic ratio, drawbar 0-8]: 16', 8', 5 1/3'
+const ORG={held:0};
+function initOrgan(){
+  ORG.in=ctx.createGain();ORG.in.gain.value=1;
+  const pre=ctx.createGain();pre.gain.value=1.6;
+  const drive=ctx.createWaveShaper();const n=1024,c=new Float32Array(n);
+  for(let i=0;i<n;i++){const x=i/(n-1)*2-1;c[i]=Math.tanh(1.6*x)/Math.tanh(1.6);}drive.curve=c;
+  const post=ctx.createGain();post.gain.value=0.9;
+  ORG.in.connect(pre);pre.connect(drive);drive.connect(post);
+  const merger=ctx.createChannelMerger(2);merger.connect(busKy);
+  const rotor=(type,dDepth,aDepth,speeds,gain)=>{
+    const f=ctx.createBiquadFilter();f.type=type;f.frequency.value=800;post.connect(f);
+    const lfo=ctx.createOscillator();lfo.frequency.value=speeds[0];lfo.start();
+    const mk=(sign)=>{
+      const dl=ctx.createDelay(0.02);dl.delayTime.value=0.004;
+      const dm=ctx.createGain();dm.gain.value=sign*dDepth;lfo.connect(dm);dm.connect(dl.delayTime);
+      const a=ctx.createGain();a.gain.value=(1-aDepth)*gain;
+      const am=ctx.createGain();am.gain.value=sign*aDepth*gain;lfo.connect(am);am.connect(a.gain);
+      f.connect(dl);dl.connect(a);return a;
+    };
+    mk(1).connect(merger,0,0);mk(-1).connect(merger,0,1);
+    return{lfo,speeds};
+  };
+  ORG.horn=rotor('highpass',0.00035,0.35,[0.83,6.7],1);
+  ORG.drum=rotor('lowpass',0.00015,0.12,[0.67,5.8],1);
+  setLeslie(S.leslieFast);
+}
+function setLeslie(fast){
+  if(!ORG.horn)return;const n=ctx.currentTime;
+  ORG.horn.lfo.frequency.setTargetAtTime(ORG.horn.speeds[fast?1:0],n,fast?0.35:0.6);   // horn spins up fast
+  ORG.drum.lfo.frequency.setTargetAtTime(ORG.drum.speeds[fast?1:0],n,fast?1.2:1.6);    // drum is heavier
+}
+function organVoice(m){
+  const t=ctx.currentTime,f=mtof(m),out=ctx.createGain();out.connect(ORG.in);
+  const oscs=[];
+  for(const [r,lvl] of DRAWBARS){
+    if(!lvl||f*r>11000)continue;
+    const o=ctx.createOscillator();o.frequency.value=f*r;
+    const g=ctx.createGain();g.gain.value=Math.pow(10,(lvl-8)*3/20)*0.07;
+    o.connect(g);g.connect(out);o.start(t);oscs.push(o);
+  }
+  out.gain.setValueAtTime(0,t);out.gain.linearRampToValueAtTime(1,t+0.004);
+  if(ORG.held===0&&f*3<11000){       // percussion only when no other key is held (like a real B3)
+    const o=ctx.createOscillator();o.frequency.value=f*3;
+    const g=ctx.createGain();g.gain.setValueAtTime(0.09,t);g.gain.setTargetAtTime(0,t,0.09);
+    o.connect(g);g.connect(out);o.start(t);o.stop(t+0.9);
+  }
+  const kc=ctx.createBufferSource();kc.buffer=noiseBuf;
+  const kf=ctx.createBiquadFilter();kf.type='bandpass';kf.frequency.value=2800;kf.Q.value=0.8;
+  const kg=ctx.createGain();kg.gain.setValueAtTime(0.05,t);kg.gain.setTargetAtTime(0,t,0.003);
+  kc.connect(kf);kf.connect(kg);kg.connect(out);kc.start(t,Math.random());kc.stop(t+0.03);
+  ORG.held++;
+  let done=false;
+  return{releaseNow(){
+    if(done)return;done=true;ORG.held=Math.max(0,ORG.held-1);
+    const n=ctx.currentTime;out.gain.cancelScheduledValues(n);out.gain.setValueAtTime(out.gain.value,n);out.gain.linearRampToValueAtTime(0,n+0.012);
+    oscs.forEach(o=>o.stop(n+0.05));
+  }};
+}
+function keyVoice(m){
+  const k=S.keyInst;
+  if(k==='organ'&&ORG.in)return organVoice(m);
+  if((k==='piano'||k==='rhodes')&&keysReady(k))return sampVoice(k,m);
+  return epNote(m,ctx.currentTime,0.32,busKy);   // synth EP (also the fallback while samples load)
+}
+function updateKeysLabel(){
+  const k=S.keyInst,loading=(k==='piano'||k==='rhodes')&&ctx&&!keysReady(k);
+  $('keyInst').title=loading?'Loading samples…':'';
+  $('leslieBtn').hidden=k!=='organ';
+}
+
 // ---------- Audio ----------
 let ctx,master,busDr,busBs,busCp,busKy,revIn,revOut,epTrem,noiseBuf;
 const DR={swLast:0};
@@ -502,7 +606,9 @@ function initAudio(){
   const bMk=ctx.createGain();bMk.gain.value=0.7;DR.bassMakeup=bMk;
   busBs.connect(bLo);bLo.connect(bMid);bMid.connect(bCmp);bCmp.connect(bMk);bMk.connect(bsOut);
   busBs.tap=bsOut;
-busCp=mk(0.3,-0.2,true);busKy=mk(0.25,0.1,true);
+busCp=mk(0.3,-0.2,true);const kyOut=mk(0.25,0.1,true);busKy=ctx.createGain();
+  const kyLim=ctx.createDynamicsCompressor();kyLim.threshold.value=-6;kyLim.knee.value=3;kyLim.ratio.value=12;kyLim.attack.value=0.001;kyLim.release.value=0.12;
+  busKy.connect(kyLim);kyLim.connect(kyOut);busKy.tap=kyOut;
   // shared noise + metallic sources for cymbals and brushes
   noiseBuf=ctx.createBuffer(1,ctx.sampleRate*2,ctx.sampleRate);
   const nd=noiseBuf.getChannelData(0);for(let i=0;i<nd.length;i++)nd[i]=Math.random()*2-1;
@@ -545,7 +651,7 @@ busCp=mk(0.3,-0.2,true);busKy=mk(0.25,0.1,true);
   const out=(pan,via)=>{const p=makePan(pan);p.connect(busDr);if(via){via.connect(p);return via;}return p;};
   SMP_OUT.ride=DR.rideLP;SMP_OUT.crash=out(-0.4,DR.crashSLP);
   SMP_OUT.kick=out(0);SMP_OUT.snare=out(-0.1);SMP_OUT.hat=out(-0.35);SMP_OUT.chh=out(-0.35);SMP_OUT.xstick=out(-0.1);
-  loadSamples();loadBass();
+  loadSamples();loadBass();initOrgan();loadKeys(S.keyInst);
   applyVolumes();
   const sb=ctx.createBufferSource();sb.buffer=ctx.createBuffer(1,1,22050);sb.connect(ctx.destination);sb.start(0);
   if(ctx.state!=='running')ctx.resume();
@@ -874,7 +980,7 @@ function markDown(m,d){const n=(downCount.get(m)||0)+(d?1:-1);downCount.set(m,Ma
 function press(id,m){
   initAudio();
   if(sustained.has(m)){sustained.get(m).releaseNow();sustained.delete(m);}
-  const h=epNote(m,ctx.currentTime,0.32,busKy);
+  const h=keyVoice(m);
   active.set(id,{m,h});markDown(m,true);
 }
 function release(id){
@@ -998,6 +1104,10 @@ function init(){
   $('cCount').checked=S.countIn;$('cCount').onchange=e=>{S.countIn=e.target.checked;store.set('countIn',S.countIn);};
   $('tonesBtn').classList.toggle('on',S.tones);
   $('tonesBtn').onclick=()=>{S.tones=!S.tones;store.set('tones',S.tones);$('tonesBtn').classList.toggle('on',S.tones);const c=curTones;curTones=undefined;setTones(c);};
+  $('keyInst').value=S.keyInst;
+  $('keyInst').onchange=e=>{S.keyInst=e.target.value;store.set('keyInst',S.keyInst);if(ctx)loadKeys(S.keyInst);updateKeysLabel();};
+  $('leslieBtn').onclick=()=>{S.leslieFast=!S.leslieFast;$('leslieBtn').textContent='Leslie: '+(S.leslieFast?'fast':'slow');$('leslieBtn').classList.toggle('on',S.leslieFast);if(ctx)setLeslie(S.leslieFast);};
+  updateKeysLabel();
   $('susBtn').onclick=()=>{sustain=!sustain;$('susBtn').classList.toggle('on',sustain);if(!sustain){sustained.forEach(h=>h.releaseNow());sustained.clear();}};
   $('octDn').onclick=()=>{S.oct=Math.max(1,S.oct-1);store.set('oct',S.oct);buildKeyboard();};
   $('octUp').onclick=()=>{S.oct=Math.min(6,S.oct+1);store.set('oct',S.oct);buildKeyboard();};
