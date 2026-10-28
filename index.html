@@ -961,6 +961,7 @@ function buildKeyboard(){
       wi++;
     }
     const d=document.createElement('div');d.className='dot';k.appendChild(d);
+    if(typeof downCount!=='undefined'&&downCount.get(m)>0)k.classList.add('down'); // keep held keys lit across rebuilds
     kb.appendChild(k);m++;
   }
   // drop a trailing black key hanging off the right edge
@@ -1003,6 +1004,9 @@ function wireKeyboard(){
   const up=e=>release(e.pointerId);
   kb.addEventListener('pointerup',up);kb.addEventListener('pointercancel',up);kb.addEventListener('lostpointercapture',up);
   kb.addEventListener('contextmenu',e=>e.preventDefault());
+  // Cancel the browser's touch gestures on the keys. On Android this stops the long-press
+  // detection (and its haptic buzz); pointer events, which do the playing, still arrive.
+  for(const ev of ['touchstart','touchmove','touchend'])kb.addEventListener(ev,e=>{if(e.cancelable)e.preventDefault();},{passive:false});
 }
 // sheet
 function openSheet(){
