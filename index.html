@@ -14,7 +14,7 @@
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <title>Jazz Jam</title>
 <style>
-:root{--bg:#14161a;--panel:#1e2128;--line:#2e333c;--text:#ece9e2;--dim:#8d929b;--accent:#e3a94b;--guide:#5fb7a6;--white:#f4f1ea;--black:#1b1b1d}
+:root{--bg:#14161a;--panel:#1e2128;--line:#2e333c;--text:#ece9e2;--dim:#8d929b;--accent:#e3a94b;--guide:#5fb7a6;--ext:#b48ef0;--white:#f4f1ea;--black:#1b1b1d}
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;background:var(--bg);color:var(--text);font:15px/1.3 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;overflow:hidden;overscroll-behavior:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
 #app{display:flex;flex-direction:column;height:100vh;height:100dvh;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
@@ -49,6 +49,7 @@ button.muted{opacity:.4;text-decoration:line-through}
 .w .dot{bottom:24px}.b .dot{bottom:10px}
 .k[data-tone="ct"] .dot{display:block;background:var(--accent);opacity:.75}
 .k[data-tone="gt"] .dot{display:block;background:var(--guide)}
+.k[data-tone="ex"] .dot{display:block;background:var(--ext)}
 #sheet{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10;display:flex;justify-content:center;align-items:flex-start;padding:env(safe-area-inset-top) 0 0}
 #sheet[hidden]{display:none}
 .sheetin{background:var(--bg);border:1px solid var(--line);border-radius:0 0 12px 12px;width:100%;max-width:640px;max-height:100%;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:10px;-webkit-user-select:text;user-select:text}
@@ -124,6 +125,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
       Bars are separated by <b>|</b> or new lines. Up to 4 chords per bar (1 chord = whole bar, 2 = half each).
       <b>%</b> repeats the previous bar. <b>/</b> holds the chord for a beat.
       [Labels in brackets] are ignored.<br>
+      Key dots: <b style="color:var(--guide)">teal</b> = 3rd &amp; 7th, <b style="color:var(--accent)">orange</b> = root &amp; 5th, <b style="color:var(--ext)">purple</b> = 9ths, 11ths, 13ths and alterations in the symbol.<br>
       Examples: Cmaj7 C6 C69 Dm7 D-7 Dm6 Dm(maj7) G7 G9 G13 G7b9 G7#9 G7alt G7#11 G7sus4 Bø Bm7b5 Ebdim7 Caug Bb/D
     </div>
     <div class="sl"><span>Tempo</span><input id="sTempo" type="range" min="40" max="320" step="1"><span id="vTempo"></span></div>
@@ -161,7 +163,7 @@ const KINDS={
 function classify(raw){
   const q=raw.replace(/[()\s]/g,'');
   let kind;
-  if(/^[øØ]/.test(q)||/^(min|mi|m|-)7?b5/.test(q)) kind='m7b5';
+  if(/^[øØ]/.test(q)||/^(min|mi|m|-)(7|9|11)?b5/.test(q)) kind='m7b5';
   else if(/^(dim|o|°)/.test(q)) kind='dim';
   else if(/^(maj|Maj|MAJ|Δ|\^|M(?!in|i))/.test(q)) kind=/6/.test(q)?'maj6':'maj7';
   else if(/^(min|Min|mi|Mi|m|-)/.test(q)){
@@ -175,6 +177,7 @@ function classify(raw){
   else if(/sus/.test(q)) kind='sus';
   else if(/^(\+|aug)/.test(q)) kind='aug';
   else if(/6/.test(q)&&!/7/.test(q)) kind='maj6';
+  else if(/^(add9|add2|2)$/.test(q)) kind='maj6';
   else if(/7|9|11|13|alt/.test(q)) kind='dom';
   else if(q===''||/^(add9|add2|2)$/.test(q)) kind='maj6';
   else return null;
@@ -187,10 +190,24 @@ function classify(raw){
       const b9=/b9/.test(q),s9=/#9/.test(q),b13=/b13|#5|\+5/.test(q),s11=/#11/.test(q);
       if(b9){c.comp[2]=1;c.scale=[0,1,3,4,6,7,9,10];}
       if(s9){if(b9)c.comp[3]=3;else c.comp[2]=3;c.scale=[0,1,3,4,6,8,10];}
-      if(b13){if(!(b9&&s9))c.comp[3]=8;c.arp=[0,4,8,10];if(!b9&&!s9)c.scale=[0,2,4,6,8,10];}
+      if(b13){if(!(b9&&s9))c.comp[3]=8;if(!b9&&!s9)c.scale=[0,2,4,6,8,10];}
+      if(/#5|\+5/.test(q))c.arp=[0,4,8,10];                  // #5 replaces the 5th
+      else if(/b5/.test(q)){c.arp=[0,4,6,10];c.comp[3]=6;}   // b5 replaces the 5th
       if(s11&&!b13){c.comp[3]=6;c.scale=[0,2,4,6,7,9,10];}
     }
   }
+  // Extensions/alterations written in (or implied by) the symbol, for the key dots.
+  const has=re=>re.test(q),nat=n=>new RegExp('(^|[^b#])'+n+'(?!\\d)').test(q);
+  const ext=[];
+  if(has(/alt/))ext.push(1,3,6,8);
+  if(has(/b9/))ext.push(1);
+  if(has(/#9/))ext.push(3);
+  if(nat('9')||has(/add[29]|^2$/)||((nat('11')||nat('13'))&&!has(/[b#]9|alt/)))ext.push(2);
+  if(nat('11'))ext.push(5);
+  if(has(/#11/))ext.push(6);
+  if(nat('13'))ext.push(9);
+  if(has(/b13/))ext.push(8);
+  c.ext=[...new Set(ext)].filter(i=>!c.arp.includes(i));
   return c;
 }
 function parseChord(sym){
@@ -938,7 +955,7 @@ function setTones(ch){
   const on=S.tones&&ch;
   for(const k of $('kb').children){
     const pc=((+k.dataset.m-(ch?ch.root:0))%12+12)%12;
-    k.dataset.tone=!on?'':ch.guide.includes(pc)?'gt':ch.arp.includes(pc)?'ct':'';
+    k.dataset.tone=!on?'':ch.guide.includes(pc)?'gt':ch.arp.includes(pc)?'ct':(ch.ext||[]).includes(pc)?'ex':'';
   }
 }
 // keyboard
