@@ -139,7 +139,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
     <div class="sl"><span>Room</span><input id="sRv" type="range" min="0" max="100"><span id="vRv"></span></div>
     <div class="row help"><label>Drums <select id="drumStyle"><option value="auto">Auto (brushes under 110)</option><option value="ride">Sticks &amp; ride</option><option value="brushes">Brushes</option></select></label><label class="row"><input id="cTrem" type="checkbox"> Keys tremolo</label></div>
     <label class="row help"><input id="cSmp" type="checkbox"> Recorded drums (ride, kick, snare, hi-hat, crash)</label>
-    <label class="row help"><input id="cSmpB" type="checkbox"> Recorded bass</label>
+    <div class="row help"><label>Bass sound <select id="bassSound"><option value="room">Upright (room)</option><option value="studio">Upright (studio)</option><option value="synth">Synth</option></select></label></div>
     <label class="row help"><input id="cCount" type="checkbox"> One-bar count-in</label>
   </div>
 </div>
@@ -410,14 +410,14 @@ const S={
   output:store.get('output','phone'),
   vols:{phone:Object.assign({},VOL_DEF,store.get('vol',{}),store.get('vol_phone',{})),
         head:Object.assign({},VOL_DEF,store.get('vol_head',{}))},
-  drumStyle:store.get('drumStyle','auto'),samples:store.get('samples',true),samplesBass:store.get('samplesBass',true),trem:store.get('trem',false),
+  drumStyle:store.get('drumStyle','auto'),samples:store.get('samples',true),bassSounds:{phone:store.get('bassSound_phone',store.get('samplesBass',true)?'room':'synth'),head:store.get('bassSound_head','studio')},trem:store.get('trem',false),
   mute:store.get('mute',{dr:false,bs:false,cp:false}),
   countIn:store.get('countIn',true),tones:store.get('tones',true),
   oct:store.get('oct',null),
   songName:store.get('songName',''),keyInst:store.get('keyInst','piano'),leslieFast:false,style:store.get('style','swing'),
   songs:store.get('songs',{}), // name -> {chart,bpm,swing,saved}
 };
-S.vol=S.vols[S.output];
+S.vol=S.vols[S.output];S.bassSound=S.bassSounds[S.output];
 let song=parseChart(S.chart);
 
 // ---------- Drum samples (Virtuosity Drums, CC0; see drums/README.md) ----------
@@ -460,30 +460,39 @@ function playSmp(inst,t,v){
   src.connect(gn);gn.connect(SMP_OUT[inst]);src.start(t,best.off);
 }
 
-// ---------- Bass samples (VSCO 2 CE solo contrabass pizzicato, CC0; see bass/README.md) ----------
-// MIDI note -> [[file, measured tuning offset in cents], ...]
-const BASS_DEF={"28":[["bass_28_1",-4],["bass_28_2",2]],"30":[["bass_30_1",-10],["bass_30_2",-8]],"31":[["bass_31_1",-12],["bass_31_2",-15]],"34":[["bass_34_1",-1],["bass_34_2",0]],"36":[["bass_36_1",-11],["bass_36_2",-8]],"38":[["bass_38_1",4],["bass_38_2",-2]],"40":[["bass_40_1",-1],["bass_40_2",12]],"42":[["bass_42_1",-14],["bass_42_2",-13]],"44":[["bass_44_1",-22],["bass_44_2",-12]],"45":[["bass_45_1",31],["bass_45_2",27]],"49":[["bass_49_1",3],["bass_49_2",6]],"52":[["bass_52_1",1],["bass_52_2",-1]],"56":[["bass_56_1",-6],["bass_56_2",1]]};
-const BASS={};let bassLoaded=0;const BASS_TOTAL=Object.values(BASS_DEF).reduce((a,v)=>a+v.length,0);const BG=7;
-function useB(){return S.samplesBass&&bassLoaded===BASS_TOTAL;}
-function loadBass(){
-  for(const [m,files] of Object.entries(BASS_DEF)){
-    BASS[m]=[];
+// ---------- Bass samples ----------
+// room:   VSCO 2 CE solo contrabass pizzicato (CC0; bass/README.md), recorded with room sound
+// studio: MusyngKite SoundFont acoustic bass (CC BY-SA 3.0; bass2/README.md), dry and even
+// def: MIDI note -> [[file, measured tuning offset in cents], ...]
+const BASS_SETS={
+  room:{dir:'bass',gain:7,def:{"28":[["bass_28_1",-4],["bass_28_2",2]],"30":[["bass_30_1",-10],["bass_30_2",-8]],"31":[["bass_31_1",-12],["bass_31_2",-15]],"34":[["bass_34_1",-1],["bass_34_2",0]],"36":[["bass_36_1",-11],["bass_36_2",-8]],"38":[["bass_38_1",4],["bass_38_2",-2]],"40":[["bass_40_1",-1],["bass_40_2",12]],"42":[["bass_42_1",-14],["bass_42_2",-13]],"44":[["bass_44_1",-22],["bass_44_2",-12]],"45":[["bass_45_1",31],["bass_45_2",27]],"49":[["bass_49_1",3],["bass_49_2",6]],"52":[["bass_52_1",1],["bass_52_2",-1]],"56":[["bass_56_1",-6],["bass_56_2",1]]}},
+  studio:{dir:'bass2',gain:6.6,def:{"28":[["mk_28",5]],"29":[["mk_29",5]],"30":[["mk_30",6]],"31":[["mk_31",6]],"32":[["mk_32",6]],"33":[["mk_33",6]],"34":[["mk_34",12]],"35":[["mk_35",11]],"36":[["mk_36",11]],"37":[["mk_37",3]],"38":[["mk_38",3]],"39":[["mk_39",3]],"40":[["mk_40",3]],"41":[["mk_41",-1]],"42":[["mk_42",-1]],"43":[["mk_43",-1]],"44":[["mk_44",-7]],"45":[["mk_45",-6]],"46":[["mk_46",-6]],"47":[["mk_47",-6]],"48":[["mk_48",4]],"49":[["mk_49",4]],"50":[["mk_50",4]],"51":[["mk_51",-8]],"52":[["mk_52",-7]],"53":[["mk_53",-7]],"54":[["mk_54",-6]],"55":[["mk_55",-6]],"56":[["mk_56",-5]]}},
+};
+const BASS={};
+function bassReady(k){const B=BASS[k];return !!B&&B.loaded===B.total;}
+function useB(){return bassReady(S.bassSound);}
+function loadBass(k){
+  if(!BASS_SETS[k]||BASS[k])return;
+  const set=BASS_SETS[k],B=BASS[k]={map:{},loaded:0,total:Object.values(set.def).reduce((a,v)=>a+v.length,0)};
+  for(const [m,files] of Object.entries(set.def)){
+    B.map[m]=[];
     for(const [name,c] of files){
-      fetch('bass/'+name+'.mp3').then(r=>{if(!r.ok)throw new Error(r.status);return r.arrayBuffer();})
+      fetch(set.dir+'/'+name+'.mp3').then(r=>{if(!r.ok)throw new Error(r.status);return r.arrayBuffer();})
         .then(b=>new Promise((ok,no)=>ctx.decodeAudioData(b,ok,no)))
-        .then(buf=>{BASS[m].push({buf,c,off:onsetOf(buf)});bassLoaded++;})
+        .then(buf=>{B.map[m].push({buf,c,off:onsetOf(buf)});B.loaded++;})
         .catch(()=>{}); // if any file is missing, the synth bass is used
     }
   }
 }
 function bassSmp(m,t,dur,v,dead){
+  const B=BASS[S.bassSound],set=BASS_SETS[S.bassSound];
   let best=null,bd=99;
-  for(const k in BASS){const d=Math.abs(m-k)+(+k>m?0.1:0);if(d<bd&&BASS[k].length){bd=d;best=+k;}}
-  const arr=BASS[best],s=arr[Math.floor(Math.random()*arr.length)];
+  for(const k in B.map){const d=Math.abs(m-k)+(+k>m?0.1:0);if(d<bd&&B.map[k].length){bd=d;best=+k;}}
+  const arr=B.map[best],s=arr[Math.floor(Math.random()*arr.length)];
   const src=ctx.createBufferSource();src.buffer=s.buf;
   src.playbackRate.value=Math.pow(2,(m-best-s.c/100)/12);
   const g=ctx.createGain();
-  g.gain.setValueAtTime(v*BG,t);g.gain.setTargetAtTime(0,t+dur,dead?0.012:0.05); // damp when the next note comes
+  g.gain.setValueAtTime(v*set.gain,t);g.gain.setTargetAtTime(0,t+dur,dead?0.012:0.05); // damp when the next note comes
   let node=src;
   if(dead){const f=ctx.createBiquadFilter();f.type='lowpass';f.frequency.value=500;src.connect(f);node=f;}
   node.connect(g);g.connect(busBs);
@@ -689,7 +698,7 @@ busCp=mk(0.3,-0.2,true);const kyOut=mk(0.25,0.1,true);busKy=ctx.createGain();
   const out=(pan,via)=>{const p=makePan(pan);p.connect(busDr);if(via){via.connect(p);return via;}return p;};
   SMP_OUT.ride=DR.rideLP;SMP_OUT.crash=out(-0.4,DR.crashSLP);
   SMP_OUT.kick=out(0);SMP_OUT.snare=out(-0.1);SMP_OUT.hat=out(-0.35);SMP_OUT.chh=out(-0.35);SMP_OUT.xstick=out(-0.1);
-  loadSamples();loadBass();initOrgan();loadKeys(S.keyInst);
+  loadSamples();loadBass(S.bassSound);initOrgan();loadKeys(S.keyInst);
   applyVolumes();
   const sb=ctx.createBufferSource();sb.buffer=ctx.createBuffer(1,1,22050);sb.connect(ctx.destination);sb.start(0);
   if(ctx.state!=='running')ctx.resume();
@@ -1118,6 +1127,7 @@ const dbLabel=x=>x===0?'off':(30*Math.log10(x/100)).toFixed(1)+' dB';
 function setOutput(o){
   S.output=o==='head'?'head':'phone';store.set('output',S.output);$('output').value=S.output;
   S.vol=S.vols[S.output];
+  S.bassSound=S.bassSounds[S.output];$('bassSound').value=S.bassSound;if(ctx)loadBass(S.bassSound);
   for(const [id,k] of MIX_SLIDERS){const el=$('s'+id);el.value=S.vol[k];el.dispatchEvent(new Event('input'));}
   applyVolumes();
 }
@@ -1154,7 +1164,7 @@ function init(){
     bindSlider(id,()=>S.vol[k],v=>{S.vol[k]=v;store.set('vol_'+S.output,S.vol);applyVolumes();},['dr','bs','cp','ky'].includes(k)?dbLabel:null);
   $('drumStyle').value=S.drumStyle;$('drumStyle').onchange=e=>{S.drumStyle=e.target.value;store.set('drumStyle',S.drumStyle);if(ctx)silenceDrums();};
   $('cSmp').checked=S.samples;$('cSmp').onchange=e=>{S.samples=e.target.checked;store.set('samples',S.samples);};
-  $('cSmpB').checked=S.samplesBass;$('cSmpB').onchange=e=>{S.samplesBass=e.target.checked;store.set('samplesBass',S.samplesBass);};
+  $('bassSound').value=S.bassSound;$('bassSound').onchange=e=>{S.bassSound=S.bassSounds[S.output]=e.target.value;store.set('bassSound_'+S.output,S.bassSound);if(ctx)loadBass(S.bassSound);};
   $('cTrem').checked=S.trem;$('cTrem').onchange=e=>{S.trem=e.target.checked;store.set('trem',S.trem);applyVolumes();};
   $('cCount').checked=S.countIn;$('cCount').onchange=e=>{S.countIn=e.target.checked;store.set('countIn',S.countIn);};
   $('tonesBtn').classList.toggle('on',S.tones);
