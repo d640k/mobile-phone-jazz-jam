@@ -40,6 +40,10 @@ button.muted{opacity:.4;text-decoration:line-through}
 #strip .sp{flex:1 1 0;min-width:0}
 #octlbl{min-width:30px;text-align:center;color:var(--dim);font-size:13px}
 #kb{flex:0 0 42%;position:relative;touch-action:none;background:#000;overflow:hidden}
+body.trio #strip,body.trio #kb{display:none}
+body.trio .cell{font-size:clamp(17px,2.6vw,26px);min-height:clamp(44px,9vh,80px);padding:6px 10px}
+body.trio #cur{font-size:clamp(40px,7vw,64px)}body.trio #next{font-size:clamp(20px,3vw,28px)}
+body.trio #mCp{opacity:.35}
 .k{position:absolute;top:0}
 .w{background:var(--white);height:100%;border-right:1px solid #bdb7aa;border-radius:0 0 7px 7px}
 .b{background:var(--black);height:60%;z-index:2;border-radius:0 0 5px 5px;box-shadow:inset 0 -4px 0 #333}
@@ -87,6 +91,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
       <button id="mBs" class="on">Bass</button>
       <button id="mCp" class="on">Comp</button>
       <button id="chartBtn">Chart</button>
+      <button id="trioBtn" title="Bass and drums only, no on-screen keyboard">Trio</button>
     </div>
     <div id="title"></div>
     <div id="now"><span id="cur">—</span><span id="next"></span><span id="pos"></span></div>
@@ -139,6 +144,7 @@ input[type=range]{width:100%;accent-color:var(--accent)}
     <div class="sl"><span>Room</span><input id="sRv" type="range" min="0" max="100"><span id="vRv"></span></div>
     <div class="row help"><label>Drums <select id="drumStyle"><option value="auto">Auto (brushes under 110)</option><option value="ride">Sticks &amp; ride</option><option value="brushes">Brushes</option></select></label><label class="row"><input id="cTrem" type="checkbox"> Keys tremolo</label></div>
     <label class="row help"><input id="cSmp" type="checkbox"> Recorded drums (ride, kick, snare, hi-hat, crash)</label>
+    <div class="row help"><label>Comping sound <select id="compInst"><option value="rhodes">Rhodes</option><option value="piano">Piano</option><option value="synth">Synth EP</option></select></label></div>
     <div class="row help"><label>Bass sound <select id="bassSound"><option value="room">Upright (room)</option><option value="studio">Upright (studio)</option><option value="synth">Synth</option></select></label></div>
     <div class="row help"><span>MIDI keyboard</span><button id="midiBtn">Connect</button><label class="row"><input id="cMidiSnd" type="checkbox"> Play app sound</label></div>
     <div id="midiStatus" class="help">Lights up the notes you play on a USB/Bluetooth MIDI keyboard. Turn on “Play app sound” to play the Keys sound from it.</div>
@@ -416,7 +422,7 @@ const S={
   mute:store.get('mute',{dr:false,bs:false,cp:false}),
   countIn:store.get('countIn',true),tones:store.get('tones',true),
   oct:store.get('oct',null),
-  songName:store.get('songName',''),keyInst:store.get('keyInst','piano'),midiSound:store.get('midiSound',false),leslieFast:false,style:store.get('style','swing'),
+  songName:store.get('songName',''),keyInst:store.get('keyInst','piano'),compInst:store.get('compInst','rhodes'),trio:store.get('trio',false),midiSound:store.get('midiSound',false),leslieFast:false,style:store.get('style','swing'),
   songs:store.get('songs',{}), // name -> {chart,bpm,swing,saved}
 };
 S.vol=S.vols[S.output];S.bassSound=S.bassSounds[S.output];
@@ -521,13 +527,29 @@ function loadKeys(inst){
   }
 }
 const velGain=vel=>Math.pow(vel/100,1.6);   // MIDI velocity -> gain (touch = 100 = unity)
-function sampVoice(inst,m,vel=100){
+// One sampled note: nearest recording, pitch-shifted; softer = quieter and darker.
+function sampNote(inst,m,vel,t,bus,trim=1){
   const K=KEYS[inst],d=KEYS_DEF[inst];
   let best=null,bd=99;for(const k in K.map){const dd=Math.abs(m-k);if(dd<bd){bd=dd;best=+k;}}
-  const s=K.map[best],t=ctx.currentTime;
+  const s=K.map[best];
   const src=ctx.createBufferSource();src.buffer=s.buf;src.playbackRate.value=Math.pow(2,(m-best)/12);
-  const lp=ctx.createBiquadFilter();lp.type='lowpass';lp.frequency.value=Math.min(18000,1200*Math.pow(2,vel/127*4)); // softer = darker
-  const g=ctx.createGain();g.gain.value=s.g*d.gain*velGain(vel);src.connect(lp);lp.connect(g);g.connect(busKy);src.start(t,s.off);
+  const lp=ctx.createBiquadFilter();lp.type='lowpass';lp.frequency.value=Math.min(18000,1200*Math.pow(2,vel/127*4));
+  const g=ctx.createGain();g.gain.value=s.g*d.gain*velGain(vel)*trim;src.connect(lp);lp.connect(g);g.connect(bus);src.start(t,s.off);
+  return{src,g,d};
+}
+// Comping voice (scheduled): sampled Rhodes/piano when chosen and loaded, else the synth EP.
+// v is on the synth-EP scale (0.32 = a normal touch).
+const COMP_TRIM={rhodes:1.45,piano:1.17};  // level-matched to the synth EP comping
+function compNote(m,t,v){
+  const k=S.compInst;
+  if((k==='rhodes'||k==='piano')&&keysReady(k)){
+    const {src,g,d}=sampNote(k,m,Math.max(1,Math.min(127,v/0.32*100)),t,busCp,COMP_TRIM[k]);
+    return{releaseAt(rt){g.gain.setTargetAtTime(0,rt,d.rel);src.stop(rt+d.rel*10);}};
+  }
+  return epNote(m,t,v,busCp);
+}
+function sampVoice(inst,m,vel=100){
+  const t=ctx.currentTime,{src,g,d}=sampNote(inst,m,vel,t,busKy);
   let done=false;
   return{releaseNow(){if(done)return;done=true;const n=ctx.currentTime;g.gain.cancelScheduledValues(n);g.gain.setValueAtTime(g.gain.value,n);g.gain.setTargetAtTime(0,n,d.rel);src.stop(n+d.rel*10);}};
 }
@@ -702,7 +724,7 @@ busCp=mk(0.3,-0.2,true);const kyOut=mk(0.25,0.1,true);busKy=ctx.createGain();
   const out=(pan,via)=>{const p=makePan(pan);p.connect(busDr);if(via){via.connect(p);return via;}return p;};
   SMP_OUT.ride=DR.rideLP;SMP_OUT.crash=out(-0.4,DR.crashSLP);
   SMP_OUT.kick=out(0);SMP_OUT.snare=out(-0.1);SMP_OUT.hat=out(-0.35);SMP_OUT.chh=out(-0.35);SMP_OUT.xstick=out(-0.1);
-  loadSamples();loadBass(S.bassSound);initOrgan();loadKeys(S.keyInst);
+  loadSamples();loadBass(S.bassSound);initOrgan();loadKeys(S.keyInst);loadKeys(S.compInst);
   applyVolumes();
   const sb=ctx.createBufferSource();sb.buffer=ctx.createBuffer(1,1,22050);sb.connect(ctx.destination);sb.start(0);
   if(ctx.state!=='running')ctx.resume();
@@ -713,7 +735,7 @@ function applyVolumes(){
   const O=OUT_PROFILE[S.output];
   busDr.gain.value=v(S.vol.dr,S.mute.dr)*O.dr;
   busBs.gain.value=v(S.vol.bs,S.mute.bs)*O.bs;
-  busCp.gain.value=v(S.vol.cp,S.mute.cp)*O.cp;
+  busCp.gain.value=S.trio?0:v(S.vol.cp,S.mute.cp)*O.cp;
   busKy.gain.value=v(S.vol.ky,false)*O.ky;
   master.gain.value=1.3*O.mst;DR.bLo.gain.value=O.bLo;DR.bMid.gain.value=O.bMid;DR.bassMakeup.gain.value=O.bMk;
   revOut.gain.value=Math.pow(S.vol.rv/100,1.2)*1.6;
@@ -885,7 +907,7 @@ function scheduleBossa(gs,t,beatDur){
     const l=Math.min(P.bossaComp.get(s16),remain);
     const v=voicingFor(song.segs[csi].chord,P.compPrev);P.compPrev=v;
     const cv=rnd(0.15,0.21),t0=T(t+rnd(0,0.006)),rt=t+l*beatDur/2*0.85;
-    v.forEach((m,i)=>epNote(m,t0+i*rnd(0.001,0.004),cv*rnd(0.92,1.05),busCp).releaseAt(rt));
+    v.forEach((m,i)=>compNote(m,t0+i*rnd(0.001,0.004),cv*rnd(0.92,1.05)).releaseAt(rt));
   }
 }
 // last-bar fills: eighth slot -> velocity
@@ -948,7 +970,7 @@ function scheduleStep(s,t,beatDur){
     const v=voicingFor(song.segs[si].chord,P.compPrev);P.compPrev=v;
     const vel=rnd(0.16,0.24)*inten;
     const t0=T(t+rnd(0.002,0.014)),rt=t+len*beatDur/2*0.92;
-    v.forEach((m,i)=>epNote(m,t0+i*rnd(0.002,0.007),vel*rnd(0.9,1.05),busCp).releaseAt(rt));
+    v.forEach((m,i)=>compNote(m,t0+i*rnd(0.002,0.007),vel*rnd(0.9,1.05)).releaseAt(rt));
   }
 }
 function uiLoop(){
@@ -1042,6 +1064,13 @@ function release(id){
   const a=active.get(id);if(!a)return;active.delete(id);markDown(a.m,false);
   if(sustain){if(sustained.has(a.m))sustained.get(a.m).releaseNow();sustained.set(a.m,a.h);}
   else a.h.releaseNow();
+}
+// Trio mode: bass + drums only, on-screen keyboard hidden, bigger chart (for practising on a real piano).
+function setTrio(on){
+  S.trio=!!on;store.set('trio',S.trio);
+  document.body.classList.toggle('trio',S.trio);$('trioBtn').classList.toggle('on',S.trio);
+  $('mCp').disabled=S.trio;$('mCp').title=S.trio?'Comping is off in trio mode':'';
+  applyVolumes();if(!S.trio)buildKeyboard();
 }
 function setSustain(on){
   sustain=on;$('susBtn').classList.toggle('on',sustain);
@@ -1181,6 +1210,7 @@ function init(){
   const muteBtn=(id,key)=>{const b=$(id);const r=()=>{b.classList.toggle('on',!S.mute[key]);b.classList.toggle('muted',S.mute[key]);};r();
     b.onclick=()=>{S.mute[key]=!S.mute[key];store.set('mute',S.mute);applyVolumes();r();};};
   muteBtn('mDr','dr');muteBtn('mBs','bs');muteBtn('mCp','cp');
+  $('trioBtn').onclick=()=>setTrio(!S.trio);setTrio(S.trio);
   $('chartBtn').onclick=openSheet;$('done').onclick=closeSheet;
   const sel=$('preset');
   Object.keys(PRESETS).forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n;sel.appendChild(o);});
@@ -1206,6 +1236,7 @@ function init(){
     bindSlider(id,()=>S.vol[k],v=>{S.vol[k]=v;store.set('vol_'+S.output,S.vol);applyVolumes();},['dr','bs','cp','ky'].includes(k)?dbLabel:null);
   $('drumStyle').value=S.drumStyle;$('drumStyle').onchange=e=>{S.drumStyle=e.target.value;store.set('drumStyle',S.drumStyle);if(ctx)silenceDrums();};
   $('cSmp').checked=S.samples;$('cSmp').onchange=e=>{S.samples=e.target.checked;store.set('samples',S.samples);};
+  $('compInst').value=S.compInst;$('compInst').onchange=e=>{S.compInst=e.target.value;store.set('compInst',S.compInst);if(ctx)loadKeys(S.compInst);};
   $('bassSound').value=S.bassSound;$('bassSound').onchange=e=>{S.bassSound=S.bassSounds[S.output]=e.target.value;store.set('bassSound_'+S.output,S.bassSound);if(ctx)loadBass(S.bassSound);};
   $('cTrem').checked=S.trem;$('cTrem').onchange=e=>{S.trem=e.target.checked;store.set('trem',S.trem);applyVolumes();};
   $('cCount').checked=S.countIn;$('cCount').onchange=e=>{S.countIn=e.target.checked;store.set('countIn',S.countIn);};
