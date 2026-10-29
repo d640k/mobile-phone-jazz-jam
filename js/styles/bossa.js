@@ -42,7 +42,7 @@ function scheduleBossa(gs,t,beatDur){
   else if(s8===3||s8===7){const r=P.bRoot??bossaRoot(ch);bn=s8===3?bossaFifth(r):r;len=0.45;vel=0.4;}
   else if(s8===4){bn=bossaFifth(P.bRoot??bossaRoot(ch));len=1.45;vel=0.48;}
   if(bn!==null){bassNote(bn,T(t-0.002),beatDur*len,vel*rnd(0.92,1.05));P.lastBass=bn;}
-  if(gs%2===0)P.uiQ.push({t,beat,bar});
+  if(gs%2===0)P.uiQ.push({t,beat,bar,chorus:Math.floor(gs/(song.beats*2))});
   // comping: syncopated 2-bar cycle, anticipating chord changes
   if(s16===0||!P.bossaComp)P.bossaComp=s16===0?planBossa(song,bar):null;
   if(P.bossaComp&&P.bossaComp.has(s16)){

@@ -18,7 +18,7 @@ function showBeat(ev){
   const nseg=song.segs[(si+1)%song.segs.length];
   $('cur').textContent=seg.chord.sym;
   $('next').textContent=nseg!==seg?'→ '+nseg.chord.sym:'';
-  $('pos').textContent=`bar ${ev.bar+1}/${song.bars.length} · beat ${ev.beat%4+1}`;
+  $('pos').textContent=`bar ${ev.bar+1}/${song.bars.length} · beat ${ev.beat%4+1}`+(ev.chorus!=null?` · chorus ${ev.chorus+1}`:'')+(ev.feel?' · '+ev.feel:'')+(ev.stroll?' · comp out':'');
   const cell=$('grid').children[ev.bar];
   if(cell!==curCell){if(curCell)curCell.classList.remove('cur');if(cell){cell.classList.add('cur');if(ev.beat%4===0)cell.scrollIntoView({block:'nearest'});}curCell=cell;}
   setTones(seg.chord);
@@ -162,9 +162,12 @@ function closeSheet(){
 function songMsg(t){$('songMsg').textContent=t;}
 function updateTitle(){$('title').textContent=[S.songName,S.style==='bossa'?'Bossa nova':''].filter(Boolean).join(' · ');}
 function setSongName(n){S.songName=n;store.set('songName',n);updateTitle();}
+function setFeel(f){S.bassFeel=['4','2','24'].includes(f)?f:'24';store.set('bassFeel',S.bassFeel);$('bassFeel').value=S.bassFeel;}
+function setDynamics(on){S.dynamics=!!on;store.set('dynamics',S.dynamics);$('cDyn').checked=S.dynamics;}
 function setStyle(v){
   S.style=v==='bossa'?'bossa':'swing';store.set('style',S.style);$('style').value=S.style;
   $('styleNote').textContent=S.style==='bossa'?'Straight eighths; the Swing slider and drum style don’t apply.':'';
+  $('swingOpts').hidden=S.style!=='swing';
   P.bossaComp=null;P.compPlan=null;if(ctx)silenceDrums();updateTitle();
 }
 function refreshSongList(){
@@ -180,7 +183,7 @@ function saveSong(){
   const chart=$('chartText').value;
   if(!parseChart(chart).segs.length){songMsg('Nothing to save: the chart is empty.');return;}
   if(S.songs[name]&&name!==S.songName&&!confirm(`Replace the saved “${name}”?`))return;
-  S.songs[name]={chart,bpm:S.bpm,swing:S.swing,style:S.style,saved:Date.now()};
+  S.songs[name]={chart,bpm:S.bpm,swing:S.swing,style:S.style,feel:S.bassFeel,dynamics:S.dynamics,saved:Date.now()};
   if(!store.set('songs',S.songs)){delete S.songs[name];songMsg('Couldn’t save: this browser is blocking storage.');return;}
   setSongName(name);refreshSongList();
   songMsg(S.style==='bossa'?`Saved “${name}” (bossa nova, tempo ${S.bpm}).`:`Saved “${name}” (tempo ${S.bpm}, swing ${S.swing}%).`);
@@ -190,7 +193,7 @@ function loadSong(name){
   $('chartText').value=s.chart;$('songName').value=name;
   if(s.bpm)setSlider('Tempo',s.bpm);
   if(s.swing)setSlider('Swing',s.swing);
-  setStyle(s.style||'swing');
+  setStyle(s.style||'swing');if(s.feel)setFeel(s.feel);if(s.dynamics!=null)setDynamics(s.dynamics);
   $('errs').textContent=parseChart(s.chart).errors.join(' · ');
   songMsg(`Loaded “${name}”. Tap Done to play it.`);
 }
@@ -238,6 +241,8 @@ function init(){
     }
     sel.value='';
   };
+  $('bassFeel').onchange=e=>setFeel(e.target.value);setFeel(S.bassFeel);
+  $('cDyn').onchange=e=>setDynamics(e.target.checked);setDynamics(S.dynamics);
   $('style').onchange=e=>setStyle(e.target.value);setStyle(S.style);
   $('output').value=S.output;$('output').onchange=e=>setOutput(e.target.value);
   $('resetMix').onclick=()=>{for(const [id,k] of MIX_SLIDERS)setSlider(id,VOL_DEF[k]);songMsg('Mix reset to the defaults for '+(S.output==='phone'?'phone speaker.':'headphones / speakers.'));};
