@@ -262,6 +262,15 @@ function parseChart(text){
     bars.push(display);
     prevTokens=toks;
   }
+  // Lead-sheet display: the chords actually sounding in each bar (so % shows real chords).
+  // A bar that only holds the previous chord is blank; a held chord before a change is dimmed.
+  const symAt=b=>segs[segOfBeat[b]].chord.sym;
+  for(let i=0;i<bars.length;i++){
+    const d=[];let prev=null;
+    for(let b=i*4;b<i*4+4;b++){const sy=symAt(b);if(sy!==prev){d.push({t:sy,dim:false});prev=sy;}}
+    const held=i>0&&d[0].t===symAt(i*4-1);
+    bars[i]=held?(d.length===1?[]:(d[0].dim=true,d)):d;
+  }
   return {bars,segs,segOfBeat,beats:bars.length*4,errors};
 }
 // ---------- Walking bass ----------
@@ -932,7 +941,7 @@ function renderGrid(){
   const g=$('grid');g.innerHTML='';
   song.bars.forEach((b,i)=>{
     const c=document.createElement('div');c.className='cell';c.dataset.bar=i;
-    b.forEach(t=>{const s=document.createElement('span');if(t==='/'||t==='%')s.className='rep';s.textContent=t;c.appendChild(s);});
+    b.forEach(x=>{const s=document.createElement('span');if(x.dim)s.className='rep';s.textContent=x.t;c.appendChild(s);});
     g.appendChild(c);
   });
   curCell=null;
