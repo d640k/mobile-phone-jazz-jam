@@ -140,6 +140,8 @@ input[type=range]{width:100%;accent-color:var(--accent)}
     <div class="row help"><label>Drums <select id="drumStyle"><option value="auto">Auto (brushes under 110)</option><option value="ride">Sticks &amp; ride</option><option value="brushes">Brushes</option></select></label><label class="row"><input id="cTrem" type="checkbox"> Keys tremolo</label></div>
     <label class="row help"><input id="cSmp" type="checkbox"> Recorded drums (ride, kick, snare, hi-hat, crash)</label>
     <div class="row help"><label>Bass sound <select id="bassSound"><option value="room">Upright (room)</option><option value="studio">Upright (studio)</option><option value="synth">Synth</option></select></label></div>
+    <div class="row help"><span>MIDI keyboard</span><button id="midiBtn">Connect</button><label class="row"><input id="cMidiSnd" type="checkbox"> Play app sound</label></div>
+    <div id="midiStatus" class="help">Lights up the notes you play on a USB/Bluetooth MIDI keyboard. Turn on “Play app sound” to play the Keys sound from it.</div>
     <label class="row help"><input id="cCount" type="checkbox"> One-bar count-in</label>
   </div>
 </div>
@@ -414,7 +416,7 @@ const S={
   mute:store.get('mute',{dr:false,bs:false,cp:false}),
   countIn:store.get('countIn',true),tones:store.get('tones',true),
   oct:store.get('oct',null),
-  songName:store.get('songName',''),keyInst:store.get('keyInst','piano'),leslieFast:false,style:store.get('style','swing'),
+  songName:store.get('songName',''),keyInst:store.get('keyInst','piano'),midiSound:store.get('midiSound',false),leslieFast:false,style:store.get('style','swing'),
   songs:store.get('songs',{}), // name -> {chart,bpm,swing,saved}
 };
 S.vol=S.vols[S.output];S.bassSound=S.bassSounds[S.output];
@@ -518,12 +520,14 @@ function loadKeys(inst){
       .catch(()=>{});
   }
 }
-function sampVoice(inst,m){
+const velGain=vel=>Math.pow(vel/100,1.6);   // MIDI velocity -> gain (touch = 100 = unity)
+function sampVoice(inst,m,vel=100){
   const K=KEYS[inst],d=KEYS_DEF[inst];
   let best=null,bd=99;for(const k in K.map){const dd=Math.abs(m-k);if(dd<bd){bd=dd;best=+k;}}
   const s=K.map[best],t=ctx.currentTime;
   const src=ctx.createBufferSource();src.buffer=s.buf;src.playbackRate.value=Math.pow(2,(m-best)/12);
-  const g=ctx.createGain();g.gain.value=s.g*d.gain;src.connect(g);g.connect(busKy);src.start(t,s.off);
+  const lp=ctx.createBiquadFilter();lp.type='lowpass';lp.frequency.value=Math.min(18000,1200*Math.pow(2,vel/127*4)); // softer = darker
+  const g=ctx.createGain();g.gain.value=s.g*d.gain*velGain(vel);src.connect(lp);lp.connect(g);g.connect(busKy);src.start(t,s.off);
   let done=false;
   return{releaseNow(){if(done)return;done=true;const n=ctx.currentTime;g.gain.cancelScheduledValues(n);g.gain.setValueAtTime(g.gain.value,n);g.gain.setTargetAtTime(0,n,d.rel);src.stop(n+d.rel*10);}};
 }
@@ -588,11 +592,11 @@ function organVoice(m){
     oscs.forEach(o=>o.stop(n+0.05));
   }};
 }
-function keyVoice(m){
+function keyVoice(m,vel=100){
   const k=S.keyInst;
-  if(k==='organ'&&ORG.in)return organVoice(m);
-  if((k==='piano'||k==='rhodes')&&keysReady(k))return sampVoice(k,m);
-  return epNote(m,ctx.currentTime,0.32,busKy);   // synth EP (also the fallback while samples load)
+  if(k==='organ'&&ORG.in)return organVoice(m);          // organs ignore velocity
+  if((k==='piano'||k==='rhodes')&&keysReady(k))return sampVoice(k,m,vel);
+  return epNote(m,ctx.currentTime,0.32*Math.pow(vel/100,1.2),busKy);   // synth EP (also the fallback while samples load)
 }
 function updateKeysLabel(){
   const k=S.keyInst,loading=(k==='piano'||k==='rhodes')&&ctx&&!keysReady(k);
@@ -1027,16 +1031,54 @@ function keyAt(x,y){
 }
 function keyEl(m){return $('kb').querySelector(`[data-m="${m}"]`);}
 function markDown(m,d){const n=(downCount.get(m)||0)+(d?1:-1);downCount.set(m,Math.max(0,n));const e=keyEl(m);if(e)e.classList.toggle('down',n>0);}
-function press(id,m){
-  initAudio();
+const SILENT={releaseNow(){}};
+function press(id,m,vel=100,silent=false){
+  if(!silent)initAudio();
   if(sustained.has(m)){sustained.get(m).releaseNow();sustained.delete(m);}
-  const h=keyVoice(m);
+  const h=silent?SILENT:keyVoice(m,vel);
   active.set(id,{m,h});markDown(m,true);
 }
 function release(id){
   const a=active.get(id);if(!a)return;active.delete(id);markDown(a.m,false);
   if(sustain){if(sustained.has(a.m))sustained.get(a.m).releaseNow();sustained.set(a.m,a.h);}
   else a.h.releaseNow();
+}
+function setSustain(on){
+  sustain=on;$('susBtn').classList.toggle('on',sustain);
+  if(!sustain){sustained.forEach(h=>h.releaseNow());sustained.clear();}
+}
+function updateLeslieBtn(){$('leslieBtn').textContent='Leslie: '+(S.leslieFast?'fast':'slow');$('leslieBtn').classList.toggle('on',S.leslieFast);}
+// ---------- MIDI input (Web MIDI: Chrome/Edge, incl. Android Chrome; not iPhone Safari) ----------
+const MIDI={access:null};
+function midiStatus(t){$('midiStatus').textContent=t;}
+function midiRefresh(){
+  const ins=MIDI.access?[...MIDI.access.inputs.values()].filter(i=>i.state==='connected'):[];
+  ins.forEach(i=>{i.onmidimessage=midiMessage;});
+  midiStatus(ins.length?'Connected: '+ins.map(i=>i.name).join(', '):'No MIDI keyboard found. Plug it in and it will be picked up automatically.');
+  $('midiBtn').textContent=MIDI.access?'Connected':'Connect';$('midiBtn').disabled=!!MIDI.access;
+}
+async function midiConnect(fromUser){
+  if(!navigator.requestMIDIAccess){midiStatus('This browser doesn’t support MIDI. It works in Chrome and Edge, including Chrome on Android.');return;}
+  try{
+    MIDI.access=await navigator.requestMIDIAccess();
+    MIDI.access.onstatechange=midiRefresh;midiRefresh();store.set('midiOn',true);
+    if(fromUser)initAudio();
+  }catch(e){
+    let state='unknown';try{state=(await navigator.permissions.query({name:'midi'})).state;}catch(_){}
+    const blocked=state!=='granted'&&e&&(e.name==='NotAllowedError'||e.name==='SecurityError');
+    midiStatus(blocked
+      ?'MIDI access was blocked. Allow MIDI for this site in the browser’s site settings, then try again.'
+      :'Couldn’t start MIDI on this device'+(e&&e.message?' ('+e.message+')':'')+'.');
+  }
+}
+function midiMessage(e){
+  const [st,d1,d2=0]=e.data,cmd=st&0xf0;
+  if(cmd===0x90&&d2>0)press('midi'+d1,d1,d2,!S.midiSound);
+  else if(cmd===0x80||(cmd===0x90&&d2===0))release('midi'+d1);
+  else if(cmd===0xB0&&d1===64)setSustain(d2>=64);                     // sustain pedal
+  else if(cmd===0xB0&&d1===1&&S.keyInst==='organ'){                  // mod wheel: Leslie slow/fast
+    const f=d2>=64;if(f!==S.leslieFast){S.leslieFast=f;updateLeslieBtn();if(ctx)setLeslie(f);}
+  }
 }
 function wireKeyboard(){
   const kb=$('kb');
@@ -1171,9 +1213,16 @@ function init(){
   $('tonesBtn').onclick=()=>{S.tones=!S.tones;store.set('tones',S.tones);$('tonesBtn').classList.toggle('on',S.tones);const c=curTones;curTones=undefined;setTones(c);};
   $('keyInst').value=S.keyInst;
   $('keyInst').onchange=e=>{S.keyInst=e.target.value;store.set('keyInst',S.keyInst);if(ctx)loadKeys(S.keyInst);updateKeysLabel();};
-  $('leslieBtn').onclick=()=>{S.leslieFast=!S.leslieFast;$('leslieBtn').textContent='Leslie: '+(S.leslieFast?'fast':'slow');$('leslieBtn').classList.toggle('on',S.leslieFast);if(ctx)setLeslie(S.leslieFast);};
+  $('leslieBtn').onclick=()=>{S.leslieFast=!S.leslieFast;updateLeslieBtn();if(ctx)setLeslie(S.leslieFast);};
   updateKeysLabel();
-  $('susBtn').onclick=()=>{sustain=!sustain;$('susBtn').classList.toggle('on',sustain);if(!sustain){sustained.forEach(h=>h.releaseNow());sustained.clear();}};
+  $('susBtn').onclick=()=>setSustain(!sustain);
+  $('midiBtn').onclick=()=>midiConnect(true);
+  $('cMidiSnd').checked=S.midiSound;$('cMidiSnd').onchange=e=>{S.midiSound=e.target.checked;store.set('midiSound',S.midiSound);if(S.midiSound)initAudio();};
+  // reconnect automatically if MIDI was allowed before
+  if(store.get('midiOn',false)&&navigator.requestMIDIAccess&&navigator.permissions)
+    navigator.permissions.query({name:'midi'}).then(p=>{if(p.state==='granted')midiConnect(false);}).catch(()=>{});
+  // MIDI notes don't count as a user gesture, so let any tap or key press wake the audio
+  for(const ev of ['pointerdown','keydown'])document.addEventListener(ev,()=>{if(ctx&&ctx.state!=='running')ctx.resume();},true);
   $('octDn').onclick=()=>{S.oct=Math.max(1,S.oct-1);store.set('oct',S.oct);buildKeyboard();};
   $('octUp').onclick=()=>{S.oct=Math.min(6,S.oct+1);store.set('oct',S.oct);buildKeyboard();};
   setBpm(S.bpm);renderGrid();showBeat(null);buildKeyboard();wireKeyboard();
