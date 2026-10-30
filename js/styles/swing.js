@@ -8,14 +8,24 @@ const FILLS=[{5:0.3,6:0.4,7:0.55},{3:0.25,5:0.35,7:0.55},{6:0.45,7:0.6},{4:0.3,5
 const RIDE={0:0.5,2:0.62,3:0.36,4:0.5,6:0.62,7:0.36};
 // sparse comping for the two-feel: [eighth slot, length in eighths]
 const SPARSE_COMP=[[[0,4]],[[3,3]],[[0,2],[4,2]],[[2,3]],[[7,1]],[[0,3]],[[4,4]],[]];
+// ballad comping: long, sustained chords
+const BALLAD_COMP=[[[0,8]],[[0,4],[4,4]],[[0,6],[6,2]],[[0,3],[3,5]],[[0,4],[7,1]],[[2,6]]];
+// Make sure every chord that starts in this bar gets voiced, whatever the pattern.
+function coverPlan(plan,bar,bpb=4){
+  const B=bar*bpb,covered=new Set([...plan.keys()].map(s=>hitSeg(song,B*2+s).si));
+  for(let b=B;b<B+bpb;b++){const bb=b%song.beats,si=song.segOfBeat[bb];if(song.segs[si].start===bb&&!covered.has(si)){plan.set((b-B)*2,2);covered.add(si);}}
+  return plan;
+}
+const pickPlan=pats=>new Map(pats[Math.floor(Math.random()*pats.length)]);
 
 const chorusOf=gs=>Math.floor(gs/(song.beats*2));
 const isTwoFeel=ch=>S.bassFeel==='2'||(S.bassFeel==='24'&&ch===0);
 
 // Two-feel bass: plan one bar of half notes (beats 1 and 3), the next downbeat, and pickups.
-function planTwo(bar){
-  const B=bar*4,nb=song.beats,segAt=b=>song.segs[song.segOfBeat[((b%nb)+nb)%nb]];
-  const s1=segAt(B),s3=segAt(B+2),sN=segAt(B+4);
+// bpb: beats per bar (4, or 3 in a waltz, where the second note falls on beat 3 too)
+function planTwo(bar,bpb=4){
+  const B=bar*bpb,nb=song.beats,segAt=b=>song.segs[song.segOfBeat[((b%nb)+nb)%nb]];
+  const s1=segAt(B),s3=segAt(B+2),sN=segAt(B+bpb);
   const prev=P.lastBass??38,pick=a=>a[Math.floor(Math.random()*a.length)];
   // beat 1: the root on a new chord; on a held chord, vary with the 5th, 3rd or root
   const c1=s1.chord,fresh=s1.start===B||!P.two||P.two.ch!==c1;
@@ -23,7 +33,7 @@ function planTwo(bar){
   // beat 3: a new chord's root; otherwise mostly the 5th, sometimes the 3rd or a
   // chromatic approach into the next bar's new chord
   let n3;
-  const nextNew=sN.start===(B+4)%nb&&sN.chord!==s3.chord;
+  const nextNew=sN.start===(B+bpb)%nb&&sN.chord!==s3.chord;
   if(s3.start===B+2)n3=nearest(s3.chord.bass,n1);
   else{
     const r=Math.random(),c=s3.chord;
@@ -38,12 +48,13 @@ function planTwo(bar){
   P.two={ch:s3.chord,n1,n3,nN,pk3:Math.random()<0.14,pk7:Math.random()<0.18};
 }
 
-function scheduleSwing(gs,t,beatDur){
+// o: style options, e.g. {brushes:true, ballad:true, level:0.8} for the ballad
+function scheduleSwing(gs,t,beatDur,o={}){
   const beat=Math.floor(gs/2)%song.beats;
   const s8=gs%8, bar=Math.floor(beat/4), nBars=song.bars.length;
   const lastBar=bar===nBars-1, chorus=chorusOf(gs), two=isTwoFeel(chorus);
   const H=ms=>T(t+rnd(-ms,ms)/1000);               // humanized time
-  const br=brushes();
+  const br=o.brushes||brushes();
   const hit=br?brushTap:snare;
   // chorus-level dynamics
   if(gs%(song.beats*2)===0){
@@ -51,7 +62,7 @@ function scheduleSwing(gs,t,beatDur){
     if(S.dynamics&&!two&&chorus>=2&&chorus-(P.lastStroll??-9)>=2&&Math.random()<0.3){P.stroll=true;P.lastStroll=chorus;}
   }
   const ci=S.dynamics?Math.min(1,0.8+0.07*chorus):0.92;
-  const inten=ci*(0.9+0.1*bar/Math.max(1,nBars-1))*(two?0.88:1); // builds through each chorus
+  const inten=ci*(0.9+0.1*bar/Math.max(1,nBars-1))*(two?0.88:1)*(o.level||1); // builds through each chorus
   // drums
   if(s8===0){
     if(bar===0&&gs>0){crash(H(2),(br?0.16:0.3)*(two?0.8:1));kick(H(2),0.3);}
@@ -102,12 +113,9 @@ function scheduleSwing(gs,t,beatDur){
   if(gs%2===0)P.uiQ.push({t,beat,bar,chorus,feel:two?'2-feel':'',stroll:P.stroll});
   // comping, laid back a hair, notes slightly rolled
   if(s8===0){
-    if(two){
-      P.compPlan=new Map(SPARSE_COMP[Math.floor(Math.random()*SPARSE_COMP.length)]);
-      // still voice any chord change that the sparse pattern misses
-      const B=bar*4,covered=new Set([...P.compPlan.keys()].map(s=>hitSeg(song,B*2+s).si));
-      for(let b=B;b<B+4;b++){const si=song.segOfBeat[b];if(song.segs[si].start===b&&!covered.has(si)){P.compPlan.set((b-B)*2,2);covered.add(si);}}
-    }else P.compPlan=planCompBar(song,bar,bar>=nBars*0.75||(S.dynamics&&ci>=0.95&&Math.random()<0.3));
+    if(o.ballad)P.compPlan=coverPlan(pickPlan(BALLAD_COMP),bar);
+    else if(two)P.compPlan=coverPlan(pickPlan(SPARSE_COMP),bar);
+    else P.compPlan=planCompBar(song,bar,bar>=nBars*0.75||(S.dynamics&&ci>=0.95&&Math.random()<0.3));
   }
   if(!P.stroll&&P.compPlan&&P.compPlan.has(s8)){
     const {si,remain}=hitSeg(song,beat*2+(gs%2));
@@ -115,7 +123,10 @@ function scheduleSwing(gs,t,beatDur){
     const v=voicingFor(song.segs[si].chord,P.compPrev);P.compPrev=v;
     const vel=rnd(0.16,0.24)*inten;
     const t0=T(t+rnd(0.002,0.014)),rt=t+len*beatDur/2*0.92;
-    v.forEach((m,i)=>compNote(m,t0+i*rnd(0.002,0.007),vel*rnd(0.9,1.05)).releaseAt(rt));
+    v.forEach((m,i)=>compNote(m,t0+i*(o.ballad?rnd(0.012,0.03):rnd(0.002,0.007)),vel*rnd(0.9,1.05)).releaseAt(rt)); // ballad: rolled
   }
 }
 STYLES.swing={schedule:scheduleSwing,straight:false};
+// Ballad: brushes, softer, long rolled comping chords; same feel/dynamics options as swing.
+const BALLAD_OPT={brushes:true,ballad:true,level:0.8};
+STYLES.ballad={schedule:(gs,t,bd)=>scheduleSwing(gs,t,bd,BALLAD_OPT),straight:false};

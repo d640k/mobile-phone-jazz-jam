@@ -7,9 +7,9 @@ const BOSSA_COMP=[                          // 2-bar comping cycles: [eighth slo
   [[0,3],[3,2],[7,2],[10,3],[14,2]],
   [[2,2],[5,3],[8,2],[11,2],[13,2]],
 ];
-function planBossa(song,bar){
+function planBossa(song,bar,pats=BOSSA_COMP){
   const plan=new Map();
-  for(const [s,d] of BOSSA_COMP[Math.floor(Math.random()*BOSSA_COMP.length)])plan.set(s,d);
+  for(const [s,d] of pats[Math.floor(Math.random()*pats.length)])plan.set(s,d);
   const B=bar*4,covered=new Set([...plan.keys()].map(s=>hitSeg(song,B*2+s).si));
   for(let b=B;b<B+8;b++){                   // make sure every chord in the 2 bars gets voiced
     const bb=b%song.beats,si=song.segOfBeat[bb];

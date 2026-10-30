@@ -22,4 +22,7 @@ const S={
   songs:store.get('songs',{}), // name -> {chart,bpm,swing,saved}
 };
 S.vol=S.vols[S.output];S.bassSound=S.bassSounds[S.output];
-let song=parseChart(S.chart);
+// beats per bar for each style (default 4)
+const STYLE_BPB={waltz:3};
+const curBpb=()=>STYLE_BPB[S.style]||4;
+let song=parseChart(S.chart,curBpb());

@@ -18,7 +18,7 @@ function showBeat(ev){
   const nseg=song.segs[(si+1)%song.segs.length];
   $('cur').textContent=seg.chord.sym;
   $('next').textContent=nseg!==seg?'→ '+nseg.chord.sym:'';
-  $('pos').textContent=`bar ${ev.bar+1}/${song.bars.length} · beat ${ev.beat%4+1}`+(ev.chorus!=null?` · chorus ${ev.chorus+1}`:'')+(ev.feel?' · '+ev.feel:'')+(ev.stroll?' · comp out':'');
+  $('pos').textContent=`bar ${ev.bar+1}/${song.bars.length} · beat ${ev.beat%song.bpb+1}`+(ev.chorus!=null?` · chorus ${ev.chorus+1}`:'')+(ev.feel?' · '+ev.feel:'')+(ev.stroll?' · comp out':'');
   const cell=$('grid').children[ev.bar];
   if(cell!==curCell){if(curCell)curCell.classList.remove('cur');if(cell){cell.classList.add('cur');if(ev.beat%4===0)cell.scrollIntoView({block:'nearest'});}curCell=cell;}
   setTones(seg.chord);
@@ -152,7 +152,7 @@ function openSheet(){
 function closeSheet(){
   setSongName($('songName').value.trim());
   S.chart=$('chartText').value;store.set('chart',S.chart);
-  song=parseChart(S.chart);renderGrid();
+  song=parseChart(S.chart,curBpb());renderGrid();
   if(!P.playing)showBeat(null);
   if(song.errors.length){$('errs').textContent=song.errors.join(' · ');}
   if(!song.segs.length){stop();}
@@ -160,14 +160,18 @@ function closeSheet(){
 }
 // saved songs (stored in this browser's localStorage)
 function songMsg(t){$('songMsg').textContent=t;}
-function updateTitle(){$('title').textContent=[S.songName,S.style==='bossa'?'Bossa nova':''].filter(Boolean).join(' · ');}
+const STYLE_NAMES={swing:'Swing',ballad:'Ballad',waltz:'Jazz waltz (3/4)',bossa:'Bossa nova',samba:'Samba'};
+function updateTitle(){$('title').textContent=[S.songName,S.style!=='swing'?STYLE_NAMES[S.style]:''].filter(Boolean).join(' · ');}
 function setSongName(n){S.songName=n;store.set('songName',n);updateTitle();}
 function setFeel(f){S.bassFeel=['4','2','24'].includes(f)?f:'24';store.set('bassFeel',S.bassFeel);$('bassFeel').value=S.bassFeel;}
 function setDynamics(on){S.dynamics=!!on;store.set('dynamics',S.dynamics);$('cDyn').checked=S.dynamics;}
 function setStyle(v){
-  S.style=v==='bossa'?'bossa':'swing';store.set('style',S.style);$('style').value=S.style;
-  $('styleNote').textContent=S.style==='bossa'?'Straight eighths; the Swing slider and drum style don’t apply.':'';
-  $('swingOpts').hidden=S.style!=='swing';
+  const prevBpb=curBpb();
+  S.style=STYLE_NAMES[v]?v:'swing';store.set('style',S.style);$('style').value=S.style;
+  const straight=S.style==='bossa'||S.style==='samba';
+  $('styleNote').textContent=straight?'Straight eighths; the Swing slider and drum style don’t apply.':S.style==='ballad'?'Brushes; the drum style setting doesn’t apply.':'';
+  $('swingOpts').hidden=!['swing','ballad','waltz'].includes(S.style);
+  if(curBpb()!==prevBpb){song=parseChart(S.chart,curBpb());renderGrid();if(!P.playing)showBeat(null);}
   P.bossaComp=null;P.compPlan=null;if(ctx)silenceDrums();updateTitle();
 }
 function refreshSongList(){
@@ -181,12 +185,12 @@ function saveSong(){
   const name=$('songName').value.trim();
   if(!name){songMsg('Give the song a name first.');$('songName').focus();return;}
   const chart=$('chartText').value;
-  if(!parseChart(chart).segs.length){songMsg('Nothing to save: the chart is empty.');return;}
+  if(!parseChart(chart,curBpb()).segs.length){songMsg('Nothing to save: the chart is empty.');return;}
   if(S.songs[name]&&name!==S.songName&&!confirm(`Replace the saved “${name}”?`))return;
   S.songs[name]={chart,bpm:S.bpm,swing:S.swing,style:S.style,feel:S.bassFeel,dynamics:S.dynamics,saved:Date.now()};
   if(!store.set('songs',S.songs)){delete S.songs[name];songMsg('Couldn’t save: this browser is blocking storage.');return;}
   setSongName(name);refreshSongList();
-  songMsg(S.style==='bossa'?`Saved “${name}” (bossa nova, tempo ${S.bpm}).`:`Saved “${name}” (tempo ${S.bpm}, swing ${S.swing}%).`);
+  songMsg(S.style!=='swing'?`Saved “${name}” (${STYLE_NAMES[S.style].toLowerCase()}, tempo ${S.bpm}).`:`Saved “${name}” (tempo ${S.bpm}, swing ${S.swing}%).`);
 }
 function loadSong(name){
   const s=S.songs[name];if(!s)return;
@@ -194,7 +198,7 @@ function loadSong(name){
   if(s.bpm)setSlider('Tempo',s.bpm);
   if(s.swing)setSlider('Swing',s.swing);
   setStyle(s.style||'swing');if(s.feel)setFeel(s.feel);if(s.dynamics!=null)setDynamics(s.dynamics);
-  $('errs').textContent=parseChart(s.chart).errors.join(' · ');
+  $('errs').textContent=parseChart(s.chart,curBpb()).errors.join(' · ');
   songMsg(`Loaded “${name}”. Tap Done to play it.`);
 }
 function deleteSong(){
@@ -237,7 +241,7 @@ function init(){
       const pv=PRESETS[sel.value],chart=typeof pv==='string'?pv:pv.chart;
       $('chartText').value=chart;$('songName').value=sel.value;songMsg('');
       setStyle(typeof pv==='string'?'swing':pv.style);if(pv.bpm)setSlider('Tempo',pv.bpm);
-      $('errs').textContent=parseChart(chart).errors.join(' · ');
+      $('errs').textContent=parseChart(chart,curBpb()).errors.join(' · ');
     }
     sel.value='';
   };
@@ -249,7 +253,7 @@ function init(){
   const ms=$('mySongs');ms.onchange=()=>{if(ms.value)loadSong(ms.value);ms.value='';};
   $('saveSong').onclick=saveSong;$('delSong').onclick=deleteSong;
   refreshSongList();updateTitle();
-  $('chartText').addEventListener('input',()=>{$('errs').textContent=parseChart($('chartText').value).errors.join(' · ');});
+  $('chartText').addEventListener('input',()=>{$('errs').textContent=parseChart($('chartText').value,curBpb()).errors.join(' · ');});
   bindSlider('Tempo',()=>S.bpm,v=>setBpm(v));
   bindSlider('Swing',()=>S.swing,v=>{S.swing=v;store.set('swing',v);},v=>v===50?'straight':v+'%');
   for(const [id,k] of MIX_SLIDERS)

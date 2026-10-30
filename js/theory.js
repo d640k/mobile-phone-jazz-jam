@@ -81,7 +81,9 @@ function parseChord(sym){
 }
 // ---------- Chart parsing ----------
 // Returns {bars:[[display tokens]], segs:[{chord,start,len}], segOfBeat:[], beats, errors}
-function parseChart(text){
+// bpb = beats per bar (4, or 3 for a waltz)
+const BAR_SPLITS={4:[[4],[2,2],[2,1,1],[1,1,1,1]],3:[[3],[2,1],[1,1,1]]};
+function parseChart(text,bpb=4){
   const errors=[];
   const clean=text.replace(/\[[^\]]*\]/g,' ');
   const rawBars=clean.split(/[|\n]/).map(s=>s.trim()).filter(s=>s.length);
@@ -94,10 +96,10 @@ function parseChart(text){
       if(!prevTokens){errors.push('“%” with no bar before it');continue;}
       toks=prevTokens;display=['%'];
     }
-    if(toks.length>4){errors.push(`Too many chords in bar: ${rb}`);toks=toks.slice(0,4);}
+    if(toks.length>bpb){errors.push(`Too many chords in bar: ${rb}`);toks=toks.slice(0,bpb);}
     const n=toks.length;
-    const lens=n===1?[4]:n===2?[2,2]:n===3?[2,1,1]:[1,1,1,1];
-    const barStart=bars.length*4;
+    const lens=BAR_SPLITS[bpb][n-1];
+    const barStart=bars.length*bpb;
     let beat=barStart;
     toks.forEach((t,i)=>{
       if(t==='/'||t==='%'){
@@ -122,11 +124,11 @@ function parseChart(text){
   const symAt=b=>segs[segOfBeat[b]].chord.sym;
   for(let i=0;i<bars.length;i++){
     const d=[];let prev=null;
-    for(let b=i*4;b<i*4+4;b++){const sy=symAt(b);if(sy!==prev){d.push({t:sy,dim:false});prev=sy;}}
-    const held=i>0&&d[0].t===symAt(i*4-1);
+    for(let b=i*bpb;b<i*bpb+bpb;b++){const sy=symAt(b);if(sy!==prev){d.push({t:sy,dim:false});prev=sy;}}
+    const held=i>0&&d[0].t===symAt(i*bpb-1);
     bars[i]=held?(d.length===1?[]:(d[0].dim=true,d)):d;
   }
-  return {bars,segs,segOfBeat,beats:bars.length*4,errors};
+  return {bars,segs,segOfBeat,beats:bars.length*bpb,bpb,errors};
 }
 // ---------- Walking bass ----------
 const BLO=31,BHI=52;
