@@ -224,14 +224,17 @@ function voicingCands(ch,type){
   }
   return out;
 }
-function voicingFor(ch,prev,type='rootless'){
+// opts.center: target average pitch; opts.lowSecond: penalize 1-2 semitone gaps below this pitch
+function voicingFor(ch,prev,type='rootless',opts={}){
+  const center=opts.center??62;
   let best=null,bs=Infinity;
   for(const v of voicingCands(ch,type)){
     {
       let s=v.penalty||0;
       if(prev)for(let i=0;i<v.length;i++)s+=Math.abs(v[i]-prev[Math.min(i,prev.length-1)]);
       const avg=v.reduce((a,b)=>a+b,0)/v.length;
-      s+=Math.abs(avg-62)*0.7;
+      s+=Math.abs(avg-center)*0.7;
+      if(opts.lowSecond)for(let i=1;i<v.length;i++)if(v[i]-v[i-1]<=2&&v[i-1]<opts.lowSecond)s+=6;
       s+=Math.random()*0.6;
       if(s<bs){bs=s;best=v;}
     }

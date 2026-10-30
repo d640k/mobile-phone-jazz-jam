@@ -80,16 +80,26 @@ function bassSmp(m,t,dur,v,dead){
 
 // ---------- Keyboard instruments (what you play) ----------
 // Sampled: Salamander Grand Piano (CC BY 3.0) and jRhodes3d (CC BY-NC 4.0); see keys/README.md.
-// notes: MIDI -> loudness correction in dB (evens out the recordings)
+// notes: MIDI -> loudness correction in dB (evens out the recordings).
+// Layered sets (piano): MIDI -> {s: soft layer level dB, h: hard layer level dB, c: correction dB};
+// files <inst>_<midi>_<s|h>.mp3, stereo. Velocity picks the closer-sounding layer.
 const KEYS_DEF={
-  piano:{rel:0.09,gain:1.35,notes:{"21":-2.3,"24":-1.2,"27":-1.7,"30":-1.4,"33":-0.1,"36":-0.6,"39":-1.0,"42":-1.6,"45":-0.6,"48":-1.4,"51":-1.8,"54":3.2,"57":3.5,"60":-4.1,"63":-0.5,"66":-1.7,"69":0.1,"72":4.4,"75":1.7,"78":-1.7,"81":1.3,"84":-0.0,"87":0.2,"90":2.0,"93":4.0,"96":2.5,"99":8.0,"102":6.4,"105":4.8,"108":7.7}},
+  piano:{rel:0.09,gain:1.82,layered:true,notes:{"21":{"s":-17.9,"h":-13.8,"c":-1.2},"24":{"s":-17.8,"h":-14.1,"c":-0.5},"27":{"s":-16.8,"h":-13.1,"c":-1.5},"30":{"s":-16.7,"h":-13.9,"c":-0.4},"33":{"s":-17.6,"h":-13.8,"c":-0.1},"36":{"s":-17.4,"h":-12.9,"c":-1.0},"39":{"s":-16.4,"h":-12.8,"c":-0.8},"42":{"s":-16.1,"h":-12.0,"c":-1.9},"45":{"s":-18.9,"h":-13.7,"c":0.8},"48":{"s":-18.4,"h":-14.0,"c":0.2},"51":{"s":-17.6,"h":-13.8,"c":0.2},"54":{"s":-19.6,"h":-15.6,"c":1.5},"57":{"s":-21.8,"h":-15.2,"c":1.3},"60":{"s":-17.4,"h":-11.9,"c":-2.7},"63":{"s":-20.1,"h":-16.0,"c":1.3},"66":{"s":-19.7,"h":-14.5,"c":0.3},"69":{"s":-19.0,"h":-14.3,"c":-0.9},"72":{"s":-19.3,"h":-13.5,"c":-0.9},"75":{"s":-21.4,"h":-14.9,"c":0.5},"78":{"s":-19.4,"h":-13.5,"c":-1.7},"81":{"s":-23.8,"h":-18.2,"c":2.7},"84":{"s":-25.6,"h":-18.1,"c":0.7},"87":{"s":-21.2,"h":-15.9,"c":-0.7},"90":{"s":-27.0,"h":-20.2,"c":3.0},"93":{"s":-27.7,"h":-18.9,"c":2.4},"96":{"s":-29.8,"h":-19.9,"c":3.6},"99":{"s":-33.9,"h":-24.0,"c":6.2},"102":{"s":-31.7,"h":-24.4,"c":6.0},"105":{"s":-36.5,"h":-25.4,"c":6.9},"108":{"s":-33.7,"h":-27.0,"c":7.0}}},
   rhodes:{rel:0.06,gain:0.53,notes:{"29":-0.3,"35":-1.1,"40":-0.5,"45":0.2,"50":-0.4,"55":0.4,"59":1.6,"62":0.3,"65":-2.4,"71":-0.1,"76":-1.6,"81":3.6,"86":1.6,"91":4.6,"96":8.0}},
 };
 const KEYS={};
 function keysReady(inst){const K=KEYS[inst];return !!K&&K.loaded===K.total;}
 function loadKeys(inst){
   if(!KEYS_DEF[inst]||KEYS[inst])return;
-  const d=KEYS_DEF[inst],K=KEYS[inst]={map:{},loaded:0,total:Object.keys(d.notes).length};
+  const d=KEYS_DEF[inst],K=KEYS[inst]={map:{},loaded:0,total:Object.keys(d.notes).length*(d.layered?2:1)};
+  const get=f=>fetch('keys/'+f+'.mp3').then(r=>{if(!r.ok)throw new Error(r.status);return r.arrayBuffer();}).then(b=>new Promise((ok,no)=>ctx.decodeAudioData(b,ok,no)));
+  if(d.layered){
+    for(const [m,n] of Object.entries(d.notes)){
+      K.map[m]={g:Math.pow(10,n.c/20)};
+      for(const L of ['s','h'])get(inst+'_'+m+'_'+L).then(buf=>{K.map[m][L]={buf,off:onsetOf(buf),db:n[L]};K.loaded++;updateKeysLabel();}).catch(()=>{});
+    }
+    return;
+  }
   for(const [m,db] of Object.entries(d.notes)){
     fetch('keys/'+inst+'_'+m+'.mp3').then(r=>{if(!r.ok)throw new Error(r.status);return r.arrayBuffer();})
       .then(b=>new Promise((ok,no)=>ctx.decodeAudioData(b,ok,no)))
@@ -102,15 +112,24 @@ const velGain=vel=>Math.pow(vel/100,1.6);   // MIDI velocity -> gain (touch = 10
 function sampNote(inst,m,vel,t,bus,trim=1){
   const K=KEYS[inst],d=KEYS_DEF[inst];
   let best=null,bd=99;for(const k in K.map){const dd=Math.abs(m-k);if(dd<bd){bd=dd;best=+k;}}
-  const s=K.map[best];
+  let s=K.map[best],gain;
+  if(d.layered){
+    // target level follows velocity (hard layer at velocity 100); use the layer closest to it
+    const tgt=s.h.db+20*Math.log10(velGain(vel)),L=Math.abs(s.s.db-tgt)<Math.abs(s.h.db-tgt)?'s':'h';
+    gain=s.g*Math.pow(10,Math.max(-12,Math.min(6,tgt-s[L].db))/20);s={...s[L]};
+  }else gain=s.g*velGain(vel);
   const src=ctx.createBufferSource();src.buffer=s.buf;src.playbackRate.value=Math.pow(2,(m-best)/12);
-  const lp=ctx.createBiquadFilter();lp.type='lowpass';lp.frequency.value=Math.min(18000,1200*Math.pow(2,vel/127*4));
-  const g=ctx.createGain();g.gain.value=s.g*d.gain*velGain(vel)*trim;src.connect(lp);lp.connect(g);g.connect(bus);src.start(t,s.off);
+  const lp=ctx.createBiquadFilter();lp.type='lowpass';lp.frequency.value=d.layered?Math.min(18000,4000*Math.pow(2,vel/127*3)):Math.min(18000,1200*Math.pow(2,vel/127*4));
+  const g=ctx.createGain();g.gain.value=gain*d.gain*trim;src.connect(lp);lp.connect(g);g.connect(bus);src.start(t,s.off);
   return{src,g,d};
 }
 // Comping voice (scheduled): sampled Rhodes/piano when chosen and loaded, else the synth EP.
 // v is on the synth-EP scale (0.32 = a normal touch).
-const COMP_TRIM={rhodes:1.45,piano:1.17};  // level-matched to the synth EP comping
+const COMP_TRIM={rhodes:1.45,piano:1.37};  // level-matched to the synth EP comping
+// Comping voicing: on the acoustic piano, voice a little higher and avoid seconds low in the chord.
+function compVoicing(ch,prev,type='rootless'){
+  return voicingFor(ch,prev,type,S.compInst==='piano'?{center:65,lowSecond:62}:undefined);
+}
 function compNote(m,t,v){
   const k=S.compInst;
   if((k==='rhodes'||k==='piano')&&keysReady(k)){

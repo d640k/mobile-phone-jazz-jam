@@ -48,7 +48,7 @@ function scheduleBossa(gs,t,beatDur){
   if(P.bossaComp&&P.bossaComp.has(s16)){
     const {si:csi,remain}=hitSeg(song,beat*2+(gs%2));
     const l=Math.min(P.bossaComp.get(s16),remain);
-    const v=voicingFor(song.segs[csi].chord,P.compPrev);P.compPrev=v;
+    const v=compVoicing(song.segs[csi].chord,P.compPrev);P.compPrev=v;
     const cv=rnd(0.15,0.21),t0=T(t+rnd(0,0.006)),rt=t+l*beatDur/2*0.85;
     v.forEach((m,i)=>compNote(m,t0+i*rnd(0.001,0.004),cv*rnd(0.92,1.05)).releaseAt(rt));
   }

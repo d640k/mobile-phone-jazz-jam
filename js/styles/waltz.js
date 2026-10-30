@@ -62,7 +62,7 @@ function scheduleWaltz(gs,t,beatDur){
   if(!P.stroll&&P.compPlan&&P.compPlan.has(s6)){
     const {si,remain}=hitSeg(song,beat*2+(gs%2));
     const len=Math.min(P.compPlan.get(s6),remain);
-    const v=voicingFor(song.segs[si].chord,P.compPrev);P.compPrev=v;
+    const v=compVoicing(song.segs[si].chord,P.compPrev);P.compPrev=v;
     const vel=rnd(0.16,0.24)*inten;
     const t0=T(t+rnd(0.002,0.014)),rt=t+len*beatDur/2*0.92;
     v.forEach((m,i)=>compNote(m,t0+i*rnd(0.002,0.007),vel*rnd(0.9,1.05)).releaseAt(rt));
