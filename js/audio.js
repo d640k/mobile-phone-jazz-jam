@@ -147,6 +147,11 @@ function tone(t,v,f0,f1,tau){
   g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(v,t+0.003);g.gain.setTargetAtTime(0,t+0.004,tau);
   o.connect(g);g.connect(busDr);o.start(t);o.stop(t+tau*6+0.05);
 }
+// Press roll: a fast crescendo buzz of snare strokes from t over dur (Blakey's signature).
+function pressRoll(t,dur,v0,v1){
+  const n=Math.max(10,Math.round(dur/0.042));
+  for(let i=0;i<n;i++){const k=i/(n-1);snare(T(t+k*dur+rnd(-0.003,0.003)),(v0+(v1-v0)*Math.pow(k,1.6))*rnd(0.9,1.08));}
+}
 function snare(t,v){if(useS('snare')){playSmp('snare',t,v);return;}noiseHit(t,v,'bandpass',1900,0.6,0.07);tone(t,v*0.5,190,165,0.04);}
 function chh(t,v){if(useS('chh')){playSmp('chh',t,v);return;}DR.hat.gain.setValueAtTime(v*0.8,t);DR.hat.gain.setTargetAtTime(0,t+0.001,0.03);}
 function xstick(t,v){if(useS('xstick')){playSmp('xstick',t,v);return;}noiseHit(t,v*0.6,'bandpass',3200,1.2,0.02);tone(t,v*0.5,1700,1550,0.025);}

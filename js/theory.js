@@ -144,7 +144,11 @@ function wpick(items){ // [[value,weight]]
   return items[items.length-1][0];
 }
 function makeWalker(){return {prev:null,target:null};}
-function bassForBeat(song,b,W){
+// Bass profile weights (rhythm-section profiles change these):
+// chrom: chromatic approach into the next chord; fifth/step: other approaches;
+// ct: preference for chord tones mid-bar; leap: chance of a wide leap (6th/octave) mid-bar.
+const BASS_DEFAULT={chrom:3,fifth:1.2,step:1.5,ct:1,leap:0};
+function bassForBeat(song,b,W,bp=BASS_DEFAULT){
   const si=song.segOfBeat[b],seg=song.segs[si];
   const p=b-seg.start,r=seg.len-p;
   const nseg=song.segs[(si+1)%song.segs.length];
@@ -161,15 +165,19 @@ function bassForBeat(song,b,W){
     const ok=m=>m>=BLO&&m<=BHI&&m!==prev;
     if(r===1){
       const opts=[];
-      [tgt-1,tgt+1].forEach(m=>ok(m)&&opts.push([m,3]));
-      const fifth=tgt+7<=BHI?tgt+7:tgt-5; if(ok(fifth)&&fifth%12!==prev%12)opts.push([fifth,1.2]);
-      [tgt-2,tgt+2].forEach(m=>ok(m)&&inScale(m)&&opts.push([m,1.5]));
+      [tgt-1,tgt+1].forEach(m=>ok(m)&&opts.push([m,bp.chrom]));
+      const fifth=tgt+7<=BHI?tgt+7:tgt-5; if(ok(fifth)&&fifth%12!==prev%12)opts.push([fifth,bp.fifth]);
+      [tgt-2,tgt+2].forEach(m=>ok(m)&&inScale(m)&&opts.push([m,bp.step]));
       note=opts.length?wpick(opts):tgt+1;
       W.target=tgt;
+    }else if(bp.leap&&Math.random()<bp.leap){
+      // wide leap to a chord tone a 6th to an octave away
+      const c=[];for(let m=BLO;m<=BHI;m++){const d=Math.abs(m-prev);if(d>=8&&d<=12&&isCT(m))c.push([m,1]);}
+      note=c.length?wpick(c):nearest(ch.root,prev);
     }else{
       let dir=tgt>prev?1:tgt<prev?-1:(Math.random()<.5?1:-1);
       if(Math.random()<0.15)dir=-dir;
-      const cands=d=>{const c=[];for(let i=1;i<=5;i++){const m=prev+d*i;if(!ok(m)||!inScale(m))continue;if(r===2&&m===tgt)continue;c.push([m,isCT(m)?(p===2?6:3):1]);}return c;};
+      const cands=d=>{const c=[];for(let i=1;i<=5;i++){const m=prev+d*i;if(!ok(m)||!inScale(m))continue;if(r===2&&m===tgt)continue;c.push([m,isCT(m)?(p===2?6:3)*bp.ct:1]);}return c;};
       let c=cands(dir); if(!c.length)c=cands(-dir);
       note=c.length?wpick(c):nearest(ch.arp[1]!=null?(ch.root+ch.arp[2])%12:ch.root,prev);
     }
@@ -179,21 +187,51 @@ function bassForBeat(song,b,W){
 }
 // ---------- Comping voicings ----------
 function perms(a){if(a.length<=1)return[a];const o=[];a.forEach((x,i)=>{for(const p of perms(a.slice(0,i).concat(a.slice(i+1))))o.push([x,...p]);});return o;}
-function voicingFor(ch,prev){
-  const pcs=[...new Set(ch.comp.map(i=>(ch.root+i)%12))];
-  let best=null,bs=Infinity;
+// Voicing types: 'rootless' (default, 3-7 plus colours), 'quartal' (stacked 4ths from the
+// chord scale, Herbie/McCoy-ish), 'monk' (guide tones plus a half-step rub).
+function voicingCands(ch,type){
+  // major chords stack from lydian (#11) so the natural 4th never lands on a maj7
+  const sc=(ch.kind==='maj7'||ch.kind==='maj6'?ch.scale.map(i=>i===5?6:i):ch.scale).map(i=>(ch.root+i)%12);
+  if(type==='quartal'){
+    const out=[];
+    for(const st of [ch.guide[0],ch.guide[1],2,ch.arp[2]]){
+      for(let base=50;base<=62;base++){
+        if(base%12!==(ch.root+st)%12)continue;
+        const v=[base];
+        while(v.length<4){const l=v[v.length-1];const n=sc.includes((l+5)%12)?l+5:sc.includes((l+6)%12)?l+6:null;if(n===null||v.some(x=>x%12===n%12))break;v.push(n);}
+        if(v.length>=3&&v.some(n=>ch.guide.includes(((n-ch.root)%12+12)%12)))out.push(v);
+      }
+    }
+    if(out.length)return out;
+  }
+  let pcs=[...new Set(ch.comp.map(i=>(ch.root+i)%12))];
+  if(type==='monk'){
+    const g=ch.guide.map(i=>(ch.root+i)%12);
+    const alt=ch.arp.includes(8)||ch.comp.includes(1)||ch.comp.includes(3);
+    const rub=ch.kind==='dom'&&alt?[1,8]:ch.kind==='dom'||ch.kind==='aug'?[6,7]:ch.kind==='maj7'||ch.kind==='maj6'?[11,12]:ch.kind==='m7b5'?[5,6]:ch.kind==='dim'?[2,3]:[2,3];
+    pcs=[...new Set([...g,...rub.map(i=>(ch.root+i)%12)])];
+  }
+  const out=[];
   for(const p of perms(pcs)){
     for(let base=48;base<=62;base++){
       if(base%12!==p[0])continue;
       const v=[base];
       for(let i=1;i<p.length;i++){let n=v[i-1]+1;while(n%12!==p[i])n++;v.push(n);}
-      const top=v[v.length-1];
-      if(top>75||top-base>14)continue;
-      let s=0;
+      if(v[v.length-1]>75||v[v.length-1]-base>14)continue;
+      if(type!=='monk'&&v[1]-v[0]===1)v.penalty=4;
+      out.push(v);
+    }
+  }
+  return out;
+}
+function voicingFor(ch,prev,type='rootless'){
+  let best=null,bs=Infinity;
+  for(const v of voicingCands(ch,type)){
+    {
+      let s=v.penalty||0;
       if(prev)for(let i=0;i<v.length;i++)s+=Math.abs(v[i]-prev[Math.min(i,prev.length-1)]);
       const avg=v.reduce((a,b)=>a+b,0)/v.length;
       s+=Math.abs(avg-62)*0.7;
-      if(v[1]-v[0]===1)s+=4;
       s+=Math.random()*0.6;
       if(s<bs){bs=s;best=v;}
     }

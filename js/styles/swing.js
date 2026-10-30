@@ -48,28 +48,37 @@ function planTwo(bar,bpb=4){
   P.two={ch:s3.chord,n1,n3,nN,pk3:Math.random()<0.14,pk7:Math.random()<0.18};
 }
 
-// o: style options, e.g. {brushes:true, ballad:true, level:0.8} for the ballad
+// o: style options, e.g. {brushes:true, ballad:true, level:0.8} for the ballad.
+// The Swing style also follows the chosen rhythm-section profile (js/sections.js).
 function scheduleSwing(gs,t,beatDur,o={}){
+  const X=o.ballad?curSectionDefault():curSection(),D=X.drums;
   const beat=Math.floor(gs/2)%song.beats;
   const s8=gs%8, bar=Math.floor(beat/4), nBars=song.bars.length;
-  const lastBar=bar===nBars-1, chorus=chorusOf(gs), two=isTwoFeel(chorus);
+  const lastBar=bar===nBars-1, chorus=chorusOf(gs);
   const H=ms=>T(t+rnd(-ms,ms)/1000);               // humanized time
   const br=o.brushes||brushes();
   const hit=br?brushTap:snare;
-  // chorus-level dynamics
+  // chorus-level dynamics: occasional quiet "drop" choruses, comping laying out
   if(gs%(song.beats*2)===0){
-    P.stroll=false;
-    if(S.dynamics&&!two&&chorus>=2&&chorus-(P.lastStroll??-9)>=2&&Math.random()<0.3){P.stroll=true;P.lastStroll=chorus;}
+    P.stroll=false;P.drop=false;
+    if(S.dynamics&&X.dyn.drop&&chorus>=2&&chorus-(P.lastDrop??-9)>=2&&Math.random()<X.dyn.drop){P.drop=true;P.lastDrop=chorus;}
+    else if(S.dynamics&&!isTwoFeel(chorus)&&chorus>=2&&chorus-(P.lastStroll??-9)>=2&&Math.random()<0.3){P.stroll=true;P.lastStroll=chorus;}
   }
-  const ci=S.dynamics?Math.min(1,0.8+0.07*chorus):0.92;
-  const inten=ci*(0.9+0.1*bar/Math.max(1,nBars-1))*(two?0.88:1)*(o.level||1); // builds through each chorus
+  const two=isTwoFeel(chorus)||P.drop;
+  const ci=S.dynamics?Math.min(1,X.dyn.start+X.dyn.build*chorus):0.92;
+  const inten=ci*(0.9+0.1*bar/Math.max(1,nBars-1))*(two?0.88:1)*(P.drop?0.8:1)*(o.level||1); // builds through each chorus
   // drums
   if(s8===0){
-    if(bar===0&&gs>0){crash(H(2),(br?0.16:0.3)*(two?0.8:1));kick(H(2),0.3);}
+    if(bar===0&&gs>0){crash(H(2),(br?0.16:D.crash)*(two?0.8:1));kick(H(2),0.3);}
     P.fill=lastBar&&nBars>1?FILLS[Math.floor(Math.random()*FILLS.length)]:null;
-    P.rideDrop=Math.random()<0.25?(Math.random()<0.5?3:7):-1;
+    P.roll=null;
+    if(!br&&!P.drop&&((lastBar&&nBars>1&&Math.random()<D.pressRoll)||(!lastBar&&bar%8===7&&Math.random()<D.pressRollPhrase))){P.roll=true;P.fill=null;}
+    P.rideDrop=Math.random()<D.rideDrop?(Math.random()<0.5?3:7):-1;
+    P.rideQ=Math.random()<D.rideQuarters;              // a bar of plain quarter notes on the ride
     P.xs4=two&&!br&&Math.random()<0.5;               // two-feel: cross-stick on 4 some bars
+    if(bar%2===0&&!two&&!br&&Math.random()<D.crossRhythm)P.xr=gs;  // 2 bars of dotted-quarter accents
   }
+  const inXR=P.xr!=null&&gs>=P.xr&&gs<P.xr+16;
   if(br){
     if(s8%2===0)sweep(t,beatDur,0.1*inten*rnd(0.85,1.1));
     if(s8===2||s8===6){brushTap(H(4),0.3*inten*rnd(0.85,1.1));hat(H(4),0.3);}
@@ -78,18 +87,27 @@ function scheduleSwing(gs,t,beatDur,o={}){
   }else{
     if(DR.swLast){DR.sweep.gain.setValueAtTime(DR.swLast,t);DR.sweep.gain.linearRampToValueAtTime(0,t+0.2);DR.swLast=0;}
     let rv=RIDE[s8];
+    if(P.rideQ&&(s8===3||s8===7))rv=undefined;
     if(s8===P.rideDrop)rv=undefined;
-    if(rv===undefined&&(s8===1||s8===5)&&Math.random()<0.05)rv=0.3;
-    if(rv!==undefined)ride(H(3),rv*inten*rnd(0.88,1.08));
-    if(s8===2||s8===6)hat(H(4),0.42*rnd(0.85,1.1));
+    if(rv===undefined&&!P.rideQ&&(s8===1||s8===5)&&Math.random()<D.rideExtra)rv=0.3;
+    if(rv!==undefined)ride(H(3),rv*D.ride*inten*rnd(0.88,1.08));
+    if(D.hat==='all'){if(s8%2===0)hat(H(4),D.hatVel*(s8===2||s8===6?1:0.7)*rnd(0.85,1.1));}
+    else if(s8===2||s8===6)hat(H(4),D.hatVel*rnd(0.85,1.1));
     if(s8===6&&P.xs4)xstick(H(4),0.3*rnd(0.9,1.1));
-    if(s8%2===0)kick(H(4),0.09*rnd(0.8,1.25));
-    if(s8%2===1&&Math.random()<0.12*inten*(two?0.3:1))snare(H(6),rnd(0.05,0.12));
-    if(s8%2===1&&!two&&Math.random()<0.025*ci)kick(H(4),0.4);
+    if(s8%2===0)kick(H(4),D.kick*rnd(0.8,1.25));
+    if(inXR){if((gs-P.xr)%3===0){if(((gs-P.xr)/3)%2===0)snare(H(4),0.3*inten*rnd(0.9,1.1));else kick(H(4),0.32*rnd(0.9,1.1));}}
+    else{
+      if(s8%2===1&&Math.random()<D.chatter*inten*(two?0.3:1))snare(H(6),rnd(0.05,0.12));
+      for(const [sl,pr,v] of D.accents)if(s8===sl&&!two&&Math.random()<pr)snare(H(4),v*rnd(0.9,1.1));
+      if(s8%2===1&&!two&&Math.random()<D.bombs*ci)kick(H(4),D.bombVel);
+    }
+    // press roll: a crescendo buzz on the snare from beat 3 into the top
+    if(P.roll&&s8===4)pressRoll(t,beatDur*1.5,0.08,0.42*inten+0.08);
   }
   if(P.fill&&P.fill[s8])hit(H(4),P.fill[s8]*rnd(0.85,1.1)*(two?0.85:1));
-  else if(!lastBar&&bar%4===3&&s8===7&&Math.random()<0.3){hit(H(4),0.28);if(!br)kick(H(4),0.25);}
+  else if(!P.roll&&!lastBar&&bar%4===3&&s8===7&&Math.random()<D.phraseBomb){hit(H(4),0.28);if(!br)kick(H(4),0.25);}
   // bass, sitting slightly on top of the beat
+  const push=X.bass.push/1000;
   if(two){
     if(s8===0)planTwo(bar);
     const p=P.two;let n=null,len=0,vel=0.55;
@@ -99,33 +117,50 @@ function scheduleSwing(gs,t,beatDur,o={}){
     else if(s8===7&&p.pk7){n=Math.random()<0.5?p.n3:p.nN+(p.nN>p.n3?-1:1);len=0.45;vel=0.42;}
     if(n!==null){
       n=Math.max(BLO,Math.min(BHI,n));
-      bassNote(n,T(t-0.004+rnd(-0.003,0.003)),beatDur*len,vel*rnd(0.92,1.05));
+      bassNote(n,T(t-push+rnd(-0.003,0.003)),beatDur*len,vel*rnd(0.92,1.05));
       P.lastBass=n;P.walker.prev=n;P.walker.target=null;   // walking picks up smoothly afterwards
     }
+    P.pedal=null;
   }else if(gs%2===0){
-    const m=bassForBeat(song,beat,P.walker);
+    // pedal point: hold one note through the last 2 bars of a 4-bar phrase (Ron Carter-ish)
+    if(s8===0&&bar%4===2&&bar+2<=nBars&&Math.random()<X.bass.pedal){
+      const tgt=song.segs[song.segOfBeat[((bar+2)*4)%song.beats]].chord;
+      const pc=Math.random()<0.6?(tgt.bass+7)%12:song.segs[song.segOfBeat[beat]].chord.bass;
+      P.pedal={note:nearest(pc,P.lastBass??40),until:gs+16};   // two bars, counted in absolute eighths
+    }
+    if(P.pedal&&gs>=P.pedal.until)P.pedal=null;
+    let m;
+    if(P.pedal){m=P.pedal.note+(s8===4&&Math.random()<0.25&&P.pedal.note+12<=BHI?12:0);P.walker.prev=P.pedal.note;P.walker.target=null;}
+    else m=bassForBeat(song,beat,P.walker,X.bass);
     const acc=beat%4===0?1.08:1;
-    bassNote(m,T(t-0.004+rnd(-0.003,0.003)),beatDur*rnd(0.78,0.9),0.55*acc*rnd(0.9,1.06));
+    bassNote(m,T(t-push+rnd(-0.003,0.003)),beatDur*rnd(0.78,0.9),0.55*acc*rnd(0.9,1.06));
     P.lastBass=m;
-  }else if(P.lastBass!=null&&Math.random()<0.07){
+  }else if(P.lastBass!=null&&Math.random()<X.bass.ghost){
     bassNote(P.lastBass,H(4),0.07,0.22,true); // ghost note
   }
-  if(gs%2===0)P.uiQ.push({t,beat,bar,chorus,feel:two?'2-feel':'',stroll:P.stroll});
+  if(gs%2===0)P.uiQ.push({t,beat,bar,chorus,feel:P.drop?'drop':two?'2-feel':(P.pedal?'pedal':''),stroll:P.stroll});
   // comping, laid back a hair, notes slightly rolled
   if(s8===0){
     if(o.ballad)P.compPlan=coverPlan(pickPlan(BALLAD_COMP),bar);
-    else if(two)P.compPlan=coverPlan(pickPlan(SPARSE_COMP),bar);
-    else P.compPlan=planCompBar(song,bar,bar>=nBars*0.75||(S.dynamics&&ci>=0.95&&Math.random()<0.3));
+    else if(two||X.comp.density==='sparse')P.compPlan=coverPlan(pickPlan(SPARSE_COMP),bar);
+    else{
+      P.compPlan=planCompBar(song,bar,X.comp.density==='busy'||bar>=nBars*0.75||(S.dynamics&&ci>=0.95&&Math.random()<0.3));
+      if(X.comp.density==='busy'){   // punchy anticipations on the "and" of 4 and of 2
+        if(!P.compPlan.has(7)&&Math.random()<0.45)P.compPlan.set(7,1);
+        if(!P.compPlan.has(3)&&!P.compPlan.has(2)&&Math.random()<0.3)P.compPlan.set(3,2);
+      }
+    }
   }
   if(!P.stroll&&P.compPlan&&P.compPlan.has(s8)){
     const {si,remain}=hitSeg(song,beat*2+(gs%2));
     const len=Math.min(P.compPlan.get(s8),remain);
-    const v=voicingFor(song.segs[si].chord,P.compPrev);P.compPrev=v;
-    const vel=rnd(0.16,0.24)*inten;
-    const t0=T(t+rnd(0.002,0.014)),rt=t+len*beatDur/2*0.92;
+    const v=voicingFor(song.segs[si].chord,P.compPrev,X.comp.voicing);P.compPrev=v;
+    const vel=rnd(0.16,0.24)*inten*X.comp.vel;
+    const lay=X.comp.lay/1000,t0=T(t+lay+rnd(-0.006,0.006)),rt=t+len*beatDur/2*0.92;
     v.forEach((m,i)=>compNote(m,t0+i*(o.ballad?rnd(0.012,0.03):rnd(0.002,0.007)),vel*rnd(0.9,1.05)).releaseAt(rt)); // ballad: rolled
   }
 }
+const curSectionDefault=()=>({...SEC_DEFAULT});
 STYLES.swing={schedule:scheduleSwing,straight:false};
 // Ballad: brushes, softer, long rolled comping chords; same feel/dynamics options as swing.
 const BALLAD_OPT={brushes:true,ballad:true,level:0.8};
