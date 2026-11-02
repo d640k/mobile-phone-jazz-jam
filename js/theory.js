@@ -274,14 +274,18 @@ function planCompBar(song,bar,busy){
   return plan;
 }
 // A playable sub-song made of bars a..b (inclusive). It wraps to its own start, so the
-// walking bass, fills and chorus count all treat the loop as the whole tune.
-function sliceSong(src,a,b){
-  const bpb=src.bpb,B0=a*bpb,B1=(b+1)*bpb,segs=[],segOfBeat=[];let last=-1;
-  for(let x=B0;x<B1;x++){
+// walking bass, fills and chorus count all treat it as the whole tune. Short loops are
+// repeated until they fill at least minBars, so fills and dynamics happen once per
+// 16-ish bars instead of every pass. loopLen = bars in one pass of the loop.
+function sliceSong(src,a,b,minBars=16){
+  const bpb=src.bpb,n=b-a+1,reps=Math.max(1,Math.ceil(minBars/n)),segs=[],segOfBeat=[];let last=-1,y=0;
+  for(let r=0;r<reps;r++)for(let x=a*bpb;x<(b+1)*bpb;x++,y++){
     const si=src.segOfBeat[x];
-    if(si!==last){segs.push({chord:src.segs[si].chord,start:x-B0,len:0});last=si;}
+    if(si!==last){segs.push({chord:src.segs[si].chord,start:y,len:0});last=si;}
     segs[segs.length-1].len++;segOfBeat.push(segs.length-1);
   }
-  return{bars:src.bars.slice(a,b+1),segs,segOfBeat,beats:B1-B0,bpb,errors:[],offset:a};
+  // one held chord across the whole phrase: let it wrap as a single segment
+  const bars=[];for(let r=0;r<reps;r++)bars.push(...src.bars.slice(a,b+1));
+  return{bars,segs,segOfBeat,beats:y,bpb,errors:[],offset:a,loopLen:n};
 }
 /*CORE-END*/

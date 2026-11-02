@@ -16,13 +16,13 @@ function showBeat(ev){
   if(!ev){const s0=S.loop?chartSong.segs[chartSong.segOfBeat[S.loop.a*chartSong.bpb]]:chartSong.segs[0];$('cur').textContent=s0?s0.chord.sym:'—';$('next').textContent='';$('pos').textContent='';
     if(curCell)curCell.classList.remove('cur');curCell=null;setTones(null);return;}
   if(ev.count){$('cur').textContent=String(ev.count);$('next').textContent=song.segs[0]?'→ '+song.segs[0].chord.sym:'';$('pos').textContent='count-in';return;}
-  const sg=ev.song||song,off=sg.offset||0;
+  const sg=ev.song||song,off=sg.offset||0,lb=sg.loopLen?ev.bar%sg.loopLen:ev.bar;
   const si=sg.segOfBeat[ev.beat],seg=sg.segs[si];
   const nseg=sg.segs[(si+1)%sg.segs.length];
   $('cur').textContent=seg.chord.sym;
   $('next').textContent=nseg!==seg?'→ '+nseg.chord.sym:'';
-  $('pos').textContent=`bar ${ev.bar+off+1}/${chartSong.bars.length} · beat ${ev.beat%sg.bpb+1}`+(sg.offset!=null?` · loop ${S.loop?S.loop.a+1:off+1}–${S.loop?S.loop.b+1:off+sg.bars.length}`:'')+(ev.chorus!=null?` · chorus ${ev.chorus+1}`:'')+(ev.feel?' · '+ev.feel:'')+(ev.stroll?' · comp out':'');
-  const cell=$('grid').children[ev.bar+off];
+  $('pos').textContent=`bar ${lb+off+1}/${chartSong.bars.length} · beat ${ev.beat%sg.bpb+1}`+(sg.offset!=null?` · loop ${S.loop?S.loop.a+1:off+1}–${S.loop?S.loop.b+1:off+(sg.loopLen||sg.bars.length)}`:'')+(ev.chorus!=null?` · chorus ${ev.chorus+1}`:'')+(ev.feel?' · '+ev.feel:'')+(ev.stroll?' · comp out':'');
+  const cell=$('grid').children[lb+off];
   if(cell!==curCell){if(curCell)curCell.classList.remove('cur');if(cell){cell.classList.add('cur');if(ev.beat%sg.bpb===0)cell.scrollIntoView({block:'nearest'});}curCell=cell;}
   setTones(seg.chord);
 }
@@ -49,7 +49,7 @@ function clearLoop(silent){
   if(!silent){
     // carry on from the bar after the current one, in the whole chart
     let bar=0;
-    if(was&&P.playing&&song.offset!=null){const cur=Math.floor(((P.step-P.countSteps)/2)%song.beats/song.bpb);bar=(song.offset+cur+1)%chartSong.bars.length;}
+    if(was&&P.playing&&song.offset!=null){const cur=Math.floor(((P.step-P.countSteps)/2)%song.beats/song.bpb)%(song.loopLen||song.bars.length);bar=(song.offset+cur+1)%chartSong.bars.length;}
     if(was)applyLoopLive(bar);
     renderGrid();if(!P.playing)showBeat(null);
   }
