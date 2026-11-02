@@ -273,4 +273,15 @@ function planCompBar(song,bar,busy){
   }
   return plan;
 }
+// A playable sub-song made of bars a..b (inclusive). It wraps to its own start, so the
+// walking bass, fills and chorus count all treat the loop as the whole tune.
+function sliceSong(src,a,b){
+  const bpb=src.bpb,B0=a*bpb,B1=(b+1)*bpb,segs=[],segOfBeat=[];let last=-1;
+  for(let x=B0;x<B1;x++){
+    const si=src.segOfBeat[x];
+    if(si!==last){segs.push({chord:src.segs[si].chord,start:x-B0,len:0});last=si;}
+    segs[segs.length-1].len++;segOfBeat.push(segs.length-1);
+  }
+  return{bars:src.bars.slice(a,b+1),segs,segOfBeat,beats:B1-B0,bpb,errors:[],offset:a};
+}
 /*CORE-END*/

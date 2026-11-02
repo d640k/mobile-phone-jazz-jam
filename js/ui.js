@@ -3,25 +3,62 @@ const $=id=>document.getElementById(id);
 let curCell=null,curTones=null;
 function renderGrid(){
   const g=$('grid');g.innerHTML='';
-  song.bars.forEach((b,i)=>{
+  chartSong.bars.forEach((b,i)=>{
     const c=document.createElement('div');c.className='cell';c.dataset.bar=i;
+    if(S.loop&&i>=S.loop.a&&i<=S.loop.b)c.classList.add('inloop');
+    if(LOOP.sel&&i===LOOP.first)c.classList.add('loopfirst');
     b.forEach(x=>{const s=document.createElement('span');if(x.dim)s.className='rep';s.textContent=x.t;c.appendChild(s);});
     g.appendChild(c);
   });
   curCell=null;
 }
 function showBeat(ev){
-  if(!ev){$('cur').textContent=song.segs[0]?song.segs[0].chord.sym:'—';$('next').textContent='';$('pos').textContent='';
+  if(!ev){const s0=S.loop?chartSong.segs[chartSong.segOfBeat[S.loop.a*chartSong.bpb]]:chartSong.segs[0];$('cur').textContent=s0?s0.chord.sym:'—';$('next').textContent='';$('pos').textContent='';
     if(curCell)curCell.classList.remove('cur');curCell=null;setTones(null);return;}
   if(ev.count){$('cur').textContent=String(ev.count);$('next').textContent=song.segs[0]?'→ '+song.segs[0].chord.sym:'';$('pos').textContent='count-in';return;}
-  const si=song.segOfBeat[ev.beat],seg=song.segs[si];
-  const nseg=song.segs[(si+1)%song.segs.length];
+  const sg=ev.song||song,off=sg.offset||0;
+  const si=sg.segOfBeat[ev.beat],seg=sg.segs[si];
+  const nseg=sg.segs[(si+1)%sg.segs.length];
   $('cur').textContent=seg.chord.sym;
   $('next').textContent=nseg!==seg?'→ '+nseg.chord.sym:'';
-  $('pos').textContent=`bar ${ev.bar+1}/${song.bars.length} · beat ${ev.beat%song.bpb+1}`+(ev.chorus!=null?` · chorus ${ev.chorus+1}`:'')+(ev.feel?' · '+ev.feel:'')+(ev.stroll?' · comp out':'');
-  const cell=$('grid').children[ev.bar];
-  if(cell!==curCell){if(curCell)curCell.classList.remove('cur');if(cell){cell.classList.add('cur');if(ev.beat%4===0)cell.scrollIntoView({block:'nearest'});}curCell=cell;}
+  $('pos').textContent=`bar ${ev.bar+off+1}/${chartSong.bars.length} · beat ${ev.beat%sg.bpb+1}`+(sg.offset!=null?` · loop ${S.loop?S.loop.a+1:off+1}–${S.loop?S.loop.b+1:off+sg.bars.length}`:'')+(ev.chorus!=null?` · chorus ${ev.chorus+1}`:'')+(ev.feel?' · '+ev.feel:'')+(ev.stroll?' · comp out':'');
+  const cell=$('grid').children[ev.bar+off];
+  if(cell!==curCell){if(curCell)curCell.classList.remove('cur');if(cell){cell.classList.add('cur');if(ev.beat%sg.bpb===0)cell.scrollIntoView({block:'nearest'});}curCell=cell;}
   setTones(seg.chord);
+}
+// ---------- Looping bars ----------
+// Loop button -> tap the first bar -> tap the last bar. Loop button again turns it off.
+const LOOP={sel:false,first:null};
+function loopSong(){return S.loop?sliceSong(chartSong,S.loop.a,S.loop.b):chartSong;}
+function loopHint(t){$('loopHint').textContent=t||'';$('loopHint').hidden=!t;}
+function refreshLoopBtn(){
+  const b=$('loopBtn');b.classList.toggle('on',!!S.loop||LOOP.sel);
+  b.textContent=S.loop?`Loop ${S.loop.a+1}–${S.loop.b+1}`:LOOP.sel?'Cancel':'Loop';
+}
+// queue the switch to the loop (or back to the chart) at the next downbeat
+function applyLoopLive(resumeBar){
+  if(!P.playing)return;
+  P.pending={song:loopSong(),bar:resumeBar||0};
+}
+function setLoop(a,b){
+  S.loop={a:Math.min(a,b),b:Math.max(a,b)};LOOP.sel=false;LOOP.first=null;loopHint('');
+  renderGrid();refreshLoopBtn();applyLoopLive(0);if(!P.playing)showBeat(null);
+}
+function clearLoop(silent){
+  const was=S.loop;S.loop=null;LOOP.sel=false;LOOP.first=null;loopHint('');
+  if(!silent){
+    // carry on from the bar after the current one, in the whole chart
+    let bar=0;
+    if(was&&P.playing&&song.offset!=null){const cur=Math.floor(((P.step-P.countSteps)/2)%song.beats/song.bpb);bar=(song.offset+cur+1)%chartSong.bars.length;}
+    if(was)applyLoopLive(bar);
+    renderGrid();if(!P.playing)showBeat(null);
+  }
+  refreshLoopBtn();
+}
+function loopTap(i){
+  if(!LOOP.sel)return;
+  if(LOOP.first===null){LOOP.first=i;loopHint(`Bar ${i+1}. Now tap the last bar of the loop (or the same bar again).`);renderGrid();}
+  else setLoop(LOOP.first,i);
 }
 function setTones(ch){
   if(ch===curTones)return;curTones=ch;
@@ -166,7 +203,7 @@ function openSheet(){
 function closeSheet(){
   setSongName($('songName').value.trim());
   S.chart=$('chartText').value;store.set('chart',S.chart);
-  song=parseChart(S.chart,curBpb());renderGrid();
+  chartSong=song=parseChart(S.chart,curBpb());clearLoop(true);renderGrid();
   if(!P.playing)showBeat(null);
   if(song.errors.length){$('errs').textContent=song.errors.join(' · ');}
   if(!song.segs.length){stop();}
@@ -186,7 +223,7 @@ function setStyle(v){
   $('styleNote').textContent=straight?'Straight eighths; the Swing slider and drum style don’t apply.':S.style==='ballad'?'Brushes; the drum style setting doesn’t apply.':'';
   $('swingOpts').hidden=!['swing','ballad','waltz'].includes(S.style);
   $('sectionRow').hidden=S.style!=='swing';
-  if(curBpb()!==prevBpb){song=parseChart(S.chart,curBpb());renderGrid();if(!P.playing)showBeat(null);}
+  if(curBpb()!==prevBpb){chartSong=song=parseChart(S.chart,curBpb());clearLoop(true);renderGrid();if(!P.playing)showBeat(null);}
   P.bossaComp=null;P.compPlan=null;if(ctx)silenceDrums();updateTitle();
 }
 function refreshSongList(){
@@ -247,6 +284,11 @@ function init(){
   const muteBtn=(id,key)=>{MUTE_BTNS[key]=id;refreshMute(key);$(id).onclick=()=>setMute(key,!S.mute[key]);};
   muteBtn('mDr','dr');muteBtn('mBs','bs');muteBtn('mCp','cp');
   $('trioBtn').onclick=()=>setTrio(!S.trio);setTrio(S.trio);
+  $('loopBtn').onclick=()=>{
+    if(S.loop||LOOP.sel){clearLoop(false);return;}
+    LOOP.sel=true;LOOP.first=null;loopHint('Tap the first bar of the loop.');refreshLoopBtn();
+  };
+  $('grid').addEventListener('click',e=>{const c=e.target.closest('.cell');if(c)loopTap(+c.dataset.bar);});
   $('chartBtn').onclick=openSheet;$('done').onclick=closeSheet;
   const sel=$('preset');
   Object.keys(PRESETS).forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n;sel.appendChild(o);});

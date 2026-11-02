@@ -18,7 +18,7 @@ const S={
   mute:store.get('mute',{dr:false,bs:false,cp:false}),
   countIn:store.get('countIn',true),tones:store.get('tones',true),
   oct:store.get('oct',null),
-  songName:store.get('songName',''),keyInst:store.get('keyInst','piano'),compInst:store.get('compInst','rhodes'),trio:store.get('trio',false),midiSound:store.get('midiSound',false),leslieFast:false,style:store.get('style','swing'),bassFeel:store.get('bassFeel','24'),section:store.get('section','std'),secMutedComp:store.get('secMutedComp',false),dynamics:store.get('dynamics',true),
+  songName:store.get('songName',''),keyInst:store.get('keyInst','piano'),compInst:store.get('compInst','rhodes'),trio:store.get('trio',false),midiSound:store.get('midiSound',false),leslieFast:false,style:store.get('style','swing'),loop:null,bassFeel:store.get('bassFeel','24'),section:store.get('section','std'),secMutedComp:store.get('secMutedComp',false),dynamics:store.get('dynamics',true),
   songs:store.get('songs',{}), // name -> {chart,bpm,swing,saved}
 };
 S.vol=S.vols[S.output];S.bassSound=S.bassSounds[S.output];
@@ -26,3 +26,4 @@ S.vol=S.vols[S.output];S.bassSound=S.bassSounds[S.output];
 const STYLE_BPB={waltz:3};
 const curBpb=()=>STYLE_BPB[S.style]||4;
 let song=parseChart(S.chart,curBpb());
+let chartSong=song;   // the whole chart; `song` is what's playing (the chart or a loop of it)
