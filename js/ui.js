@@ -279,6 +279,27 @@ function setOutput(o){
 function setBpm(b){S.bpm=Math.max(40,Math.min(320,b));$('bpm').textContent=S.bpm;$('sTempo').value=S.bpm;$('vTempo').textContent=S.bpm;store.set('bpm',S.bpm);}
 function init(){
   $('play').onclick=()=>{P.playing?stop():start();};
+  // Space = play/stop, like a DAW. Typing keeps its space; controls reached with the
+  // keyboard (Tab) keep native Space behaviour where Enter can't stand in (checkboxes,
+  // dropdowns). Buttons can always be pressed with Enter.
+  let viaKeyboard=false;
+  document.addEventListener('pointerdown',()=>{viaKeyboard=false;},true);
+  document.addEventListener('keydown',e=>{if(e.key==='Tab')viaKeyboard=true;},true);
+  const spaceIsNative=el=>{
+    if(!el||el===document.body)return false;
+    if(el.isContentEditable||el.tagName==='TEXTAREA')return true;
+    if(el.tagName==='INPUT'&&!['checkbox','radio','range','button'].includes(el.type))return true;   // text fields
+    if(el.tagName==='SELECT'||(el.tagName==='INPUT'&&(el.type==='checkbox'||el.type==='radio')))return viaKeyboard;
+    return false;
+  };
+  const isSpace=e=>e.code==='Space'||e.key===' ';
+  document.addEventListener('keydown',e=>{
+    if(!isSpace(e)||e.ctrlKey||e.metaKey||e.altKey||spaceIsNative(document.activeElement))return;
+    e.preventDefault();e.stopPropagation();
+    if(!e.repeat)$('play').click();
+  },true);
+  // some browsers "click" a focused button on Space key-up; swallow that too
+  document.addEventListener('keyup',e=>{if(isSpace(e)&&!spaceIsNative(document.activeElement)){e.preventDefault();e.stopPropagation();}},true);
   $('slower').onclick=()=>setBpm(S.bpm-5);
   $('faster').onclick=()=>setBpm(S.bpm+5);
   const muteBtn=(id,key)=>{MUTE_BTNS[key]=id;refreshMute(key);$(id).onclick=()=>setMute(key,!S.mute[key]);};
