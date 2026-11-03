@@ -196,6 +196,7 @@ function wireKeyboard(){
 }
 // sheet
 function openSheet(){
+  driveSync(false);
   $('chartText').value=S.chart;$('errs').textContent=song.errors.join(' · ');
   $('songName').value=S.songName;songMsg('');refreshSongList();
   $('sheet').hidden=false;
@@ -241,6 +242,7 @@ function saveSong(){
   if(S.songs[name]&&name!==S.songName&&!confirm(`Replace the saved “${name}”?`))return;
   S.songs[name]={chart,bpm:S.bpm,swing:S.swing,style:S.style,feel:S.bassFeel,dynamics:S.dynamics,section:S.section,saved:Date.now()};
   if(!store.set('songs',S.songs)){delete S.songs[name];songMsg('Couldn’t save: this browser is blocking storage.');return;}
+  delete S.songsDeleted[name];store.set('songsDeleted',S.songsDeleted);songsChanged();
   setSongName(name);refreshSongList();
   songMsg(S.style!=='swing'?`Saved “${name}” (${STYLE_NAMES[S.style].toLowerCase()}, tempo ${S.bpm}).`:`Saved “${name}” (tempo ${S.bpm}, swing ${S.swing}%).`);
 }
@@ -257,7 +259,7 @@ function deleteSong(){
   const name=$('songName').value.trim();
   if(!S.songs[name]){songMsg('No saved song with that name.');return;}
   if(!confirm(`Delete “${name}”?`))return;
-  delete S.songs[name];store.set('songs',S.songs);refreshSongList();
+  delete S.songs[name];S.songsDeleted[name]=Date.now();store.set('songs',S.songs);store.set('songsDeleted',S.songsDeleted);refreshSongList();songsChanged();
   songMsg(`Deleted “${name}”. The chart stays in the editor until you change it.`);
 }
 function bindSlider(id,get,set,fmt){
@@ -330,7 +332,7 @@ function init(){
   $('resetMix').onclick=()=>{for(const [id,k] of MIX_SLIDERS)setSlider(id,VOL_DEF[k]);songMsg('Mix reset to the defaults for '+(S.output==='phone'?'phone speaker.':'headphones / speakers.'));};
   const ms=$('mySongs');ms.onchange=()=>{if(ms.value)loadSong(ms.value);ms.value='';};
   $('saveSong').onclick=saveSong;$('delSong').onclick=deleteSong;
-  refreshSongList();updateTitle();
+  refreshSongList();updateTitle();initDrive();
   $('chartText').addEventListener('input',()=>{$('errs').textContent=parseChart($('chartText').value,curBpb()).errors.join(' · ');});
   bindSlider('Tempo',()=>S.bpm,v=>setBpm(v));
   bindSlider('Swing',()=>S.swing,v=>{S.swing=v;store.set('swing',v);},v=>v===50?'straight':v+'%');
