@@ -21,6 +21,8 @@ const S={
   songName:store.get('songName',''),keyInst:store.get('keyInst','piano'),compInst:store.get('compInst','rhodes'),trio:store.get('trio',false),midiSound:store.get('midiSound',false),leslieFast:false,style:store.get('style','swing'),loop:null,bassFeel:store.get('bassFeel','24'),section:store.get('section','std'),secMutedComp:store.get('secMutedComp',false),dynamics:store.get('dynamics',true),
   songs:store.get('songs',{}), // name -> {chart,bpm,swing,saved}
   songsDeleted:store.get('songsDeleted',{}), // name -> deleted-at (for Drive sync)
+  theme:store.get('theme','system'),panelOpen:store.get('panelOpen',true),
+  kbH:store.get('kbH',{}),kbLast:store.get('kbLast',{}),   // keyboard height per orientation (port/land); 0 = hidden
 };
 S.vol=S.vols[S.output];S.bassSound=S.bassSounds[S.output];
 // beats per bar for each style (default 4)

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#14161a">
@@ -13,88 +13,194 @@
 <link rel="icon" href="icon-192.png" type="image/png" sizes="192x192">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <title>Jazz Jam</title>
+<script>
+// Apply the saved theme before anything paints (no light/dark flash).
+(()=>{let t='system';try{t=JSON.parse(localStorage.getItem('jj_theme'))||'system';}catch(e){}
+ const dark=t==='dark'||(t==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);
+ document.documentElement.dataset.theme=dark?'dark':'light';document.documentElement.classList.toggle('sl-theme-dark',dark);})();
+</script>
+<link rel="stylesheet" href="vendor/shoelace/light.css">
+<link rel="stylesheet" href="vendor/shoelace/dark.css">
 <link rel="stylesheet" href="css/app.css">
+<script type="module" src="vendor/shoelace/shoelace.js"></script>
 </head>
 <body>
 <div id="app">
-  <div id="top">
-    <div class="row">
-      <button id="play" aria-keyshortcuts="Space" title="Play / stop (Space)">Play</button>
-      <button id="slower" aria-label="Slower">−</button>
-      <span id="bpm">140</span>
-      <button id="faster" aria-label="Faster">+</button>
-      <span class="sp"></span>
-      <button id="mDr" class="on">Drums</button>
-      <button id="mBs" class="on">Bass</button>
-      <button id="mCp" class="on">Comp</button>
-      <button id="chartBtn">Chart</button>
-      <button id="loopBtn" title="Repeat a range of bars">Loop</button>
-      <button id="trioBtn" title="Bass and drums only, no on-screen keyboard">Trio</button>
+  <div id="mainCol">
+    <header id="topbar">
+      <h1 class="sr-only">Jazz Jam</h1>
+      <button id="play" class="btn primary" aria-keyshortcuts="Space" title="Play / stop (Space)">
+        <svg class="i-play" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg>
+        <svg class="i-stop" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="3" width="10" height="10" rx="1" fill="currentColor"/></svg>
+        <span id="playLabel">Play</span>
+      </button>
+      <div class="stepper" role="group" aria-label="Tempo">
+        <button id="slower" class="btn ghost" aria-label="Slower">−</button>
+        <span id="bpm">140</span>
+        <button id="faster" class="btn ghost" aria-label="Faster">+</button>
+      </div>
+      <div class="inlineNow"><span class="c" id="curS"></span><span class="n" id="nextS"></span><span class="p" id="posS"></span></div>
+      <div class="sp"></div>
+      <button id="loopBtn" class="btn" aria-pressed="false" title="Repeat a range of bars">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 2l4 4-4 4"/><path d="M3 11v-1a4 4 0 0 1 4-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v1a4 4 0 0 1-4 4H3"/></svg>
+        <span id="loopLabel">Loop</span>
+      </button>
+      <button id="panelBtn" class="btn" aria-label="Song and sound settings" aria-expanded="false" aria-controls="panel">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
+      </button>
+    </header>
+
+    <section id="now" aria-label="Now playing">
+      <div id="title"></div>
+      <div id="chordRow"><span id="cur">—</span><span id="next"></span></div>
+      <div id="status"><span id="pos"></span><span id="loopChip" class="chipTag teal" hidden></span><span id="feelChip" class="chipTag" hidden></span></div>
+    </section>
+    <div id="loopHint" role="status" hidden></div>
+
+    <main id="chartWrap">
+      <h2 class="sr-only">Chart</h2>
+      <div id="grid"></div>
+    </main>
+
+    <section id="dock" aria-label="Keyboard and bar editor">
+      <div id="kbArea">
+        <div id="kbBar">
+          <button id="octDn" class="btn small" aria-label="Octave down">‹</button>
+          <span id="octlbl">C4</span>
+          <button id="octUp" class="btn small" aria-label="Octave up">›</button>
+          <div id="kbHandle" role="separator" tabindex="0" aria-orientation="horizontal" aria-label="Keyboard height. Drag, or use the up and down arrow keys" aria-valuemin="0" aria-valuemax="400" aria-valuenow="200"><span aria-hidden="true"></span></div>
+          <label class="sr-only" for="keyInst">Keyboard sound</label>
+          <select id="keyInst" class="nsel"><option value="piano">Piano</option><option value="rhodes">Rhodes</option><option value="organ">B3 organ</option><option value="synth">Synth EP</option></select>
+          <button id="leslieBtn" class="btn small" aria-pressed="false" hidden>Leslie</button>
+          <button id="kbToggle" class="btn small">Hide</button>
+        </div>
+        <div id="kb"></div>
+      </div>
+      <section id="editor" aria-labelledby="edTitle" hidden>
+        <div class="edHead">
+          <h2 id="edTitle">Edit bar 1</h2>
+          <div class="sp"></div>
+          <button id="edText" class="btn small" aria-pressed="false">Text</button>
+          <button id="edDone" class="btn small primary">Done</button>
+        </div>
+        <div id="edPicker">
+          <div id="edSlots" class="row" role="group" aria-label="Chords in this bar"></div>
+          <div class="sec">
+            <div class="row between">
+              <h3 class="sech" id="edNoteHead">Root</h3>
+              <sl-radio-group id="edNoteMode" size="small" value="root" label="Pick the root or the bass note" class="hideLabel"><sl-radio-button value="root">Root</sl-radio-button><sl-radio-button value="bass">Bass note</sl-radio-button></sl-radio-group>
+            </div>
+            <div id="edRoots" class="chips c6" role="group" aria-labelledby="edNoteHead"></div>
+            <button id="edNoBass" class="chip wide" aria-pressed="true" hidden>No bass note (play the root)</button>
+          </div>
+          <div class="sec"><h3 class="sech" id="edQualHead">Quality</h3><div id="edQuals" class="chips c6" role="group" aria-labelledby="edQualHead"></div></div>
+          <div class="sec"><h3 class="sech" id="edExtHead">Extensions</h3><div id="edExts" class="chips c7" role="group" aria-labelledby="edExtHead"></div></div>
+        </div>
+        <div id="edTextBox" hidden>
+          <sl-input id="edInput" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" help-text="Up to 4 chords, separated by spaces. “/” holds a beat, e.g. C7 / / F7. Enter applies."></sl-input>
+          <p id="edErr" class="err" role="alert"></p>
+        </div>
+        <div class="edFoot">
+          <button id="edPrev" class="btn small" aria-label="Previous bar">‹ Bar</button>
+          <button id="edInsert" class="btn small">Insert bar</button>
+          <button id="edDelete" class="btn small danger">Delete bar</button>
+          <button id="edNext" class="btn small" aria-label="Next bar">Bar ›</button>
+        </div>
+      </section>
+    </section>
+  </div>
+
+  <aside id="panel" aria-label="Settings" hidden>
+    <div id="panelBody">
+      <sl-tab-group id="tabs">
+        <sl-tab slot="nav" panel="song">Song</sl-tab>
+        <sl-tab slot="nav" panel="sound">Sound</sl-tab>
+        <sl-tab slot="nav" panel="app">App</sl-tab>
+
+        <sl-tab-panel name="song">
+          <div class="form">
+            <sl-input id="songName" label="Song" maxlength="60" autocomplete="off"></sl-input>
+            <sl-select id="openSong" placeholder="Open…" label="Open a song or preset" hoist></sl-select>
+            <div class="row">
+              <button id="saveSong" class="btn grow">Save</button>
+              <button id="newSong" class="btn grow">New</button>
+              <button id="delSong" class="btn grow danger">Delete</button>
+            </div>
+            <p id="songMsg" class="help" role="status"></p>
+            <sl-select id="style" label="Style" hoist>
+              <sl-option value="swing">Swing</sl-option><sl-option value="ballad">Ballad</sl-option><sl-option value="waltz">Jazz waltz (3/4)</sl-option><sl-option value="bossa">Bossa nova</sl-option><sl-option value="samba">Samba</sl-option>
+            </sl-select>
+            <p id="styleNote" class="help"></p>
+            <sl-select id="section" label="Rhythm section" hoist>
+              <sl-option value="std">Standard</sl-option><sl-option value="monk">Monk quartet (Rouse years)</sl-option><sl-option value="blakey">Blue Note (Blakey)</sl-option><sl-option value="miles64">Miles '64 (Tony / Ron / Herbie)</sl-option>
+            </sl-select>
+            <sl-select id="bassFeel" label="Feel" hoist>
+              <sl-option value="24">2 then 4 (two-feel first chorus)</sl-option><sl-option value="4">Walk (4)</sl-option><sl-option value="2">Two-feel (2)</sl-option>
+            </sl-select>
+            <div class="rangeRow"><sl-range id="sTempo" label="Tempo" min="40" max="320" step="1"></sl-range><span id="vTempo" class="val"></span></div>
+            <div class="rangeRow"><sl-range id="sSwing" label="Swing" min="50" max="72" step="1"></sl-range><span id="vSwing" class="val"></span></div>
+            <sl-switch id="cDyn">Dynamics (build through choruses)</sl-switch>
+            <sl-switch id="cCount">One-bar count-in</sl-switch>
+            <button id="textBtn" class="btn">Edit whole chart as text (import / export)…</button>
+          </div>
+        </sl-tab-panel>
+
+        <sl-tab-panel name="sound">
+          <div class="form">
+            <sl-radio-group id="output" label="Output" value="phone"><sl-radio-button value="phone">Phone speaker</sl-radio-button><sl-radio-button value="head">Headphones</sl-radio-button></sl-radio-group>
+            <h3 class="sech">Mixer</h3>
+            <div class="mixRow"><button id="mDr" class="btn mute" aria-pressed="true">Drums</button><sl-range id="sDr" label="Drums level" class="hideLabel" min="0" max="100"></sl-range><span id="vDr" class="val"></span></div>
+            <div class="mixRow"><button id="mBs" class="btn mute" aria-pressed="true">Bass</button><sl-range id="sBs" label="Bass level" class="hideLabel" min="0" max="100"></sl-range><span id="vBs" class="val"></span></div>
+            <div class="mixRow"><button id="mCp" class="btn mute" aria-pressed="true">Comp</button><sl-range id="sCp" label="Comping level" class="hideLabel" min="0" max="100"></sl-range><span id="vCp" class="val"></span></div>
+            <div class="mixRow"><span class="mixLab">Keys</span><sl-range id="sKy" label="Keyboard level" class="hideLabel" min="0" max="100"></sl-range><span id="vKy" class="val"></span></div>
+            <div class="mixRow"><span class="mixLab">Room</span><sl-range id="sRv" label="Room (reverb)" class="hideLabel" min="0" max="100"></sl-range><span id="vRv" class="val"></span></div>
+            <button id="resetMix" class="btn">Reset mix for this output</button>
+            <sl-switch id="cTrio">Trio mode (bass and drums only, keyboard hidden)</sl-switch>
+            <h3 class="sech">Band sounds</h3>
+            <sl-select id="compInst" label="Comping" hoist><sl-option value="rhodes">Rhodes</sl-option><sl-option value="piano">Piano</sl-option><sl-option value="synth">Synth EP</sl-option></sl-select>
+            <sl-select id="bassSound" label="Bass" hoist><sl-option value="room">Upright (room)</sl-option><sl-option value="studio">Upright (studio)</sl-option><sl-option value="synth">Synth</sl-option></sl-select>
+            <sl-select id="drumStyle" label="Drums" hoist><sl-option value="auto">Auto (brushes under 110)</sl-option><sl-option value="ride">Sticks &amp; ride</sl-option><sl-option value="brushes">Brushes</sl-option></sl-select>
+            <sl-switch id="cSmp">Recorded drums</sl-switch>
+            <div class="rangeRow"><sl-range id="sCy" label="Cymbal tone (dark to bright)" min="0" max="100"></sl-range><span id="vCy" class="val"></span></div>
+            <h3 class="sech">On-screen keyboard</h3>
+            <sl-switch id="cTones">Show chord tones on the keys</sl-switch>
+            <p class="help legend"><span class="lg gt" aria-hidden="true"></span> 3rd &amp; 7th <span class="lg ct" aria-hidden="true"></span> root &amp; 5th <span class="lg ex" aria-hidden="true"></span> extensions</p>
+            <sl-switch id="cSus">Sustain</sl-switch>
+            <sl-switch id="cTrem">Keys tremolo</sl-switch>
+          </div>
+        </sl-tab-panel>
+
+        <sl-tab-panel name="app">
+          <div class="form">
+            <sl-radio-group id="theme" label="Appearance" value="system"><sl-radio-button value="system">System</sl-radio-button><sl-radio-button value="light">Light</sl-radio-button><sl-radio-button value="dark">Dark</sl-radio-button></sl-radio-group>
+            <h3 class="sech">Google Drive</h3>
+            <p id="driveStatus" class="help" role="status"></p>
+            <div class="row"><button id="driveBtn" class="btn grow">Sync with Google Drive</button><button id="driveOff" class="btn grow" hidden>Stop syncing</button></div>
+            <h3 class="sech">MIDI keyboard</h3>
+            <p id="midiStatus" class="help" role="status">Lights up the notes you play on a USB or Bluetooth MIDI keyboard.</p>
+            <button id="midiBtn" class="btn">Connect</button>
+            <sl-switch id="cMidiSnd">Play the app’s keyboard sound from it</sl-switch>
+          </div>
+        </sl-tab-panel>
+      </sl-tab-group>
     </div>
-    <div id="title"></div>
-    <div id="now"><span id="cur">—</span><span id="next"></span><span id="pos"></span></div>
-    <div id="loopHint" class="help" hidden></div>
-    <div id="grid"></div>
-  </div>
-  <div id="strip">
-    <button id="octDn" aria-label="Octave down">◀</button>
-    <span id="octlbl">C4</span>
-    <button id="octUp" aria-label="Octave up">▶</button>
-    <span class="sp"></span>
-    <select id="keyInst" aria-label="Keyboard sound"><option value="piano">Piano</option><option value="rhodes">Rhodes</option><option value="organ">B3 organ</option><option value="synth">Synth EP</option></select>
-    <button id="leslieBtn" hidden>Leslie: slow</button>
-    <button id="tonesBtn" class="on">Tones</button>
-    <button id="susBtn">Sustain</button>
-  </div>
-  <div id="kb"></div>
+  </aside>
 </div>
 
-<div id="sheet" hidden>
-  <div class="sheetin">
-    <div class="row"><h2>Chart</h2><span class="sp"></span><button id="done">Done</button></div>
-    <div class="row">
-      <select id="mySongs"><option value="">My songs…</option></select>
-      <select id="preset"><option value="">Load a preset…</option></select>
-    </div>
-    <div class="row">
-      <input id="songName" type="text" placeholder="Song name" autocomplete="off" autocorrect="off" maxlength="60">
-      <button id="saveSong">Save</button>
-      <button id="delSong">Delete</button>
-    </div>
-    <div id="songMsg" class="help"></div>
-    <div class="row help" id="driveRow"><span id="driveStatus"></span><button id="driveBtn">Sync with Google Drive</button><button id="driveOff" hidden>Stop syncing</button></div>
-    <div class="row help"><label>Output <select id="output"><option value="phone">Phone speaker</option><option value="head">Headphones / speakers</option></select></label><button id="resetMix">Reset mix</button></div>
-    <div class="row help"><label>Style <select id="style"><option value="swing">Swing</option><option value="ballad">Ballad</option><option value="waltz">Jazz waltz (3/4)</option><option value="bossa">Bossa nova</option><option value="samba">Samba</option></select></label><span id="styleNote"></span></div>
-    <div class="row help" id="sectionRow"><label>Rhythm section <select id="section"><option value="std">Standard</option><option value="monk">Monk quartet (Rouse years)</option><option value="blakey">Blue Note (Blakey)</option><option value="miles64">Miles '64 (Tony / Ron / Herbie)</option></select></label></div>
-    <div class="row help" id="swingOpts"><label>Feel <select id="bassFeel"><option value="24">2 then 4 (two-feel first chorus)</option><option value="4">Walk (4)</option><option value="2">Two-feel (2)</option></select></label><label class="row"><input id="cDyn" type="checkbox"> Dynamics</label></div>
-    <textarea id="chartText" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off"></textarea>
-    <div id="errs" class="err"></div>
-    <div class="help">
-      Bars are separated by <b>|</b> or new lines. Up to 4 chords per bar (1 chord = whole bar, 2 = half each).
-      <b>%</b> repeats the previous bar. <b>/</b> holds the chord for a beat.
-      [Labels in brackets] are ignored.<br>
-      Key dots: <b style="color:var(--guide)">teal</b> = 3rd &amp; 7th, <b style="color:var(--accent)">orange</b> = root &amp; 5th, <b style="color:var(--ext)">purple</b> = 9ths, 11ths, 13ths and alterations in the symbol.<br>
-      Examples: Cmaj7 C6 C69 Dm7 D-7 Dm6 Dm(maj7) G7 G9 G13 G7b9 G7#9 G7alt G7#11 G7sus4 Bø Bm7b5 Ebdim7 Caug Bb/D
-    </div>
-    <div class="sl"><span>Tempo</span><input id="sTempo" type="range" min="40" max="320" step="1"><span id="vTempo"></span></div>
-    <div class="sl"><span>Swing</span><input id="sSwing" type="range" min="50" max="72" step="1"><span id="vSwing"></span></div>
-    <div class="sl"><span>Drums</span><input id="sDr" type="range" min="0" max="100"><span id="vDr"></span></div>
-    <div class="sl"><span>Bass</span><input id="sBs" type="range" min="0" max="100"><span id="vBs"></span></div>
-    <div class="sl"><span>Comp</span><input id="sCp" type="range" min="0" max="100"><span id="vCp"></span></div>
-    <div class="sl"><span>Keys</span><input id="sKy" type="range" min="0" max="100"><span id="vKy"></span></div>
-    <div class="sl"><span>Cymbal tone</span><input id="sCy" type="range" min="0" max="100"><span id="vCy"></span></div>
-    <div class="sl"><span>Room</span><input id="sRv" type="range" min="0" max="100"><span id="vRv"></span></div>
-    <div class="row help"><label>Drums <select id="drumStyle"><option value="auto">Auto (brushes under 110)</option><option value="ride">Sticks &amp; ride</option><option value="brushes">Brushes</option></select></label><label class="row"><input id="cTrem" type="checkbox"> Keys tremolo</label></div>
-    <label class="row help"><input id="cSmp" type="checkbox"> Recorded drums (ride, kick, snare, hi-hat, crash)</label>
-    <div class="row help"><label>Comping sound <select id="compInst"><option value="rhodes">Rhodes</option><option value="piano">Piano</option><option value="synth">Synth EP</option></select></label></div>
-    <div class="row help"><label>Bass sound <select id="bassSound"><option value="room">Upright (room)</option><option value="studio">Upright (studio)</option><option value="synth">Synth</option></select></label></div>
-    <div class="row help"><span>MIDI keyboard</span><button id="midiBtn">Connect</button><label class="row"><input id="cMidiSnd" type="checkbox"> Play app sound</label></div>
-    <div id="midiStatus" class="help">Lights up the notes you play on a USB/Bluetooth MIDI keyboard. Turn on “Play app sound” to play the Keys sound from it.</div>
-    <label class="row help"><input id="cCount" type="checkbox"> One-bar count-in</label>
-  </div>
-</div>
+<sl-drawer id="sheet" label="Settings" placement="bottom" no-header>
+  <div class="sheetHead"><h2>Settings</h2><button id="sheetClose" class="btn small">Close</button></div>
+</sl-drawer>
+
+<sl-dialog id="textDlg" label="Chart as text">
+  <sl-textarea id="chartText" rows="10" resize="auto" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" label="Chart"></sl-textarea>
+  <p id="errs" class="err" role="alert"></p>
+  <p class="help">Bars are separated by <b>|</b> or new lines; up to 4 chords per bar. <b>%</b> repeats the previous bar, <b>/</b> holds the chord for a beat, <b>[A]</b> labels a section. Paste a chart in here, or copy it out to keep or share.</p>
+  <button id="textCancel" slot="footer" class="btn">Cancel</button>
+  <button id="textApply" slot="footer" class="btn primary">Apply</button>
+</sl-dialog>
 
 <script src="js/theory.js"></script>
+<script src="js/chartedit.js"></script>
 <script src="js/presets.js"></script>
 <script src="js/state.js"></script>
 <script src="js/sections.js"></script>

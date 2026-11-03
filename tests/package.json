@@ -1,0 +1,6 @@
+{
+  "name": "jazz-jam-tests",
+  "private": true,
+  "description": "Test dependencies only. Run: cd tests && npm install && python3 run.py",
+  "devDependencies": { "axe-core": "4.10.2" }
+}

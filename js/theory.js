@@ -83,14 +83,25 @@ function parseChord(sym){
 // Returns {bars:[[display tokens]], segs:[{chord,start,len}], segOfBeat:[], beats, errors}
 // bpb = beats per bar (4, or 3 for a waltz)
 const BAR_SPLITS={4:[[4],[2,2],[2,1,1],[1,1,1,1]],3:[[3],[2,1],[1,1,1]]};
+// The chart text as raw bars: [{label, toks}]. "[A]" labels attach to the next bar.
+// Shared by parseChart and the chart editor, so bar indexes always agree.
+function splitChart(text){
+  const out=[];let label=null;
+  for(const part of text.replace(/\[([^\]]*)\]/g,'|\u00a7$1|').split(/[|\n]/)){
+    const s=part.trim();if(!s)continue;
+    if(s[0]==='\u00a7'){label=s.slice(1).trim()||null;continue;}
+    out.push({label,toks:s.split(/\s+/).filter(Boolean)});label=null;
+  }
+  return out;
+}
 function parseChart(text,bpb=4){
   const errors=[];
-  const clean=text.replace(/\[[^\]]*\]/g,' ');
-  const rawBars=clean.split(/[|\n]/).map(s=>s.trim()).filter(s=>s.length);
-  const bars=[],segs=[],segOfBeat=[];
+  const raw=splitChart(text);
+  const bars=[],segs=[],segOfBeat=[],labels=[],src=[];
   let prevTokens=null,lastChord=null;
-  for(const rb of rawBars){
-    let toks=rb.split(/\s+/).filter(Boolean);
+  for(let ri=0;ri<raw.length;ri++){
+    const rb=raw[ri].toks.join(' ');
+    let toks=[...raw[ri].toks];
     let display=toks;
     if(toks.length===1&&toks[0]==='%'){
       if(!prevTokens){errors.push('“%” with no bar before it');continue;}
@@ -116,7 +127,7 @@ function parseChart(text,bpb=4){
       beat+=lens[i];
     });
     if(segOfBeat[barStart]===undefined) continue;
-    bars.push(display);
+    bars.push(display);labels.push(raw[ri].label);src.push(ri);   // src: index into splitChart()
     prevTokens=toks;
   }
   // Lead-sheet display: the chords actually sounding in each bar (so % shows real chords).
@@ -128,7 +139,7 @@ function parseChart(text,bpb=4){
     const held=i>0&&d[0].t===symAt(i*bpb-1);
     bars[i]=held?(d.length===1?[]:(d[0].dim=true,d)):d;
   }
-  return {bars,segs,segOfBeat,beats:bars.length*bpb,bpb,errors};
+  return {bars,segs,segOfBeat,beats:bars.length*bpb,bpb,errors,labels,src};
 }
 // ---------- Walking bass ----------
 const BLO=31,BHI=52;

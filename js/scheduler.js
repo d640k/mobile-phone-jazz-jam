@@ -7,12 +7,12 @@ function start(){
   P.playing=true;P.step=0;P.nextTime=ctx.currentTime+0.08;
   P.countSteps=S.countIn?song.bpb*2:0;P.walker=makeWalker();P.compPrev=null;P.compPlan=null;P.two=null;P.stroll=false;P.lastStroll=-9;P.drop=false;P.lastDrop=-9;P.pedal=null;P.xr=null;P.roll=null;P.lastBass=null;P.bossaComp=null;P.bRoot=null;P.uiQ=[];
   P.timer=setInterval(tick,25);tick();
-  $('play').textContent='Stop';$('play').classList.add('playing');
+  setPlayUI(true);
   try{navigator.wakeLock&&navigator.wakeLock.request('screen').then(l=>P.lock=l).catch(()=>{});}catch(e){}
 }
 function stop(){
   P.playing=false;clearInterval(P.timer);P.uiQ=[];silenceDrums();song=chartSong;P.pending=null;
-  $('play').textContent='Play';$('play').classList.remove('playing');
+  setPlayUI(false);
   try{P.lock&&P.lock.release();}catch(e){}
   showBeat(null);
 }
