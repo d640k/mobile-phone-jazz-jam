@@ -33,7 +33,7 @@ function layout(){
     $('panelBtn').setAttribute('aria-expanded',String($('sheet').open));
   }
   $('kbArea').hidden=!wide&&ED.open;
-  applyKbHeight();fitCells();
+  applyKbHeight();layoutLines();
 }
 function togglePanel(){
   if(MQ_WIDE.matches){S.panelOpen=$('panel').hidden;store.set('panelOpen',S.panelOpen);if(!S.panelOpen&&ED.open)closeEditor();layout();}
@@ -41,34 +41,79 @@ function togglePanel(){
   else{if(ED.open)closeEditor();$('sheet').show();$('panelBtn').setAttribute('aria-expanded','true');}
 }
 
-// ---------- Chart grid ----------
+// ---------- Chart (lead-sheet layout) ----------
+// Bars sit in lines separated by barlines. Each bar is as wide as its chords need;
+// lines hold 4 bars (8 on a short landscape phone) and break early only when the bars don't fit,
+// splitting 4 into 2+2 rather than 3+1. A section label always starts a new line.
+let CELLS=[];
 function renderGrid(){
-  const g=$('grid');g.innerHTML='';
+  const g=$('grid');g.innerHTML='';CELLS=[];
   chartSong.bars.forEach((b,i)=>{
     const c=document.createElement('button');c.type='button';c.className='cell';c.dataset.bar=i;
     if(S.loop&&i>=S.loop.a&&i<=S.loop.b)c.classList.add('inloop');
     if(LOOP.sel&&i===LOOP.first)c.classList.add('loopfirst');
     if(ED.open&&chartSong.src[i]===ED.bar)c.classList.add('sel');
+    if(i===chartSong.bars.length-1)c.classList.add('end');
     const n=document.createElement('span');n.className='n';
     const lab=chartSong.labels[i];
-    if(lab){const l=document.createElement('span');l.className='lbl';l.textContent=lab;n.appendChild(l);}
-    n.appendChild(document.createTextNode(String(i+1)));
+    if(lab){const l=document.createElement('span');l.className='lbl';l.textContent=lab;n.appendChild(l);c.classList.add('sec');}
+    const num=document.createElement('span');num.className='num';num.textContent=String(i+1);n.appendChild(num);
     const ch=document.createElement('span');ch.className='ch';ch.setAttribute('aria-hidden','true');
-    // lead-sheet layout: each chord gets the share of the bar its beats take up
+    // chords spread across the bar by beats once there's room
     let at=0;
     b.forEach(x=>{
-      if(x.beat>at){const g=document.createElement('span');g.className='gap';g.style.flexGrow=x.beat-at;ch.appendChild(g);}
-      const s=document.createElement('span');s.className='chd'+(x.dim?' rep':'');s.style.flexGrow=x.len;
-      chordInto(s,x.t);ch.appendChild(s);at=x.beat+x.len;
+      if(x.beat>at){const gp=document.createElement('span');gp.className='gap';gp.style.flexGrow=x.beat-at;ch.appendChild(gp);}
+      const sp=document.createElement('span');sp.className='chd'+(x.dim?' rep':'');sp.style.flexGrow=x.len;
+      chordInto(sp,x.t);ch.appendChild(sp);at=x.beat+x.len;
     });
     c.append(n,ch);
     const words=b.length?b.map(x=>x.t).join(', '):'same chord';
     c.setAttribute('aria-label',`Bar ${i+1}${lab?', section '+lab:''}: ${words}. ${LOOP.sel?'Choose for the loop':'Edit'}`);
-    g.appendChild(c);
+    CELLS.push(c);
   });
-  const add=document.createElement('button');add.type='button';add.className='cell add';add.id='addBar';add.textContent='+ Bar';add.setAttribute('aria-label','Add a bar at the end');
-  g.appendChild(add);
-  curCell=null;fitCells();
+  curCell=null;layoutLines();
+}
+function layoutLines(){
+  const g=$('grid');if(!CELLS.length){g.innerHTML='';g.appendChild(addBarBtn());return;}
+  const focused=CELLS.indexOf(document.activeElement),top=$('chartWrap').scrollTop;
+  // 1) measure each bar at its natural width
+  const meas=document.createElement('div');meas.className='sys measure';g.innerHTML='';g.appendChild(meas);
+  CELLS.forEach(c=>{c.style.cssText='';c.style.removeProperty('--k');meas.appendChild(c);});
+  const W=g.clientWidth-2;
+  const nat=CELLS.map(c=>Math.ceil(c.getBoundingClientRect().width));
+  // 2) break into lines
+  const per=document.body.classList.contains('short')?8:4;
+  const lines=[];
+  const place=(a,b,split)=>{                // bars a..b-1 as one or more lines
+    let sum=0;for(let i=a;i<b;i++)sum+=nat[i];
+    if(sum<=W||b-a===1){lines.push([a,b,split]);return;}
+    const mid=a+Math.ceil((b-a)/2);place(a,mid,true);place(mid,b,true);
+  };
+  let start=0;
+  for(let i=1;i<=CELLS.length;i++){
+    if(i===CELLS.length||chartSong.labels[i]||i-start===per){place(start,i,false);start=i;}
+  }
+  // 3) build the lines; a short line keeps the bar spacing of a full one
+  g.innerHTML='';
+  for(const [a,b,split] of lines){
+    const row=document.createElement('div');row.className='sys';
+    let sum=0;for(let i=a;i<b;i++)sum+=nat[i];
+    const share=!split&&b-a<per?Math.max(sum,W*(b-a)/per):W;
+    row.style.width=Math.min(W,share)+'px';
+    for(let i=a;i<b;i++){
+      const c=CELLS[i];c.style.flex=`1 1 ${nat[i]}px`;
+      if(b-a===1&&nat[i]>W)c.style.setProperty('--k',Math.max(0.6,W/nat[i]).toFixed(2));
+      row.appendChild(c);
+    }
+    g.appendChild(row);
+  }
+  g.appendChild(addBarBtn());
+  $('chartWrap').scrollTop=top;
+  if(focused>=0)CELLS[focused].focus();
+}
+function addBarBtn(){
+  const add=document.createElement('button');add.type='button';add.className='addBar';add.id='addBar';add.textContent='+ Bar';add.setAttribute('aria-label','Add a bar at the end');
+  return add;
 }
 // Lead-sheet chord symbol: root and accidental full size, quality/extensions small and raised,
 // slash bass a little smaller. "Bb7#9/Ab" -> B♭ ⁷♯⁹ /A♭
@@ -80,24 +125,6 @@ function chordInto(el,sym){
   const r=document.createElement('span');r.className='cr';r.textContent=m[1].replace('#','\u266f').replace('b','\u266d');el.appendChild(r);
   if(m[2]){const q=document.createElement('span');q.className='cq';q.textContent=accTxt(m[2]);el.appendChild(q);}
   if(m[3]){const bs=document.createElement('span');bs.className='cb';bs.textContent='/'+m[3].replace('#','\u266f').replace('b','\u266d');el.appendChild(bs);}
-}
-// Shrink a bar's chords until they fit its width (never wrap, never change the bar's height).
-// width a chord's text really needs (inline spans), plus a little air before the next chord
-function chordNeed(s){let w=0;for(const c of s.children)w+=c.getBoundingClientRect().width;return w+(s.nextElementSibling?parseFloat(getComputedStyle(s).fontSize)*0.4:0);}
-function fitCells(){
-  requestAnimationFrame(()=>{
-    for(const ch of $('grid').querySelectorAll('.ch')){
-      ch.style.removeProperty('--k');ch.classList.remove('packed','stack','stack2');
-      const chords=[...ch.querySelectorAll('.chd')];
-      const fit=()=>{let k=1;for(const s of chords){const need=chordNeed(s),have=s.getBoundingClientRect().width;if(need>have+0.5)k=Math.min(k,have/need);}return k;};
-      let k=fit();
-      // 1) chords spaced by beats; 2) too tight: pack them by their own width;
-      // 3) still too small: two lines inside the same bar (first half of the bar on top).
-      if(k<0.8){ch.classList.add('packed');const need=chords.reduce((a,s)=>a+chordNeed(s),0);k=Math.min(1,ch.clientWidth/need);}
-      if(k<0.7&&chords.length>1){ch.classList.remove('packed');ch.classList.add('stack');if(chords.length===2)ch.classList.add('stack2');k=Math.min(0.8,fit());}
-      if(k<1)ch.style.setProperty('--k',Math.max(0.5,Math.floor(k*50)/50));
-    }
-  });
 }
 function setNow(cur,next,pos){
   const put=(id,t)=>{const e=$(id);if(e.dataset.v===t)return;e.dataset.v=t;if(/^[A-G]/.test(t))chordInto(e,t);else e.textContent=t;};
@@ -123,7 +150,7 @@ function showBeat(ev){
     `Bar ${lb+off+1}/${chartSong.bars.length} · Beat ${ev.beat%sg.bpb+1}`+(ev.chorus!=null?` · Chorus ${ev.chorus+1}`:''));
   const feel=ev.stroll?'comp out':(ev.feel||'');
   $('feelChip').textContent=feel;$('feelChip').hidden=!feel;
-  const cell=$('grid').children[lb+off];
+  const cell=CELLS[lb+off];
   if(cell!==curCell){if(curCell)curCell.classList.remove('cur');if(cell){cell.classList.add('cur');if(ev.beat%sg.bpb===0)cell.scrollIntoView({block:'nearest'});}curCell=cell;}
   setTones(seg.chord);
 }
@@ -172,7 +199,7 @@ function startLoopSelect(){
   LOOP.sel=true;LOOP.first=null;loopHint('Tap the first bar of the loop.');refreshLoopBtn();renderGrid();
 }
 function loopTap(i){
-  if(LOOP.first===null){LOOP.first=i;loopHint(`Bar ${i+1}. Now tap the last bar of the loop (or the same bar again).`);renderGrid();$('grid').children[i].focus();}
+  if(LOOP.first===null){LOOP.first=i;loopHint(`Bar ${i+1}. Now tap the last bar of the loop (or the same bar again).`);renderGrid();CELLS[i].focus();}
   else setLoop(LOOP.first,i);
 }
 
@@ -190,7 +217,7 @@ function openEditor(rawIndex){
 }
 function closeEditor(){
   ED.open=false;$('editor').hidden=true;layout();renderGrid();
-  const i=chartSong.src.indexOf(ED.bar);const c=$('grid').children[i];if(c)c.focus();
+  const i=chartSong.src.indexOf(ED.bar);const c=CELLS[i];if(c)c.focus();
 }
 // write one raw bar's tokens back to the chart
 function setBarToks(toks){
@@ -595,8 +622,8 @@ function init(){
   $('sheet').addEventListener('sl-after-show',e=>{if(e.target===$('sheet'))$('panelBtn').setAttribute('aria-expanded','true');});
   $('loopBtn').onclick=()=>{if(S.loop||LOOP.sel)clearLoop(false);else startLoopSelect();};
   $('grid').addEventListener('click',e=>{
+    if(e.target.closest('#addBar')){if(!LOOP.sel)addBarAtEnd();return;}
     const c=e.target.closest('.cell');if(!c)return;
-    if(c.id==='addBar'){if(!LOOP.sel)addBarAtEnd();return;}
     const i=+c.dataset.bar;
     if(LOOP.sel)loopTap(i);
     else if(ED.open&&chartSong.src[i]===ED.bar)closeEditor();
@@ -672,9 +699,9 @@ function init(){
   setBpm(S.bpm);updateTitle();renderGrid();showBeat(null);refreshLoopBtn();
   layout();
   for(const mq of [MQ_WIDE,MQ_SHORT])mq.addEventListener('change',layout);
-  let rt;addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>{layout();fitCells();},150);});
+  let rt;addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>{layout();layoutLines();},150);});
   requestAnimationFrame(uiLoop);
-  if(document.fonts)document.fonts.ready.then(fitCells);
+  if(document.fonts)document.fonts.ready.then(layoutLines);
 }
 // Shoelace components are ES modules; wait for them before touching their properties.
 const SL_TAGS=['sl-tab-group','sl-tab','sl-tab-panel','sl-range','sl-select','sl-option','sl-switch','sl-radio-group','sl-radio-button','sl-drawer','sl-dialog','sl-input','sl-textarea'];
