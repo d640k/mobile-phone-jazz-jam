@@ -1,6 +1,6 @@
 // Minimal service worker: makes the app installable and lets it open offline.
 // Network-first, so updates show up right away; the cache is only a fallback.
-const CACHE='jazzjam-v3';
+const CACHE='jazzjam-v4';
 self.addEventListener('install',()=>self.skipWaiting());
 self.addEventListener('activate',e=>e.waitUntil(
   caches.keys().then(ks=>Promise.all(ks.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));

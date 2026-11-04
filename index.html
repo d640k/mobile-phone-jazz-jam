@@ -64,11 +64,14 @@
 
     <section id="dock" aria-label="Keyboard and bar editor">
       <div id="kbArea">
+        <div id="kbHandle" role="separator" tabindex="0" aria-orientation="horizontal" aria-label="Keyboard height. Drag, or use the up and down arrow keys" aria-valuemin="0" aria-valuemax="400" aria-valuenow="200"><span aria-hidden="true"></span></div>
         <div id="kbBar">
-          <button id="octDn" class="btn small" aria-label="Octave down">‹</button>
-          <span id="octlbl">C4</span>
-          <button id="octUp" class="btn small" aria-label="Octave up">›</button>
-          <div id="kbHandle" role="separator" tabindex="0" aria-orientation="horizontal" aria-label="Keyboard height. Drag, or use the up and down arrow keys" aria-valuemin="0" aria-valuemax="400" aria-valuenow="200"><span aria-hidden="true"></span></div>
+          <div class="octGroup" role="group" aria-label="Octave">
+            <button id="octDn" class="btn small" aria-label="Octave down">‹</button>
+            <span id="octlbl">C4</span>
+            <button id="octUp" class="btn small" aria-label="Octave up">›</button>
+          </div>
+          <div class="sp"></div>
           <label class="sr-only" for="keyInst">Keyboard sound</label>
           <select id="keyInst" class="nsel"><option value="piano">Piano</option><option value="rhodes">Rhodes</option><option value="organ">B3 organ</option><option value="synth">Synth EP</option></select>
           <button id="leslieBtn" class="btn small" aria-pressed="false" hidden>Leslie</button>

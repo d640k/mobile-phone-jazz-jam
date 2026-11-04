@@ -33,7 +33,7 @@ function layout(){
     $('panelBtn').setAttribute('aria-expanded',String($('sheet').open));
   }
   $('kbArea').hidden=!wide&&ED.open;
-  applyKbHeight();
+  applyKbHeight();fitCells();
 }
 function togglePanel(){
   if(MQ_WIDE.matches){S.panelOpen=$('panel').hidden;store.set('panelOpen',S.panelOpen);if(!S.panelOpen&&ED.open)closeEditor();layout();}
@@ -53,8 +53,14 @@ function renderGrid(){
     const lab=chartSong.labels[i];
     if(lab){const l=document.createElement('span');l.className='lbl';l.textContent=lab;n.appendChild(l);}
     n.appendChild(document.createTextNode(String(i+1)));
-    const ch=document.createElement('span');ch.className='ch';
-    b.forEach(x=>{const s=document.createElement('span');if(x.dim)s.className='rep';s.textContent=x.t;ch.appendChild(s);});
+    const ch=document.createElement('span');ch.className='ch';ch.setAttribute('aria-hidden','true');
+    // lead-sheet layout: each chord gets the share of the bar its beats take up
+    let at=0;
+    b.forEach(x=>{
+      if(x.beat>at){const g=document.createElement('span');g.className='gap';g.style.flexGrow=x.beat-at;ch.appendChild(g);}
+      const s=document.createElement('span');s.className='chd'+(x.dim?' rep':'');s.style.flexGrow=x.len;
+      chordInto(s,x.t);ch.appendChild(s);at=x.beat+x.len;
+    });
     c.append(n,ch);
     const words=b.length?b.map(x=>x.t).join(', '):'same chord';
     c.setAttribute('aria-label',`Bar ${i+1}${lab?', section '+lab:''}: ${words}. ${LOOP.sel?'Choose for the loop':'Edit'}`);
@@ -62,11 +68,44 @@ function renderGrid(){
   });
   const add=document.createElement('button');add.type='button';add.className='cell add';add.id='addBar';add.textContent='+ Bar';add.setAttribute('aria-label','Add a bar at the end');
   g.appendChild(add);
-  curCell=null;
+  curCell=null;fitCells();
+}
+// Lead-sheet chord symbol: root and accidental full size, quality/extensions small and raised,
+// slash bass a little smaller. "Bb7#9/Ab" -> B♭ ⁷♯⁹ /A♭
+const accTxt=t=>t.replace(/#/g,'\u266f').replace(/b(?=\d|$|\/)/g,'\u266d');
+function chordInto(el,sym){
+  el.textContent='';
+  const m=/^([A-G][b#]?)([^/]*)(?:\/(.+))?$/.exec(sym);
+  if(!m){el.textContent=sym;return;}
+  const r=document.createElement('span');r.className='cr';r.textContent=m[1].replace('#','\u266f').replace('b','\u266d');el.appendChild(r);
+  if(m[2]){const q=document.createElement('span');q.className='cq';q.textContent=accTxt(m[2]);el.appendChild(q);}
+  if(m[3]){const bs=document.createElement('span');bs.className='cb';bs.textContent='/'+m[3].replace('#','\u266f').replace('b','\u266d');el.appendChild(bs);}
+}
+// Shrink a bar's chords until they fit its width (never wrap, never change the bar's height).
+// width a chord's text really needs (inline spans), plus a little air before the next chord
+function chordNeed(s){let w=0;for(const c of s.children)w+=c.getBoundingClientRect().width;return w+(s.nextElementSibling?parseFloat(getComputedStyle(s).fontSize)*0.4:0);}
+function fitCells(){
+  requestAnimationFrame(()=>{
+    for(const ch of $('grid').querySelectorAll('.ch')){
+      ch.style.removeProperty('--k');ch.classList.remove('packed','stack','stack2');
+      const chords=[...ch.querySelectorAll('.chd')];
+      const fit=()=>{let k=1;for(const s of chords){const need=chordNeed(s),have=s.getBoundingClientRect().width;if(need>have+0.5)k=Math.min(k,have/need);}return k;};
+      let k=fit();
+      // 1) chords spaced by beats; 2) too tight: pack them by their own width;
+      // 3) still too small: two lines inside the same bar (first half of the bar on top).
+      if(k<0.8){ch.classList.add('packed');const need=chords.reduce((a,s)=>a+chordNeed(s),0);k=Math.min(1,ch.clientWidth/need);}
+      if(k<0.7&&chords.length>1){ch.classList.remove('packed');ch.classList.add('stack');if(chords.length===2)ch.classList.add('stack2');k=Math.min(0.8,fit());}
+      if(k<1)ch.style.setProperty('--k',Math.max(0.5,Math.floor(k*50)/50));
+    }
+  });
 }
 function setNow(cur,next,pos){
-  $('cur').textContent=cur;$('next').textContent=next;$('pos').textContent=pos;
-  $('curS').textContent=cur;$('nextS').textContent=next;$('posS').textContent=pos;
+  const put=(id,t)=>{const e=$(id);if(e.dataset.v===t)return;e.dataset.v=t;if(/^[A-G]/.test(t))chordInto(e,t);else e.textContent=t;};
+  put('cur',cur);put('curS',cur);
+  const nx=next.replace(/^→ /,'');
+  for(const id of ['next','nextS']){const e=$(id);if(e.dataset.v===nx)continue;e.dataset.v=nx;e.textContent='';
+    if(nx){e.append('→ ');const c=document.createElement('span');chordInto(c,nx);e.appendChild(c);}}
+  $('pos').textContent=pos;$('posS').textContent=pos;
 }
 function showBeat(ev){
   const loopTxt=S.loop?`Loop ${S.loop.a+1}–${S.loop.b+1}`:'';
@@ -348,7 +387,7 @@ function setSustain(on){
   sustain=on;$('cSus').checked=sustain;
   if(!sustain){sustained.forEach(h=>h.releaseNow());sustained.clear();}
 }
-function updateLeslieBtn(){$('leslieBtn').textContent='Leslie: '+(S.leslieFast?'fast':'slow');$('leslieBtn').setAttribute('aria-pressed',String(S.leslieFast));}
+function updateLeslieBtn(){const b=$('leslieBtn'),sp=S.leslieFast?'fast':'slow';b.innerHTML=`<span class="lw">Leslie </span>${sp}`;b.setAttribute('aria-label','Leslie '+sp);b.setAttribute('aria-pressed',String(S.leslieFast));}
 
 // ---------- Trio, mutes, rhythm section ----------
 function setTrio(on){
@@ -633,8 +672,9 @@ function init(){
   setBpm(S.bpm);updateTitle();renderGrid();showBeat(null);refreshLoopBtn();
   layout();
   for(const mq of [MQ_WIDE,MQ_SHORT])mq.addEventListener('change',layout);
-  let rt;addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(layout,150);});
+  let rt;addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>{layout();fitCells();},150);});
   requestAnimationFrame(uiLoop);
+  if(document.fonts)document.fonts.ready.then(fitCells);
 }
 // Shoelace components are ES modules; wait for them before touching their properties.
 const SL_TAGS=['sl-tab-group','sl-tab','sl-tab-panel','sl-range','sl-select','sl-option','sl-switch','sl-radio-group','sl-radio-button','sl-drawer','sl-dialog','sl-input','sl-textarea'];

@@ -135,7 +135,8 @@ function parseChart(text,bpb=4){
   const symAt=b=>segs[segOfBeat[b]].chord.sym;
   for(let i=0;i<bars.length;i++){
     const d=[];let prev=null;
-    for(let b=i*bpb;b<i*bpb+bpb;b++){const sy=symAt(b);if(sy!==prev){d.push({t:sy,dim:false});prev=sy;}}
+    for(let b=i*bpb;b<i*bpb+bpb;b++){const sy=symAt(b);if(sy!==prev){d.push({t:sy,dim:false,beat:b-i*bpb});prev=sy;}}
+    d.forEach((x,j)=>{x.len=(j+1<d.length?d[j+1].beat:bpb)-x.beat;});
     const held=i>0&&d[0].t===symAt(i*bpb-1);
     bars[i]=held?(d.length===1?[]:(d[0].dim=true,d)):d;
   }

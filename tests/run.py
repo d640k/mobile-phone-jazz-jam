@@ -119,7 +119,7 @@ async def play_stop_label_and_now_playing(c):
     pg = await c.page(storage={'chart': BLUES, 'countIn': False})
     await pg.click('#play'); await pg.wait_for_timeout(1200)
     ok(await pg.text_content('#playLabel') == 'Stop', 'label not Stop')
-    ok(await pg.text_content('#cur') in ('F7', 'Bb7'), await pg.text_content('#cur'))
+    ok(await pg.text_content('#cur') in ('F7', 'B\u266d7'), await pg.text_content('#cur'))
     ok('Bar ' in await pg.text_content('#pos'), 'no position')
     ok(await pg.locator('#grid .cell.cur').count() == 1, 'no current bar highlight')
     await pg.keyboard.press('Space'); await pg.wait_for_timeout(100)
@@ -175,7 +175,7 @@ async def editor_picker_root_quality_ext_bass(c):
     ok(t == 'C13b9/E', 'bass gave %r' % t)
     await pg.click('#edNoBass')
     ok(await ev(pg, 'splitChart(S.chart)[5].toks.join(" ")') == 'C13b9', 'no bass')
-    ok(await pg.text_content('#grid .cell:nth-child(6) .ch') == 'C13b9', 'grid not updated')
+    ok(await pg.text_content('#grid .cell:nth-child(6) .ch') == 'C13\u266d9', 'grid not updated')
     await pg.click('#edDone')
     ok(await pg.is_visible('#kbArea') and not await pg.is_visible('#editor'), 'done')
     ok(not pg.errors, pg.errors)
@@ -241,6 +241,32 @@ async def editor_in_side_panel_on_laptop(c):
     ok(await ev(pg, 'ED.bar') == 6, 'arrow key moves bar')
     await pg.keyboard.press('Escape')
     ok(not await pg.is_visible('#editor'), 'escape closes')
+
+# ---------------- lead-sheet cells & keyboard bar (phone) ----------------
+TEO = '| Bm7 | F#7#5 | Bm7 | F#7#5 |\n| Bm7 | F#7#5 | Bm7 | C#m7 F#7 |\n| Em7 | F#7 | Em7 | F#7 |\n| Em7 | F#7 | G7 | F#7 |\n| Bm7 | Bb7#9/Ab Gmaj7#11 | C#m7b5 / F#7alt / | Em7 A7 Dm7 G7 |'
+
+@test
+async def cells_one_height_no_wrap(c):
+    for w in (412, 360):
+        pg = await c.page(dict(PHONE, viewport=dict(width=w, height=900)), storage={'chart': TEO, 'keyInst': 'organ'}, scheme='light')
+        await pg.wait_for_timeout(300)
+        await c.shot(pg, f'leadsheet-{w}')
+        hs = await ev(pg, '[...document.querySelectorAll("#grid .cell:not(.add)")].map(c=>c.offsetHeight)')
+        ok(len(set(hs)) == 1, f'{w}: bar heights differ {set(hs)}')
+        lines = await ev(pg, '[...document.querySelectorAll("#grid .ch")].filter(c=>c.getBoundingClientRect().height>40).length')
+        ok(lines == 0, f'{w}: {lines} bars wrap onto two lines')
+        clipped = await ev(pg, '[...document.querySelectorAll("#grid .ch")].filter(c=>c.scrollWidth>c.clientWidth+2).map(c=>c.textContent)')
+        ok(not clipped, f'{w}: chords overflow their bar: {clipped}')
+        small = await ev(pg, '[...document.querySelectorAll("#grid .ch")].filter(c=>+(c.style.getPropertyValue("--k")||1)<0.6).map(c=>c.textContent)')
+        ok(not small, f'{w}: realistic bars shrunk below 60%: {small}')
+        # two chords in a 4/4 bar sit side by side, half the bar each
+        xs = await ev(pg, '(()=>{const c=document.querySelectorAll("#grid .cell")[7].querySelectorAll(".chd");return [c[0].getBoundingClientRect().left,c[1].getBoundingClientRect().left,c[0].parentElement.getBoundingClientRect().width]})()')
+        if w == 412: ok(abs((xs[1] - xs[0]) - xs[2] / 2) < 3, f'{w}: second chord not at beat 3 {xs}')
+        # keyboard bar: everything inside the screen, nothing overlapping
+        bar = await ev(pg, '''(()=>{const r=[...document.querySelectorAll("#kbBar > *:not(.sr-only)")].filter(e=>e.offsetParent).map(e=>e.getBoundingClientRect());
+          return {right:Math.max(...r.map(x=>x.right)),overlap:r.some((a,i)=>i&&a.left<r[i-1].right-0.5),w:innerWidth}})()''')
+        ok(bar['right'] <= bar['w'] and not bar['overlap'], f'{w}: keyboard bar overflows {bar}')
+        ok(await pg.is_visible('#leslieBtn'), 'Leslie button shown for organ')
 
 # ---------------- settings ----------------
 @test
