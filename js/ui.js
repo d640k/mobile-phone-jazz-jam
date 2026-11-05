@@ -21,7 +21,7 @@ function layout(){
   document.body.classList.toggle('wide',wide);document.body.classList.toggle('short',short);
   const body=$('panelBody'),ed=$('editor'),cb=$('compBtn');
   if(short&&cb.parentElement!==$('topbar'))$('topbar').insertBefore(cb,$('loopBtn'));
-  if(!short&&cb.parentElement!==$('chordRow'))$('chordRow').appendChild(cb);
+  if(!short&&cb.parentElement!==$('now'))$('now').insertBefore(cb,$('status'));
   if(wide){
     if(body.parentElement!==$('panel'))$('panel').appendChild(body);
     if(ed.parentElement!==body)body.insertBefore(ed,body.firstChild);

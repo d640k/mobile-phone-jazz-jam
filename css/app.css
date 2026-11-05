@@ -84,7 +84,9 @@ button,select,input{font:inherit;color:inherit}
 #now{padding:2px var(--sp-4) var(--sp-2)}
 #title{font-size:13px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;height:18px}
 #chordRow{display:flex;align-items:baseline;gap:var(--sp-3);height:48px;white-space:nowrap;overflow:hidden}
-#chordRow #compBtn{margin-left:auto;align-self:center}
+#now{position:relative}
+#now>#compBtn{position:absolute;right:var(--sp-4);top:21px}
+#now #chordRow{padding-right:112px}
 #cur{font-size:40px;font-weight:800;color:var(--accent-text);letter-spacing:-.5px}
 #next{font-size:18px;color:var(--dim)}
 #status{display:flex;align-items:center;gap:var(--sp-2);height:24px;font-size:13px;color:var(--dim);white-space:nowrap;overflow:hidden}

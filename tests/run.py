@@ -100,6 +100,17 @@ async def engine_all_styles_schedule(c):
         await pg.click('#play')
     ok(not pg.errors, pg.errors)
 
+@test
+async def versions_in_step(c):
+    # every local script/stylesheet carries the same ?v=, and it matches the service-worker cache name,
+    # so a new page never runs with an old cached script
+    html = open(os.path.join(ROOT, 'index.html')).read()
+    vs = set(re.findall(r'(?:src|href)="(?:js|css|vendor)/[^"]+\?v=(\d+)"', html))
+    bare = re.findall(r'(?:src|href)="((?:js|css|vendor)/[^"?]+)"', html)
+    ok(not bare, f'unversioned files: {bare}')
+    sw = re.search(r"jazzjam-v(\d+)", open(os.path.join(ROOT, 'sw.js')).read()).group(1)
+    ok(vs == {sw}, f'index.html ?v={vs} but sw.js cache v{sw}')
+
 # ---------------- main screen ----------------
 @test
 async def layout_three_sizes(c):
@@ -284,8 +295,8 @@ async def comp_toggle_on_main_screen(c):
         ok(await pg.get_attribute('#mCp', 'aria-pressed') == 'false', 'settings mute in sync')
         await pg.click('#compBtn')
         ok(await ev(pg, 'S.mute.cp') is False, 'comp back on')
-        r = await ev(pg, '$("compBtn").getBoundingClientRect().right<=innerWidth')
-        ok(r, 'comp button off screen')
+        r = await ev(pg, '(()=>{const b=$("compBtn").getBoundingClientRect(),p=$("compBtn").parentElement.getBoundingClientRect();return b.right<=innerWidth&&b.bottom<=p.bottom+1&&b.top>=p.top-1})()')
+        ok(r, 'comp button clipped or off screen')
     await ev(pg, 'setTrio(true)')
     ok(not await pg.is_visible('#compBtn'), 'hidden in trio mode')
 
