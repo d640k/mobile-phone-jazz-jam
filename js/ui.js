@@ -19,7 +19,9 @@ function setTheme(t){S.theme=['light','dark'].includes(t)?t:'system';store.set('
 function layout(){
   const wide=MQ_WIDE.matches,short=MQ_SHORT.matches&&!wide;
   document.body.classList.toggle('wide',wide);document.body.classList.toggle('short',short);
-  const body=$('panelBody'),ed=$('editor');
+  const body=$('panelBody'),ed=$('editor'),cb=$('compBtn');
+  if(short&&cb.parentElement!==$('topbar'))$('topbar').insertBefore(cb,$('loopBtn'));
+  if(!short&&cb.parentElement!==$('chordRow'))$('chordRow').appendChild(cb);
   if(wide){
     if(body.parentElement!==$('panel'))$('panel').appendChild(body);
     if(ed.parentElement!==body)body.insertBefore(ed,body.firstChild);
@@ -421,11 +423,15 @@ function setTrio(on){
   S.trio=!!on;store.set('trio',S.trio);
   document.body.classList.toggle('trio',S.trio);$('cTrio').checked=S.trio;
   $('mCp').disabled=S.trio;$('mCp').title=S.trio?'Comping is off in trio mode':'';
+  $('compBtn').hidden=S.trio;
   applyVolumes();if(!S.trio)buildKeyboard();
 }
 const MUTE_BTNS={dr:'mDr',bs:'mBs',cp:'mCp'};
 const MUTE_NAMES={dr:'Drums',bs:'Bass',cp:'Comping'};
-function refreshMute(key){const b=$(MUTE_BTNS[key]);b.setAttribute('aria-pressed',String(!S.mute[key]));b.title=`${MUTE_NAMES[key]} ${S.mute[key]?'muted':'on'}. Tap to ${S.mute[key]?'unmute':'mute'}.`;}
+function refreshMute(key){
+  const b=$(MUTE_BTNS[key]);b.setAttribute('aria-pressed',String(!S.mute[key]));b.title=`${MUTE_NAMES[key]} ${S.mute[key]?'muted':'on'}. Tap to ${S.mute[key]?'unmute':'mute'}.`;
+  if(key==='cp'){const c=$('compBtn');c.setAttribute('aria-pressed',String(!S.mute.cp));c.title=S.trio?'Comping is off in trio mode':`Comping ${S.mute.cp?'off':'on'}`;}
+}
 function setMute(key,on){S.mute[key]=on;store.set('mute',S.mute);applyVolumes();refreshMute(key);if(key==='cp'&&!on&&S.secMutedComp){S.secMutedComp=false;store.set('secMutedComp',false);}}
 // Rhythm-section profile (Swing style). Choosing one also applies its swing ratio and feel,
 // and mutes the comping for profiles where you're the pianist (Monk).
@@ -665,6 +671,7 @@ function init(){
   // sound
   $('output').addEventListener('sl-change',e=>setOutput(e.target.value));$('output').value=S.output;
   for(const k of ['dr','bs','cp']){refreshMute(k);$(MUTE_BTNS[k]).onclick=()=>setMute(k,!S.mute[k]);}
+  $('compBtn').onclick=()=>setMute('cp',!S.mute.cp);
   for(const [id,k] of MIX_SLIDERS)
     bindSlider(id,()=>S.vol[k],v=>{S.vol[k]=v;store.set('vol_'+S.output,S.vol);applyVolumes();},['dr','bs','cp','ky'].includes(k)?dbLabel:null);
   $('resetMix').onclick=()=>{for(const [id,k] of MIX_SLIDERS)setSlider(id,VOL_DEF[k]);songMsg('');};

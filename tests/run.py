@@ -274,6 +274,21 @@ async def leadsheet_lines(c):
     starts = await ev(pg, '[...document.querySelectorAll("#grid .sys")].map(r=>+r.firstElementChild.dataset.bar)')
     ok(8 in starts, f'section B should start a line: {starts}')
 
+@test
+async def comp_toggle_on_main_screen(c):
+    for dev in (PHONE, LAND, LAPTOP):
+        pg = await c.page(dev)
+        ok(await pg.is_visible('#compBtn'), 'comp button visible')
+        await pg.click('#compBtn')
+        ok(await ev(pg, 'S.mute.cp') is True and await pg.get_attribute('#compBtn', 'aria-pressed') == 'false', 'comp off')
+        ok(await pg.get_attribute('#mCp', 'aria-pressed') == 'false', 'settings mute in sync')
+        await pg.click('#compBtn')
+        ok(await ev(pg, 'S.mute.cp') is False, 'comp back on')
+        r = await ev(pg, '$("compBtn").getBoundingClientRect().right<=innerWidth')
+        ok(r, 'comp button off screen')
+    await ev(pg, 'setTrio(true)')
+    ok(not await pg.is_visible('#compBtn'), 'hidden in trio mode')
+
 # ---------------- settings ----------------
 @test
 async def settings_sheet_on_phone(c):

@@ -52,7 +52,12 @@
 
     <section id="now" aria-label="Now playing">
       <div id="title"></div>
-      <div id="chordRow"><span id="cur">—</span><span id="next"></span></div>
+      <div id="chordRow"><span id="cur">—</span><span id="next"></span><button id="compBtn" class="btn" aria-pressed="true">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true">
+          <rect x="3" y="5" width="18" height="14" rx="2"/><path d="M8 5v14M12 5v14M16 5v14"/>
+          <path d="M6.5 5v8h3V5M14.5 5v8h3V5" fill="currentColor" stroke="none"/>
+          <path class="off" d="M3 21L21 3" stroke-width="2.2"/>
+        </svg><span>Comp</span></button></div>
       <div id="status"><span id="pos"></span><span id="loopChip" class="chipTag teal" hidden></span><span id="feelChip" class="chipTag" hidden></span></div>
     </section>
     <div id="loopHint" role="status" hidden></div>
