@@ -380,10 +380,18 @@ function melDel(){
   if(t.length){t.pop();if(t.length)t[t.length-1]=t[t.length-1].replace(/~$/,'');melSet(ED.bar,t.join(' '));}
   melMsg('');renderGrid();renderEditor();
 }
+// Preview one bar. Uses the playback timeline, so ties are honoured: a note tied into the next bar
+// rings for its full length, and a note tied in from the previous bar sounds from beat 1.
 function hearBar(){
   initAudio();const bd=60/S.bpm,t0=ctx.currentTime+0.06,sw=(STYLES[S.style]||{}).straight?0.5:S.swing/100;
-  let at=0;
-  for(const n of melNotes(melGet(ED.bar))){const f=at-Math.floor(at+1e-6);if(n.midi!=null)melVoice(n.midi,t0+(Math.floor(at+1e-6)+(Math.abs(f-0.5)<1e-3?sw:f))*bd,n.beats*bd*0.92);at+=n.beats;}
+  const tl=getTimeline(),bpb=curBpb();
+  const a=ED.bar<0?-tl.pickupBeats:ED.bar*bpb,b=ED.bar<0?0:a+bpb;
+  const when=x=>{const f=x-Math.floor(x+1e-6);return (Math.floor(x+1e-6)+(Math.abs(f-0.5)<1e-3?sw:f))*bd;};
+  for(const e of tl.events){
+    if(e.midi==null||e.abs>=b-1e-6||e.abs+e.dur<=a+1e-6)continue;
+    const from=Math.max(e.abs,a)-a;
+    melVoice(e.midi,t0+when(from),(e.abs+e.dur-a-from)*bd*0.95);
+  }
 }
 // ---------- Recording ----------
 function recUI(on){document.body.classList.toggle('recording',on);loopHint(on?`Recording bars ${REC.from+1}–${REC.to+1}. Play along; tap Stop when you’re done.`:'');}

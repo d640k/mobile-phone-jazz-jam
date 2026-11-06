@@ -500,6 +500,17 @@ async def melody_playback_pickup_and_highlight(c):
     ok(not pg.errors, pg.errors)
 
 @test
+async def melody_hear_bar_honours_ties(c):
+    pg = await c.page(storage={'chart': '| C | C | C |', 'melody': {'pickup': '', 'bars': ['E4q F4q~ F4q G4q~', 'G4h A4h~', 'A4q rq rh']}, 'bpm': 60})
+    await ev(pg, 'window.__v=[];melVoice=(m,t,d)=>__v.push([m,Math.round((t-ctx.currentTime)*100)/100,Math.round(d*100)/100]);0')
+    async def hear(bar):
+        return await ev(pg, f'(()=>{{initAudio();__v=[];ED.bar={bar};hearBar();return __v.map(x=>[x[0],x[2]])}})()')
+    r = await hear(0)   # E4 1 beat; F4 tied over 2 beats; G4 tied into bar 2, rings 3 beats in all
+    ok(r == [[64, 0.95], [65, 1.9], [67, 2.85]], r)
+    r = await hear(1)   # G4 carried in from bar 1 sounds at once for its last 2 beats; A4 tied on
+    ok(r == [[67, 1.9], [69, 2.85]], r)
+
+@test
 async def melody_on_keys(c):
     pg = await c.page(PHONE, storage={'chart': '| C | C |', 'melody': {'pickup': '', 'bars': ['E4h G4h', 'C5w']}, 'oct': 4})
     await ev(pg, 'showMel(getTimeline().events[0])')
