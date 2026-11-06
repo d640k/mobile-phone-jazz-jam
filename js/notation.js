@@ -22,7 +22,7 @@ function vfBar(str){
   let tri=[],triBeats=0,at=0;
   const flush=()=>{if(tri.length>1)tuplets.push(new VF.Tuplet(tri,{num_notes:3,notes_occupied:2}));tri=[];triBeats=0;};
   ns.forEach((n,ni)=>{
-    const sn=new VF.StaveNote({keys:[n.p?vfKey(n.p):'b/4'],duration:VF_DUR[n.d]+(n.p?'':'r'),dots:n.dot?1:0,auto_stem:true});
+    const sn=new VF.StaveNote({keys:n.p?n.ps.map(vfKey):['b/4'],duration:VF_DUR[n.d]+(n.p?'':'r'),dots:n.dot?1:0,auto_stem:true});
     if(n.dot)VF.Dot.buildAndAttach([sn],{all:true});
     notes.push(sn);meta.push({n,start:at,ni});at+=n.beats;
     if(n.tri){tri.push(sn);triBeats+=n.beats;if(Math.abs(triBeats-Math.round(triBeats))<1e-6&&triBeats>0)flush();}
@@ -47,6 +47,11 @@ function notationHeadWidth(first){
   return (st.getNoteStartX()-plain.getNoteStartX())*notationScale();
 }
 // Draw one line's staff. items: [{el, bar}] in order; first: first line of the chart.
+// tie every note of a chord (first or last may be null: a tie running off / into the line)
+function drawTie(c,first,last){
+  const n=Math.min(first?first.getKeys().length:99,last?last.getKeys().length:99),ix=[...Array(n).keys()];
+  new NOT.vf.StaveTie({first_note:first,last_note:last,first_indices:ix,last_indices:ix}).setContext(c).draw();
+}
 let tiePending=null,tieCarry=false;   // tie to the next bar in this line / into the next line
 function drawStaffRow(row,items,first){
   const VF=NOT.vf,K=notationScale();
@@ -70,7 +75,7 @@ function drawStaffRow(row,items,first){
       // no melody here: chords spread by beats across the bar
       const x0=st.getNoteStartX()*K-it.el.offsetLeft,x1=(st.getNoteEndX()-8)*K-it.el.offsetLeft;
       chords.forEach(ch=>{ch.style.left=Math.round(x0+(+ch.dataset.beat/curBpb())*(x1-x0))+'px';});
-      if(tiePending){new VF.StaveTie({first_note:tiePending,last_note:null,first_indices:[0],last_indices:[0]}).setContext(c).draw();tiePending=null;}
+      if(tiePending){drawTie(c,tiePending,null);tiePending=null;}
       tieCarry=false;return;
     }
     const beams=VF.Beam.generateBeams(b.notes,{groups:[new VF.Fraction(2,8)]});
@@ -81,11 +86,11 @@ function drawStaffRow(row,items,first){
     // ties, within the line and from the previous bar
     b.meta.forEach((m,i)=>{
       const sn=b.notes[i];
-      if(i===0&&tiePending){new VF.StaveTie({first_note:tiePending,last_note:m.n.p?sn:null,first_indices:[0],last_indices:[0]}).setContext(c).draw();tiePending=null;}
-      if(i===0&&tieCarry){if(m.n.p)new VF.StaveTie({first_note:null,last_note:sn,first_indices:[0],last_indices:[0]}).setContext(c).draw();tieCarry=false;}
+      if(i===0&&tiePending){drawTie(c,tiePending,m.n.p?sn:null);tiePending=null;}
+      if(i===0&&tieCarry){if(m.n.p)drawTie(c,null,sn);tieCarry=false;}
       if(m.n.tie){
         const nx=b.notes[i+1];
-        if(nx&&b.meta[i+1].n.p)new VF.StaveTie({first_note:sn,last_note:nx,first_indices:[0],last_indices:[0]}).setContext(c).draw();
+        if(nx&&b.meta[i+1].n.p)drawTie(c,sn,nx);
         else if(!nx)tiePending=sn;
       }
       const el=sn.getSVGElement&&sn.getSVGElement();
@@ -108,7 +113,7 @@ function drawStaffRow(row,items,first){
     for(const ch of it.el.querySelectorAll('.chd')){const l=parseFloat(ch.style.left)||0;if(l<right+6){ch.style.left=Math.round(right+6)+'px';}right=parseFloat(ch.style.left)+ch.offsetWidth;}
   });
   // a tie running off the end of the line
-  if(tiePending){new VF.StaveTie({first_note:tiePending,last_note:null,first_indices:[0],last_indices:[0]}).setContext(c).draw();tiePending=null;tieCarry=true;}
+  if(tiePending){drawTie(c,tiePending,null);tiePending=null;tieCarry=true;}
 }
 // highlight the note being played
 function markNote(bar,ni){

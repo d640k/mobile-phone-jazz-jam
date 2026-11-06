@@ -525,6 +525,61 @@ async def melody_edit_single_note_and_tie_across_bars(c):
     await c.shot(pg, 'melody-note-select')
     ok(not pg.errors, pg.errors)
 
+async def key_hold(pg, m):
+    await ev(pg, f'''(()=>{{const k=$("kb").querySelector('[data-m="{m}"]');const r=k.getBoundingClientRect();
+      $("kb").dispatchEvent(new PointerEvent("pointerdown",{{pointerId:{m},clientX:r.left+r.width/2,clientY:r.bottom-12,bubbles:true}}));0}})()''')
+async def key_up(pg, m):
+    await ev(pg, f'(()=>{{$("kb").dispatchEvent(new PointerEvent("pointerup",{{pointerId:{m},bubbles:true}}));0}})()')
+
+@test
+async def melody_chords(c):
+    pg = await c.page(PHONE, storage={'chart': BLUES, 'keySig': 'F'})
+    await pg.locator('#grid .cell').nth(0).click(); await pg.click('#edPartMel')
+    await pg.wait_for_function('document.querySelectorAll(".staff svg").length>0', timeout=8000)
+    await pg.click('#edLens [data-len="h"]')
+    # keys that overlap (not simultaneous) become one chord: hold F4, add A4, let go of F4, add C5 while A4 is held
+    await key_hold(pg, 65); await pg.wait_for_timeout(150); await key_hold(pg, 69)
+    await key_up(pg, 65); await key_hold(pg, 72)
+    await key_up(pg, 69); await key_up(pg, 72)
+    ok(await ev(pg, 'melGet(0)') == 'F4+A4+C5h', await ev(pg, 'melGet(0)'))
+    # all keys up: the next key is a new note
+    await key_down(pg, 70)
+    ok(await ev(pg, 'melGet(0)') == 'F4+A4+C5h Bb4h', await ev(pg, 'melGet(0)'))
+    # Chord toggle: one-finger taps stack onto the selected note; tap again to take one out
+    await pg.click('#edPrev'); await pg.locator('#edNotes .slot.note').nth(1).click(); await pg.click('#edChord')
+    await key_down(pg, 62); await key_down(pg, 65)
+    ok(await ev(pg, 'melGet(0)') == 'F4+A4+C5h D4+F4+Bb4h', await ev(pg, 'melGet(0)'))
+    await key_down(pg, 62)
+    ok(await ev(pg, 'melGet(0)') == 'F4+A4+C5h F4+Bb4h', 'tap again removes it: ' + await ev(pg, 'melGet(0)'))
+    await c.shot(pg, 'melody-chords')
+    ok(await pg.locator('#edNotes .slot.note').nth(1).get_attribute('aria-label') == 'Note 2: F4 and B flat4 (chord), half', await pg.locator('#edNotes .slot.note').nth(1).get_attribute('aria-label'))
+    # the staff draws chords; playback / preview sound every note; keys light every note
+    ok(await ev(pg, 'document.querySelectorAll(".staff .vf-stavenote .vf-notehead").length') >= 5, 'chord noteheads drawn')
+    await ev(pg, 'window.__v=[];melVoice=(m,t,d,v)=>__v.push(m);0')
+    await ev(pg, '(()=>{initAudio();ED.bar=0;hearBar();})()')
+    ok(sorted(await ev(pg, '__v')) == [65, 65, 69, 70, 72], await ev(pg, '__v'))
+    await ev(pg, 'showMel(getTimeline().events[0])')
+    ok(await ev(pg, '[65,69,72].every(m=>$("kb").querySelector(`[data-m="${m}"]`).classList.contains("mel"))'), 'all chord notes violet')
+    # typed chord, and tied chords merge in playback
+    await ev(pg, 'melSet(1,"F4+A4h~ F4+A4h");melSet(2,"")')
+    ok(await ev(pg, 'getTimeline().events.find(e=>e.bar===1).dur') == 4, 'tied chord held')
+    ok(not pg.errors, pg.errors)
+
+@test
+async def melody_delete_key(c):
+    pg = await c.page(LAPTOP, storage={'chart': BLUES, 'melody': {'pickup': '', 'bars': ['F4q G4q A4q C5q']}})
+    await pg.wait_for_function('document.querySelectorAll(".staff svg").length>0', timeout=8000)
+    await pg.locator('#grid .cell:not(.pick)').nth(0).click(); await pg.click('#edPartMel')
+    await pg.locator('#edNotes .slot.note').nth(1).click()
+    await pg.keyboard.press('Delete')
+    ok(await ev(pg, 'melGet(0)') == 'F4q A4q C5q', 'Delete removes the selected note')
+    await pg.locator('#edNotes button', has_text='+ Add').click()
+    await pg.keyboard.press('Backspace')
+    ok(await ev(pg, 'melGet(0)') == 'F4q A4q', 'Backspace removes the last note')
+    # not while typing
+    await pg.click('#edText'); await pg.locator('#edInput input').focus(); await pg.keyboard.press('Backspace')
+    ok(await ev(pg, 'melGet(0)') == 'F4q A4q', 'typing keeps Backspace')
+
 @test
 async def melody_pickup_and_bar_ops(c):
     pg = await c.page(PHONE, storage={'chart': BLUES, 'melody': {'pickup': '', 'bars': ['F5w', 'Bb4w', 'A4w']}})

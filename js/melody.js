@@ -2,16 +2,20 @@
 // Stored beside the chart, one string per bar: S.melody = {pickup:'C5e D5e', bars:['F5q D5e C5e A4h', ...]}.
 // A note is a pitch (C4, Eb5, F#4) or r for a rest, then its length: w h q e s (whole .. sixteenth),
 // then optional . (dotted), t (triplet), ~ (tied to the next note). "Bb4q." "re" "C5et" "G4h~"
+// A chord joins pitches with +, low to high: "D4+F4+Bb4q".
 const MEL_LEN={w:4,h:2,q:1,e:0.5,s:0.25};
-const MEL_RE=/^(r|[A-G][#b]?\d)([whqes])(\.?)(t?)(~?)$/;
+const MEL_RE=/^(r|[A-G][#b]?\d(?:\+[A-G][#b]?\d)*)([whqes])(\.?)(t?)(~?)$/;
 const PC={C:0,D:2,E:4,F:5,G:7,A:9,B:11};
 function pitchMidi(p){const m=/^([A-G])([#b]?)(\d)$/.exec(p);return 12*(+m[3]+1)+PC[m[1]]+(m[2]==='#'?1:m[2]==='b'?-1:0);}
 function melTok(t){
   const m=MEL_RE.exec(t);if(!m)return null;
   let b=MEL_LEN[m[2]];if(m[3])b*=1.5;if(m[4])b*=2/3;
-  const p=m[1]==='r'?null:m[1];
-  return {tok:t,p,midi:p?pitchMidi(p):null,d:m[2],dot:!!m[3],tri:!!m[4],tie:!!m[5]&&!!p,beats:b};
+  const p=m[1]==='r'?null:m[1],ps=p?p.split('+').sort((x,y)=>pitchMidi(x)-pitchMidi(y)):[],midis=ps.map(pitchMidi);
+  // midi: the top note (the melody); midis: every note of a chord
+  return {tok:t,p:p&&ps.join('+'),ps,midis,midi:p?midis[midis.length-1]:null,d:m[2],dot:!!m[3],tri:!!m[4],tie:!!m[5]&&!!p,beats:b};
 }
+// the token for a note with these pitches (sorted low to high), or a rest
+function melJoin(ps,len){return (ps.length?[...new Set(ps)].sort((x,y)=>pitchMidi(x)-pitchMidi(y)).join('+'):'r')+len;}
 function melNotes(str){return (str||'').split(/\s+/).filter(Boolean).map(melTok).filter(Boolean);}
 function melBeats(str){return melNotes(str).reduce((s,n)=>s+n.beats,0);}
 // key signatures offered for notation, and how black keys are spelled in each
@@ -40,8 +44,8 @@ function getTimeline(){
     let at=0;
     list.forEach((n,ni)=>{
       const abs=base+at;
-      if(hold&&n.p&&n.midi===hold.midi){hold.dur+=n.beats;if(!n.tie)hold=null;}   // continues a tied note
-      else{hold=null;const e={abs,dur:n.beats,midi:n.midi,bar:barIdx,ni,start:at};out.push(e);if(n.tie)hold=e;}
+      if(hold&&n.p&&n.midis.join()===hold.midis.join()){hold.dur+=n.beats;if(!n.tie)hold=null;}   // continues a tied note
+      else{hold=null;const e={abs,dur:n.beats,midi:n.midi,midis:n.midis,bar:barIdx,ni,start:at};out.push(e);if(n.tie)hold=e;}
       at+=n.beats;
     });
   };
@@ -72,7 +76,7 @@ function scheduleMelodyStep(s,beatPos,bar,t,beatDur,sw,audible){
   for(const e of list){
     if(e.start<within-1e-6||e.start>=within+0.5-1e-6)continue;
     const fb=e.start-beat0,tt=beatStart+(Math.abs(fb-0.5)<1e-3?sw:fb)*beatDur;
-    if(e.midi!=null&&audible)melVoice(e.midi,tt,Math.max(0.08,e.dur*beatDur*0.92));
+    if(audible)for(const m of e.midis)melVoice(m,tt,Math.max(0.08,e.dur*beatDur*0.92),m===e.midi?82:64);
     P.uiQ.push({t:tt,mel:e});
   }
 }
