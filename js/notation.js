@@ -33,6 +33,26 @@ function vfBar(str){
   if(notes.length){voice.addTickables(notes);VF.Accidental.applyAccidentals([voice],S.keySig);}
   return {notes,voice,tuplets,meta};
 }
+// Beaming, lead-sheet style: in 4/4 eighths beam by half bar (beats 1-2, 3-4), never across the
+// middle; any half bar with sixteenths or triplets beams beat by beat; in 3/4 the bar beams as one.
+// Rests and notes longer than an eighth break a beam. Returns groups of note indices.
+function beamGroups(ns,starts){
+  const bpb=curBpb(),win=bpb===4?2:bpb,out=[];
+  const beamable=n=>n.p&&(n.d==='e'||n.d==='s');
+  const windows=new Map();
+  ns.forEach((n,i)=>{const w=Math.floor(starts[i]/win+1e-6);if(!windows.has(w))windows.set(w,[]);windows.get(w).push(i);});
+  for(const idx of windows.values()){
+    const fine=idx.some(i=>ns[i].d==='s'||ns[i].tri);
+    const parts=new Map();
+    for(const i of idx){const k=fine?Math.floor(starts[i]+1e-6):0;if(!parts.has(k))parts.set(k,[]);parts.get(k).push(i);}
+    for(const part of parts.values()){
+      let run=[];
+      for(const i of part){if(beamable(ns[i]))run.push(i);else{if(run.length>1)out.push(run);run=[];}}
+      if(run.length>1)out.push(run);
+    }
+  }
+  return out;
+}
 // width (px) a bar's melody needs
 function notationMinWidth(str){
   const VF=NOT.vf;if(!melNotes(str).length)return 44;
@@ -78,7 +98,7 @@ function drawStaffRow(row,items,first){
       if(tiePending){drawTie(c,tiePending,null);tiePending=null;}
       tieCarry=false;return;
     }
-    const beams=VF.Beam.generateBeams(b.notes,{groups:[new VF.Fraction(2,8)]});
+    const beams=beamGroups(b.meta.map(m=>m.n),b.meta.map(m=>m.start)).map(g=>new VF.Beam(g.map(i=>b.notes[i]),true));
     new VF.Formatter().joinVoices([b.voice]).formatToStave([b.voice],st);
     b.voice.draw(c,st);
     beams.forEach(x=>x.setContext(c).draw());

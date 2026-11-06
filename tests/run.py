@@ -424,6 +424,19 @@ async def melody_tokens(c):
     ok(r == [4, 4, 1, True, 70, None, 'Bb4', 'F#4', 'Db4'], r)
 
 @test
+async def melody_beaming(c):
+    pg = await c.page()
+    async def groups(str, style='swing'):
+        return await ev(pg, f'(()=>{{setStyle("{style}");const ns=melNotes("{str}");let a=0;const st=ns.map(n=>{{const x=a;a+=n.beats;return x;}});return beamGroups(ns,st).map(g=>g.length)}})()')
+    ok(await groups('C5e D5e E5e F5e G5e A5e B5e C6e') == [4, 4], 'eighths by half bar')
+    ok(await groups('C5s D5s E5s F5s G5s A5s B5s C6s C5h') == [4, 4], 'sixteenths by beat')
+    ok(await groups('C5e D5e re F5e G5e A5e B5e C6e') == [2, 4], 'a rest breaks the beam')
+    ok(await groups('C5q D5e E5e F5e G5e A5q') == [2, 2], 'never across the middle of the bar')
+    ok(await groups('C5e. D5s E5e F5e G5h') == [2, 2], 'a half bar with sixteenths beams by beat')
+    ok(await groups('C5et D5et E5et F5e G5e A5h') == [3, 2], 'triplets beam by beat')
+    ok(await groups('C5e D5e E5e F5e G5e A5e', 'waltz') == [6], '3/4: the bar beams as one')
+
+@test
 async def melody_notation_renders(c):
     for dev, name in ((PHONE, 'phone'), (LAND, 'landscape'), (LAPTOP, 'laptop')):
         pg = await mel_page(c, dev, scheme='light' if name == 'laptop' else 'dark')
