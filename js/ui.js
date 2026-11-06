@@ -90,7 +90,7 @@ function renderGrid(){
 function layoutLines(){
   const g=$('grid');if(!CELLS.length){g.innerHTML='';g.appendChild(addBarBtn());return;}
   const mel=melOn()&&!!NOT.vf;
-  if(melOn()&&!NOT.vf)loadNotation().then(()=>renderGrid()).catch(e=>{console.error(e);songMsg(e.message);});
+  if(melOn()&&!NOT.vf)loadNotation().then(()=>renderGrid()).catch(e=>{console.error(e);songMsg(e.message,true);});
   g.classList.remove('mel');NOT.els.clear();NOT.cur=null;   // measure chords in normal flow first
   const focused=document.activeElement,top=$('chartWrap').scrollTop;
   const items=(mel&&PICK?[{el:PICK,bar:-1}]:[]).concat(CELLS.map((el,i)=>({el,bar:i})));
@@ -487,7 +487,7 @@ function recStart(){
 }
 function recFinish(){
   REC.on=false;if(P.playing)stop();recUI(false);
-  if(!REC.notes.length){songMsg('Nothing was recorded.');return;}
+  if(!REC.notes.length){songMsg('Nothing was recorded.',true);return;}
   REC.backup=[];for(let b=REC.from;b<=REC.to;b++)REC.backup.push(melGet(b));
   REC.review=true;$('recSnap').value=REC.snap?'snap':'raw';
   recApply();$('recPanel').hidden=false;$('recKeep').focus();
@@ -504,7 +504,7 @@ function recDone(keep){
   if(P.playing)stop();
   if(!keep)recRestore();
   REC.review=false;$('recPanel').hidden=true;renderGrid();
-  songMsg(keep?'Melody kept. Save the song to keep it for good.':'');
+  songMsg(keep?'Melody kept. Save the song to keep it for good.':'','note');
 }
 
 // ---------- Keyboard (on screen) ----------
@@ -648,7 +648,7 @@ function setSection(id,applyDefaults){
   S.section=SECTIONS[id]?id:'std';store.set('section',S.section);$('section').value=S.section;
   if(applyDefaults){
     const X=curSection();setSlider('Swing',X.swing);setFeel(X.feel);
-    if(X.compOff&&!S.mute.cp){setMute('cp',true);S.secMutedComp=true;store.set('secMutedComp',true);songMsg('Comping muted: you’re Monk. Turn Comp back on in Sound.');}
+    if(X.compOff&&!S.mute.cp){setMute('cp',true);S.secMutedComp=true;store.set('secMutedComp',true);songMsg('Comping muted: you’re Monk. Turn Comp back on in Sound.','note');}
     else if(!X.compOff&&S.secMutedComp){S.secMutedComp=false;store.set('secMutedComp',false);setMute('cp',false);}
   }
   updateTitle();
@@ -688,7 +688,18 @@ function midiMessage(e){
 }
 
 // ---------- Song settings ----------
-function songMsg(t){$('songMsg').textContent=t;}
+// Song messages. Confirmations show fresh each time (blank, then the text, so a repeat save still
+// flashes and is announced again) and fade after 4 s. Problems (true) and notes ('note') stay until the next action.
+let songMsgTimer=0;
+function songMsg(t,sticky=false){
+  const el=$('songMsg');clearTimeout(songMsgTimer);
+  el.classList.remove('fading');el.textContent='';
+  if(!t)return;
+  setTimeout(()=>{
+    el.textContent=t;el.classList.toggle('problem',sticky===true);
+    if(!sticky)songMsgTimer=setTimeout(()=>{el.classList.add('fading');songMsgTimer=setTimeout(()=>{el.textContent='';el.classList.remove('fading');},400);},4000);
+  },120);
+}
 const STYLE_NAMES={swing:'Swing',ballad:'Ballad',waltz:'Jazz waltz (3/4)',bossa:'Bossa nova',samba:'Samba'};
 function updateTitle(){
   $('title').textContent=[S.songName||'Untitled',STYLE_NAMES[S.style],S.style==='swing'&&S.section!=='std'?curSection().name:''].filter(Boolean).join(' · ');
@@ -719,12 +730,12 @@ function refreshSongList(){
 function setSlider(id,val){const s=$('s'+id);s.value=val;s.dispatchEvent(new CustomEvent('sl-input'));}
 function saveSong(){
   const name=$('songName').value.trim();
-  if(!name){songMsg('Give the song a name first.');$('songName').focus();return;}
-  if(!chartSong.segs.length){songMsg('Nothing to save: the chart is empty.');return;}
+  if(!name){songMsg('Give the song a name first.',true);$('songName').focus();return;}
+  if(!chartSong.segs.length){songMsg('Nothing to save: the chart is empty.',true);return;}
   if(S.songs[name]&&name!==S.songName&&!confirm(`Replace the saved “${name}”?`))return;
   S.songs[name]={chart:S.chart,bpm:S.bpm,swing:S.swing,style:S.style,feel:S.bassFeel,dynamics:S.dynamics,section:S.section,saved:Date.now()};
   if(melHas())Object.assign(S.songs[name],{melody:JSON.parse(JSON.stringify(S.melody)),keySig:S.keySig});
-  if(!store.set('songs',S.songs)){delete S.songs[name];songMsg('Couldn’t save: this browser is blocking storage.');return;}
+  if(!store.set('songs',S.songs)){delete S.songs[name];songMsg('Couldn’t save: this browser is blocking storage.',true);return;}
   delete S.songsDeleted[name];store.set('songsDeleted',S.songsDeleted);songsChanged();
   setSongName(name);refreshSongList();
   songMsg(S.style!=='swing'?`Saved “${name}” (${STYLE_NAMES[S.style].toLowerCase()}, tempo ${S.bpm}).`:`Saved “${name}” (tempo ${S.bpm}, swing ${S.swing}%).`);
@@ -757,7 +768,7 @@ function newSong(){
 }
 function deleteSong(){
   const name=$('songName').value.trim();
-  if(!S.songs[name]){songMsg('No saved song with that name.');return;}
+  if(!S.songs[name]){songMsg('No saved song with that name.',true);return;}
   if(!confirm(`Delete “${name}”?`))return;
   delete S.songs[name];S.songsDeleted[name]=Date.now();store.set('songs',S.songs);store.set('songsDeleted',S.songsDeleted);refreshSongList();songsChanged();
   songMsg(`Deleted “${name}”. The chart stays on screen until you change it.`);

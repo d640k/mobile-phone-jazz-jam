@@ -332,6 +332,21 @@ async def settings_open_preset_and_save(c):
     ok(not pg.errors, pg.errors)
 
 @test
+async def song_message_confirms_then_fades(c):
+    pg = await c.page(LAPTOP, storage={'chart': BLUES})
+    await pg.locator('#songName input').fill('Fade test'); await pg.click('#saveSong')
+    await pg.wait_for_timeout(300)
+    ok((await pg.text_content('#songMsg')).startswith('Saved'), 'saved message shown')
+    await pg.wait_for_timeout(4700)
+    ok(await pg.text_content('#songMsg') == '', 'confirmation clears after a few seconds')
+    # saving again shows it again
+    await pg.click('#saveSong'); await pg.wait_for_timeout(300)
+    ok((await pg.text_content('#songMsg')).startswith('Saved'), 'repeat save shows the message again')
+    # a problem stays
+    await pg.locator('#songName input').fill(''); await pg.click('#saveSong'); await pg.wait_for_timeout(5000)
+    ok('name' in await pg.text_content('#songMsg'), 'problem message stays')
+
+@test
 async def theme_switch(c):
     pg = await c.page(LAPTOP, scheme='light')
     ok(await ev(pg, 'document.documentElement.dataset.theme') == 'light', 'system light')

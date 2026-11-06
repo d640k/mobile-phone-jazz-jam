@@ -299,3 +299,8 @@ body.wide #melKeysBtn,body.short #melKeysBtn{display:inline-flex}
 .slot.note .mod{font-size:13px}
 .staff .vf-stavenote.selnote path{fill:var(--teal);stroke:var(--teal)}
 .row.wrap{flex-wrap:wrap}
+
+/* song messages: confirmations fade out, problems stay */
+#songMsg{transition:opacity .4s}
+#songMsg.fading{opacity:0}
+#songMsg.problem{color:var(--danger)}
