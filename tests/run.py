@@ -347,6 +347,13 @@ async def song_message_confirms_then_fades(c):
     ok('name' in await pg.text_content('#songMsg'), 'problem message stays')
 
 @test
+async def drive_new_client_forgets_old_file(c):
+    pg = await c.page(LAPTOP, storage={'driveOn': True, 'driveClient': 'old.apps.googleusercontent.com',
+                                       'driveFile': 'OLDFILE', 'driveTok': {'t': 'x', 'exp': 9e15}, 'driveVer': 3})
+    r = await ev(pg, '[store.get("driveFile",null),store.get("driveTok",null),store.get("driveClient",null)===GOOGLE.clientId,G.fileId,G.token,store.get("driveOn",false)]')
+    ok(r == [None, None, True, None, None, True], r)
+
+@test
 async def theme_switch(c):
     pg = await c.page(LAPTOP, scheme='light')
     ok(await ev(pg, 'document.documentElement.dataset.theme') == 'light', 'system light')

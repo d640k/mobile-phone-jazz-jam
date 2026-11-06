@@ -1,10 +1,16 @@
 // ---------- Google Drive sync (saved songs) ----------
-// Same Google Cloud OAuth client as Talk Board: both apps are served from d640k.github.io.
+// Jazz Jam's own Google Cloud project (OAuth web client for https://d640k.github.io).
 // Scope drive.file = the app can only see files it created. Songs live in one file,
 // "Jazz Jam songs.json", tagged with appProperties {jazzjam:'songs'}.
 // Merge: per song, the newest save wins; deletions are kept as timestamps so a song
 // deleted on one device doesn't come back from another.
-const GOOGLE={clientId:'51388586652-87th3555dcca5qvdfi0eqv8jid2dsqov.apps.googleusercontent.com'};
+const GOOGLE={clientId:'273433789169-70m3d8ne2i61be262p049efdu7mpj66v.apps.googleusercontent.com'};
+// A different client can't see the old client's file (drive.file is per project), so forget the
+// remembered token and file when the client ID changes; the next sync makes a fresh file.
+if(store.get('driveClient',null)!==GOOGLE.clientId){
+  try{for(const k of ['driveTok','driveFile','driveVer','driveAt'])localStorage.removeItem('jj_'+k);}catch(e){}
+  store.set('driveClient',GOOGLE.clientId);
+}
 const DAPI='https://www.googleapis.com/drive/v3',DUP='https://www.googleapis.com/upload/drive/v3';
 const G={token:null,exp:0,client:null,ready:null,timer:null,busy:false,state:'',err:'',dirtyAt:0,
   on:store.get('driveOn',false),fileId:store.get('driveFile',null),ver:store.get('driveVer',null),at:store.get('driveAt',0)};
