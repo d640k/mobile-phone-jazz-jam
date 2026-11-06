@@ -1,7 +1,7 @@
 // ---------- Staff notation (VexFlow, loaded on first use) ----------
 // Each line of the chart gets one SVG staff under its chord buttons. Bar widths come from the
 // notation's minimum width (or the chords', whichever is wider), then lines are justified.
-const NOT={vf:null,loading:null,els:new Map(),cur:null};
+const NOT={vf:null,loading:null,els:new Map(),hits:new Map(),cur:null};   // hits: bar -> [{ni, x}] note centres (px from the line's left)
 function notationScale(){return document.body.classList.contains('wide')?0.85:document.body.classList.contains('short')?0.6:0.7;}
 const STAFF_UNITS=100,STAFF_TOP=30;   // VexFlow units: staff lines at 30..70, room for ledger lines and stems
 function loadNotation(){
@@ -115,6 +115,10 @@ function drawStaffRow(row,items,first){
       }
       const el=sn.getSVGElement&&sn.getSVGElement();
       if(el)NOT.els.set(it.bar+':'+m.ni,el);
+      // where the note sits, for tapping it
+      const hx=((sn.getNoteHeadBeginX()+sn.getNoteHeadEndX())/2)*K;
+      if(!NOT.hits.has(it.bar))NOT.hits.set(it.bar,[]);
+      NOT.hits.get(it.bar).push({ni:m.ni,x:hx});
     });
     // chord symbols sit over the note on their beat (or between notes)
     const xs=b.meta.map((m,i)=>({beat:m.start,x:b.notes[i].getAbsoluteX()*K-it.el.offsetLeft}));

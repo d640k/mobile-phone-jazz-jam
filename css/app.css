@@ -295,7 +295,9 @@ body.short #grid{--staffH:60px}
 body.wide #melKeysBtn,body.short #melKeysBtn{display:inline-flex}
 
 /* melody note buttons in the bar editor */
+/* the note buttons are for keyboard and screen-reader users; on screen you tap the notes themselves */
 .noteSlots{gap:5px}
+.noteSlots:not(:focus-within){position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .slot.note{display:inline-flex;align-items:center;gap:2px;min-width:44px;padding:0 8px;font-size:15px}
 .slot.note .mod{font-size:13px}
 .staff .vf-stavenote.selnote path{fill:var(--teal);stroke:var(--teal)}
@@ -305,3 +307,4 @@ body.wide #melKeysBtn,body.short #melKeysBtn{display:inline-flex}
 #songMsg{transition:opacity .4s}
 #songMsg.fading{opacity:0}
 #songMsg.problem{color:var(--danger)}
+#edAddEnd[hidden]{display:none}

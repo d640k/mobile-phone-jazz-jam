@@ -91,7 +91,7 @@ function layoutLines(){
   const g=$('grid');if(!CELLS.length){g.innerHTML='';g.appendChild(addBarBtn());return;}
   const mel=melOn()&&!!NOT.vf;
   if(melOn()&&!NOT.vf)loadNotation().then(()=>renderGrid()).catch(e=>{console.error(e);songMsg(e.message,true);});
-  g.classList.remove('mel');NOT.els.clear();NOT.cur=null;   // measure chords in normal flow first
+  g.classList.remove('mel');NOT.els.clear();NOT.hits.clear();NOT.cur=null;   // measure chords in normal flow first
   const focused=document.activeElement,top=$('chartWrap').scrollTop;
   const items=(mel&&PICK?[{el:PICK,bar:-1}]:[]).concat(CELLS.map((el,i)=>({el,bar:i})));
   // 1) measure each bar at its natural width (chords, or the melody if that needs more room)
@@ -373,6 +373,7 @@ const showPitch=p=>p.replace('#','♯').replace(/^([A-G])b/,'$1♭');
 function renderMelEditor(){
   const toks=toksOf(ED.bar);
   if(ED.note!=null&&ED.note>=toks.length)ED.note=null;
+  $('edAddEnd').hidden=ED.note==null;
   // one button per note; the selected one is the one you're changing
   const box=$('edNotes');box.innerHTML='';
   toks.forEach((t,i)=>{
@@ -402,6 +403,27 @@ function renderMelEditor(){
 function markSelNote(){
   for(const e of document.querySelectorAll('.staff .selnote'))e.classList.remove('selnote');
   if(ED.open&&ED.part==='melody'&&ED.note!=null)NOT.els.get(ED.bar+':'+ED.note)?.classList.add('selnote');
+}
+// the note under a tap (x px from the line's left) in bar i, or null if the tap is past the last note
+function noteAt(i,x){
+  const hs=NOT.hits.get(i)||[];if(!hs.length)return null;
+  let best=null,bd=1e9;for(const h of hs){const d=Math.abs(h.x-x);if(d<bd){bd=d;best=h;}}
+  const last=hs[hs.length-1];
+  if(x>last.x+22)return null;   // after the last note: add at the end
+  return best.ni;
+}
+// ← → step through the notes, on into the next / previous bar
+function stepNote(d){
+  const n=toksOf(ED.bar).length,lo=-1,hi=rawBars().length-1;
+  if(d>0){
+    if(ED.note!=null&&ED.note+1<n)return selectNote(ED.note+1);
+    if(ED.note!=null)return selectNote(null);              // past the last note: add at the end
+    if(ED.bar<hi){moveBar(1);if(toksOf(ED.bar).length)selectNote(0);}
+  }else{
+    if(ED.note==null&&n)return selectNote(n-1);
+    if(ED.note>0)return selectNote(ED.note-1);
+    if(ED.bar>lo){moveBar(-1);const m=toksOf(ED.bar).length;if(m)selectNote(m-1);}
+  }
 }
 // selecting a note shows its length on the length buttons
 function selectNote(i){
@@ -862,7 +884,8 @@ function wireKeys(){
     const tag=(document.activeElement?.tagName||'').toLowerCase();
     if(['sl-input','sl-textarea','input','textarea','sl-radio-group','sl-select'].includes(tag))return;
     if((e.key==='Delete'||e.key==='Backspace')&&ED.part==='melody'&&!ED.text){melDel();e.preventDefault();return;}   // remove a wrong note
-    if(e.key==='ArrowLeft'){moveBar(-1);e.preventDefault();}
+    if(ED.part==='melody'&&!ED.text&&(e.key==='ArrowLeft'||e.key==='ArrowRight')){stepNote(e.key==='ArrowLeft'?-1:1);e.preventDefault();}
+    else if(e.key==='ArrowLeft'){moveBar(-1);e.preventDefault();}
     else if(e.key==='ArrowRight'){moveBar(1);e.preventDefault();}
   });
 }
@@ -882,8 +905,20 @@ function init(){
     if(e.target.closest('#addBar')){if(!LOOP.sel)addBarAtEnd();return;}
     const c=e.target.closest('.cell');if(!c)return;
     const i=+c.dataset.bar,raw=i<0?-1:chartSong.src[i];
-    if(LOOP.sel){if(i>=0)loopTap(i);}
-    else if(ED.open&&raw===ED.bar)closeEditor();
+    if(LOOP.sel){if(i>=0)loopTap(i);return;}
+    // With the staff showing: a tap on a note selects it; on the staff elsewhere, Melody;
+    // on the chord symbols, Chords.
+    if($('grid').classList.contains('mel')&&!REC.review){
+      const row=c.closest('.sys').getBoundingClientRect(),onStaff=e.clientY>row.top+28;
+      if(onStaff){
+        const hit=noteAt(i,e.clientX-row.left);
+        if(!ED.open||ED.bar!==raw||ED.part!=='melody'){openEditor(raw,'melody');}
+        selectNote(hit);return;
+      }
+      if(ED.open&&raw===ED.bar&&ED.part==='melody'){setPart('chords');return;}
+      if(!(ED.open&&raw===ED.bar)){openEditor(raw,'chords');return;}
+    }
+    if(ED.open&&raw===ED.bar)closeEditor();
     else openEditor(raw);
   });
   // bar editor
@@ -900,6 +935,7 @@ function init(){
   $('edTri').onclick=()=>{ED.tri=!ED.tri;if(ED.tri){ED.dot=false;if(!['q','e'].includes(ED.len))ED.len='e';}setSelLength();};
   $('edTie').onclick=toggleTie;
   $('edRest').onclick=()=>{STACK.ref=null;melAdd('r');};
+  $('edAddEnd').onclick=()=>selectNote(null);
   $('edChord').onclick=()=>{ED.chord=!ED.chord;if(!ED.chord)STACK.ref=null;
     melMsg(ED.chord?'Chord: keys you tap stack onto the last note (or the selected one). Tap a key again to take it out. Turn Chord off to go on.':'');renderMelEditor();};$('edMelDel').onclick=melDel;$('edHear').onclick=hearBar;$('edRec').onclick=recStart;
   $('recSnap').addEventListener('sl-change',e=>{REC.snap=e.target.value==='snap';recRestore();recApply();});

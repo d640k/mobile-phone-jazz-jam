@@ -505,10 +505,11 @@ async def melody_edit_single_note_and_tie_across_bars(c):
     await pg.wait_for_function('document.querySelectorAll(".staff svg").length>0', timeout=8000)
     await pg.locator('#grid .cell').nth(0).click(); await pg.click('#edPartMel')
     notes = pg.locator('#edNotes .slot.note')
-    ok(await notes.count() == 4, 'one button per note')
+    ok(await notes.count() == 4, 'one (screen-reader) button per note')
     ok(await notes.nth(3).get_attribute('aria-label') == 'Note 4: C5, quarter, tied', await notes.nth(3).get_attribute('aria-label'))
-    # select note 2, change its pitch: selection moves on to note 3
-    await notes.nth(1).click()
+    # tap note 2 on the staff, change its pitch: selection moves on to note 3
+    await tap_note(pg, 0, 1)
+    ok(await ev(pg, 'ED.note') == 1, 'tapping a note selects it')
     ok(await ev(pg, '!!document.querySelector(".staff .selnote")'), 'selected note marked on the staff')
     await key_down(pg, 70)
     ok(await ev(pg, 'melGet(0)') == 'F4q Bb4q A4q C5q~' and await ev(pg, 'ED.note') == 2, await ev(pg, 'melGet(0)'))
@@ -520,23 +521,29 @@ async def melody_edit_single_note_and_tie_across_bars(c):
     await pg.click('#edRest')
     ok(await ev(pg, 'melGet(0)') == 'F4q Bb4q re C5q~', 'make rest')
     # Dave's case: redo the end of the bar, then tie its last note into the next bar
-    await pg.locator('#edNotes button', has_text='+ Add').click()
+    await pg.click('#edAddEnd')
     await pg.click('#edMelDel')                        # remove the tied C5; the note before keeps no stray tie
     ok(await ev(pg, 'melGet(0)') == 'F4q Bb4q re', await ev(pg, 'melGet(0)'))
     await pg.click('#edLens [data-len="e"]'); await key_down(pg, 69)   # A4 eighth
     await pg.click('#edLens [data-len="q"]')
     await pg.click('#oct' + 'Up'); await key_down(pg, 72); await pg.click('#octDn')   # C5 quarter fills the bar
     ok(await ev(pg, 'melGet(0)') == 'F4q Bb4q re A4e C5q' and await ev(pg, 'ED.bar') == 1, await ev(pg, 'melGet(0)'))
-    await pg.click('#edPrev'); await pg.locator('#edNotes .slot.note').nth(4).click(); await pg.click('#edTie')
+    await pg.click('#edPrev'); await tap_note(pg, 0, 4); await pg.click('#edTie')
     ok((await ev(pg, 'melGet(0)')).endswith('C5q~') and await pg.get_attribute('#edTie', 'aria-pressed') == 'true', 'tied across the barline')
     ok(await ev(pg, 'getTimeline().events.find(e=>e.bar===0&&e.midi===72).dur') == 3, 'playback holds C5 into bar 2')
     await pg.click('#edTie')
     ok((await ev(pg, 'melGet(0)')).endswith('C5q'), 'tie removed')
     # delete just the selected note
-    await pg.locator('#edNotes .slot.note').nth(1).click(); await pg.click('#edMelDel')
+    await tap_note(pg, 0, 1); await pg.click('#edMelDel')
     ok(await ev(pg, 'melGet(0)') == 'F4q re A4e C5q', await ev(pg, 'melGet(0)'))
     await c.shot(pg, 'melody-note-select')
     ok(not pg.errors, pg.errors)
+
+async def tap_note(pg, bar, ni):
+    # tap a note on the staff (bar = chart bar index, -1 = pickup)
+    x, y = await ev(pg, f'''(()=>{{const h=NOT.hits.get({bar}).find(h=>h.ni==={ni});const cell={bar}<0?document.querySelector('.cell.pick'):CELLS[{bar}];
+      cell.scrollIntoView({{block:'nearest'}});const r=cell.closest('.sys').getBoundingClientRect();return [r.left+h.x,r.top+28+20]}})()''')
+    await pg.mouse.click(x, y)
 
 async def key_hold(pg, m):
     await ev(pg, f'''(()=>{{const k=$("kb").querySelector('[data-m="{m}"]');const r=k.getBoundingClientRect();
@@ -559,7 +566,7 @@ async def melody_chords(c):
     await key_down(pg, 70)
     ok(await ev(pg, 'melGet(0)') == 'F4+A4+C5h Bb4h', await ev(pg, 'melGet(0)'))
     # Chord toggle: one-finger taps stack onto the selected note; tap again to take one out
-    await pg.click('#edPrev'); await pg.locator('#edNotes .slot.note').nth(1).click(); await pg.click('#edChord')
+    await pg.click('#edPrev'); await tap_note(pg, 0, 1); await pg.click('#edChord')
     await key_down(pg, 62); await key_down(pg, 65)
     ok(await ev(pg, 'melGet(0)') == 'F4+A4+C5h D4+F4+Bb4h', await ev(pg, 'melGet(0)'))
     await key_down(pg, 62)
@@ -583,15 +590,54 @@ async def melody_delete_key(c):
     pg = await c.page(LAPTOP, storage={'chart': BLUES, 'melody': {'pickup': '', 'bars': ['F4q G4q A4q C5q']}})
     await pg.wait_for_function('document.querySelectorAll(".staff svg").length>0', timeout=8000)
     await pg.locator('#grid .cell:not(.pick)').nth(0).click(); await pg.click('#edPartMel')
-    await pg.locator('#edNotes .slot.note').nth(1).click()
+    await tap_note(pg, 0, 1)
     await pg.keyboard.press('Delete')
     ok(await ev(pg, 'melGet(0)') == 'F4q A4q C5q', 'Delete removes the selected note')
-    await pg.locator('#edNotes button', has_text='+ Add').click()
+    await pg.click('#edAddEnd')
     await pg.keyboard.press('Backspace')
     ok(await ev(pg, 'melGet(0)') == 'F4q A4q', 'Backspace removes the last note')
     # not while typing
     await pg.click('#edText'); await pg.locator('#edInput input').focus(); await pg.keyboard.press('Backspace')
     ok(await ev(pg, 'melGet(0)') == 'F4q A4q', 'typing keeps Backspace')
+
+@test
+async def melody_tap_notes_on_staff(c):
+    pg = await mel_page(c, PHONE)
+    # editor closed: tapping a note opens Melody with it selected
+    await tap_note(pg, 5, 2)
+    ok(await ev(pg, '[ED.open,ED.part,ED.bar,ED.note]') == [True, 'melody', 5, 2], await ev(pg, '[ED.open,ED.part,ED.bar,ED.note]'))
+    ok(await ev(pg, '!!document.querySelector(".staff .selnote")') and await pg.is_visible('#edAddEnd'), 'marked; Add at end shown')
+    ok(await ev(pg, '$("edNotes").getBoundingClientRect().width') <= 1, 'no note-button row on screen')
+    # tap well after the last note (bar 7 is one whole note): back to adding
+    await tap_note(pg, 6, 0)
+    ok(await ev(pg, '[ED.bar,ED.note]') == [6, 0], 'whole note selected')
+    x, y = await ev(pg, '''(()=>{const r=CELLS[6].getBoundingClientRect(),row=CELLS[6].closest('.sys').getBoundingClientRect();return [r.right-8,row.top+48]})()''')
+    await pg.mouse.click(x, y)
+    ok(await ev(pg, 'ED.note') is None and await ev(pg, 'ED.open'), 'tap past the last note: add at the end')
+    # tap the chord symbols: Chords
+    x, y = await ev(pg, '''(()=>{const r=CELLS[7].getBoundingClientRect();return [r.left+30,r.top+16]})()''')
+    await pg.mouse.click(x, y)
+    ok(await ev(pg, '[ED.bar,ED.part]') == [7, 'chords'], await ev(pg, '[ED.bar,ED.part]'))
+    # pickup notes are tappable too
+    await tap_note(pg, -1, 1)
+    ok(await ev(pg, '[ED.bar,ED.note,ED.part]') == [-1, 1, 'melody'], await ev(pg, '[ED.bar,ED.note,ED.part]'))
+    await c.shot(pg, 'melody-tap-note')
+    ok(not pg.errors, pg.errors)
+
+@test
+async def melody_arrow_keys_step_notes(c):
+    pg = await c.page(LAPTOP, storage={'chart': BLUES, 'melody': {'pickup': '', 'bars': ['F4h G4h', 'A4w']}})
+    await pg.wait_for_function('document.querySelectorAll(".staff svg").length>0', timeout=8000)
+    await tap_note(pg, 0, 0)
+    seen = []
+    for _ in range(4):
+        await pg.keyboard.press('ArrowRight'); seen.append(await ev(pg, '[ED.bar,ED.note]'))
+    ok(seen == [[0, 1], [0, None], [1, 0], [1, None]], seen)
+    await pg.keyboard.press('ArrowLeft'); await pg.keyboard.press('ArrowLeft')
+    ok(await ev(pg, '[ED.bar,ED.note]') == [0, 1], await ev(pg, '[ED.bar,ED.note]'))
+    # screen-reader / keyboard route: the note buttons appear when tabbed to
+    await pg.locator('#edNotes .slot.note').first.focus()
+    ok(await ev(pg, '$("edNotes").getBoundingClientRect().width') > 100, 'note buttons show when focused')
 
 @test
 async def melody_pickup_and_bar_ops(c):
