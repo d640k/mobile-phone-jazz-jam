@@ -292,3 +292,10 @@ body.short #grid{--staffH:60px}
 /* the melody-on-keys button shows only where there's room */
 #melKeysBtn{display:none}
 body.wide #melKeysBtn,body.short #melKeysBtn{display:inline-flex}
+
+/* melody note buttons in the bar editor */
+.noteSlots{gap:5px}
+.slot.note{display:inline-flex;align-items:center;gap:2px;min-width:44px;padding:0 8px;font-size:15px}
+.slot.note .mod{font-size:13px}
+.staff .vf-stavenote.selnote path{fill:var(--teal);stroke:var(--teal)}
+.row.wrap{flex-wrap:wrap}

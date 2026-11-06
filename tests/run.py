@@ -465,6 +465,45 @@ async def melody_step_entry_phone(c):
     ok(not pg.errors, pg.errors)
 
 @test
+async def melody_edit_single_note_and_tie_across_bars(c):
+    pg = await c.page(PHONE, storage={'chart': BLUES, 'keySig': 'F', 'melody': {'pickup': '', 'bars': ['F4q G4q A4q C5q~', 'C5h rh']}})
+    await pg.wait_for_function('document.querySelectorAll(".staff svg").length>0', timeout=8000)
+    await pg.locator('#grid .cell').nth(0).click(); await pg.click('#edPartMel')
+    notes = pg.locator('#edNotes .slot.note')
+    ok(await notes.count() == 4, 'one button per note')
+    ok(await notes.nth(3).get_attribute('aria-label') == 'Note 4: C5, quarter, tied', await notes.nth(3).get_attribute('aria-label'))
+    # select note 2, change its pitch: selection moves on to note 3
+    await notes.nth(1).click()
+    ok(await ev(pg, '!!document.querySelector(".staff .selnote")'), 'selected note marked on the staff')
+    await key_down(pg, 70)
+    ok(await ev(pg, 'melGet(0)') == 'F4q Bb4q A4q C5q~' and await ev(pg, 'ED.note') == 2, await ev(pg, 'melGet(0)'))
+    # a new length for note 3; too long is refused
+    await pg.click('#edLens [data-len="e"]')
+    ok(await ev(pg, 'melGet(0)') == 'F4q Bb4q A4e C5q~', await ev(pg, 'melGet(0)'))
+    await pg.click('#edLens [data-len="w"]')
+    ok(await ev(pg, 'melGet(0)') == 'F4q Bb4q A4e C5q~' and 'too long' in await pg.text_content('#edMelMsg'), 'too long refused')
+    await pg.click('#edRest')
+    ok(await ev(pg, 'melGet(0)') == 'F4q Bb4q re C5q~', 'make rest')
+    # Dave's case: redo the end of the bar, then tie its last note into the next bar
+    await pg.locator('#edNotes button', has_text='+ Add').click()
+    await pg.click('#edMelDel')                        # remove the tied C5; the note before keeps no stray tie
+    ok(await ev(pg, 'melGet(0)') == 'F4q Bb4q re', await ev(pg, 'melGet(0)'))
+    await pg.click('#edLens [data-len="e"]'); await key_down(pg, 69)   # A4 eighth
+    await pg.click('#edLens [data-len="q"]')
+    await pg.click('#oct' + 'Up'); await key_down(pg, 72); await pg.click('#octDn')   # C5 quarter fills the bar
+    ok(await ev(pg, 'melGet(0)') == 'F4q Bb4q re A4e C5q' and await ev(pg, 'ED.bar') == 1, await ev(pg, 'melGet(0)'))
+    await pg.click('#edPrev'); await pg.locator('#edNotes .slot.note').nth(4).click(); await pg.click('#edTie')
+    ok((await ev(pg, 'melGet(0)')).endswith('C5q~') and await pg.get_attribute('#edTie', 'aria-pressed') == 'true', 'tied across the barline')
+    ok(await ev(pg, 'getTimeline().events.find(e=>e.bar===0&&e.midi===72).dur') == 3, 'playback holds C5 into bar 2')
+    await pg.click('#edTie')
+    ok((await ev(pg, 'melGet(0)')).endswith('C5q'), 'tie removed')
+    # delete just the selected note
+    await pg.locator('#edNotes .slot.note').nth(1).click(); await pg.click('#edMelDel')
+    ok(await ev(pg, 'melGet(0)') == 'F4q re A4e C5q', await ev(pg, 'melGet(0)'))
+    await c.shot(pg, 'melody-note-select')
+    ok(not pg.errors, pg.errors)
+
+@test
 async def melody_pickup_and_bar_ops(c):
     pg = await c.page(PHONE, storage={'chart': BLUES, 'melody': {'pickup': '', 'bars': ['F5w', 'Bb4w', 'A4w']}})
     await pg.wait_for_function('document.querySelectorAll(".staff svg").length>0', timeout=8000)

@@ -136,6 +136,7 @@ function layoutLines(){
   $('chartWrap').scrollTop=top;
   if(focused&&g.contains(focused))focused.focus();
   const sel=g.querySelector('.cell.sel');if(sel)sel.scrollIntoView({block:'nearest'});
+  markSelNote();
 }
 function addBarBtn(){
   const add=document.createElement('button');add.type='button';add.className='addBar';add.id='addBar';add.textContent='+ Bar';add.setAttribute('aria-label','Add a bar at the end');
@@ -239,13 +240,13 @@ function loopTap(i){
 }
 
 // ---------- Bar editor ----------
-const ED={open:false,bar:0,slot:0,mode:'root',text:false,part:'chords',len:'q',dot:false,tri:false,tie:false};
+const ED={open:false,bar:0,slot:0,mode:'root',text:false,part:'chords',len:'q',dot:false,tri:false,note:null};   // note: selected note in the bar (null = adding at the end)
 const rawBars=()=>splitChart(S.chart);
 function edToks(){const raw=rawBars();return raw[ED.bar]?resolveToks(raw,ED.bar):[];}
 function edChords(){return edToks().filter(t=>t!=='/'&&t!=='%');}
 function openEditor(rawIndex,part){
   if(LOOP.sel||REC.review)return;
-  ED.open=true;ED.bar=rawIndex;ED.slot=0;ED.mode='root';
+  ED.open=true;ED.bar=rawIndex;ED.slot=0;ED.mode='root';ED.note=null;
   if(part)ED.part=part;if(rawIndex<0)ED.part='melody';
   if($('sheet').open)$('sheet').hide();
   $('editor').hidden=false;layout();renderGrid();renderEditor();
@@ -329,8 +330,8 @@ function applyBarText(){
   if(toks[0]==='/'){$('edErr').textContent='Start the bar with a chord.';return;}
   $('edErr').textContent='';setBarToks(toks);
 }
-function moveBar(d){const raw=rawBars();ED.bar=Math.max(ED.part==='melody'?-1:0,Math.min(raw.length-1,ED.bar+d));ED.slot=0;renderGrid();renderEditor();}
-function setPart(p){ED.part=p;if(p==='chords'&&ED.bar<0)ED.bar=0;ED.text=false;layout();renderGrid();renderEditor();}
+function moveBar(d){const raw=rawBars();ED.note=null;ED.bar=Math.max(ED.part==='melody'?-1:0,Math.min(raw.length-1,ED.bar+d));ED.slot=0;renderGrid();renderEditor();}
+function setPart(p){ED.part=p;ED.note=null;if(p==='chords'&&ED.bar<0)ED.bar=0;ED.text=false;layout();renderGrid();renderEditor();}
 function insertBar(){
   const raw=rawBars(),cur=raw[ED.bar]?resolveToks(raw,ED.bar).filter(t=>t!=='%'):['C'];
   raw.splice(ED.bar+1,0,{label:null,toks:cur.length?cur:['C']});melInsertBar(ED.bar+1);ED.bar++;ED.slot=0;
@@ -352,32 +353,100 @@ function addBarAtEnd(){
 // ---------- Melody entry (bar editor, Melody) ----------
 const fmtBeats=b=>{const w=Math.floor(b+1e-6),f=b-w,fr=f>0.7?'¾':f>0.6?'⅔':f>0.4?'½':f>0.3?'⅓':f>0.2?'¼':'';return (w||!fr?String(w):'')+fr;};
 function melMsg(t){$('edMelMsg').textContent=t;}
+const LEN_NAME={w:'whole',h:'half',q:'quarter',e:'eighth',s:'sixteenth'};
+const toksOf=bar=>melGet(bar).split(' ').filter(Boolean);
+const showPitch=p=>p.replace('#','♯').replace(/^([A-G])b/,'$1♭');
 function renderMelEditor(){
+  const toks=toksOf(ED.bar);
+  if(ED.note!=null&&ED.note>=toks.length)ED.note=null;
+  // one button per note; the selected one is the one you're changing
+  const box=$('edNotes');box.innerHTML='';
+  toks.forEach((t,i)=>{
+    const n=melTok(t);if(!n)return;
+    const b=document.createElement('button');b.type='button';b.className='slot note';
+    b.setAttribute('aria-pressed',String(ED.note===i));
+    const lab=document.createElement('span');lab.textContent=n.p?showPitch(n.p):'Rest';b.appendChild(lab);
+    const ic=document.querySelector(`#edLens .len[data-len="${n.d}"] svg`);if(ic){const c=ic.cloneNode(true);c.setAttribute('width','13');c.setAttribute('height','16');b.appendChild(c);}
+    if(n.dot||n.tri||n.tie){const x=document.createElement('span');x.className='mod';x.textContent=(n.dot?'.':'')+(n.tri?'³':'')+(n.tie?'‿':'');b.appendChild(x);}
+    b.setAttribute('aria-label',`Note ${i+1}: ${n.p?n.p.replace('b',' flat').replace('#',' sharp'):'rest'}, ${n.dot?'dotted ':''}${LEN_NAME[n.d]}${n.tri?' triplet':''}${n.tie?', tied':''}`);
+    b.onclick=()=>selectNote(ED.note===i?null:i);
+    box.appendChild(b);
+  });
+  const add=document.createElement('button');add.type='button';add.className='btn small';add.textContent='+ Add';
+  add.setAttribute('aria-pressed',String(ED.note==null));add.setAttribute('aria-label','Add notes at the end of the bar');
+  add.onclick=()=>selectNote(null);box.appendChild(add);
   for(const b of document.querySelectorAll('#edLens .len'))b.setAttribute('aria-pressed',String(b.dataset.len===ED.len));
-  $('edDot').setAttribute('aria-pressed',String(ED.dot));$('edTri').setAttribute('aria-pressed',String(ED.tri));$('edTie').setAttribute('aria-pressed',String(ED.tie));
+  $('edDot').setAttribute('aria-pressed',String(ED.dot));$('edTri').setAttribute('aria-pressed',String(ED.tri));
+  const tt=tieTarget();$('edTie').setAttribute('aria-pressed',String(!!(tt&&tt.toks[tt.i].endsWith('~'))));$('edTie').disabled=!tt;
+  $('edRest').textContent=ED.note!=null?'Make rest':'Rest';
   const used=melBeats(melGet(ED.bar)),cap=curBpb();
   $('edFill').textContent=`${fmtBeats(used)} of ${cap} beats`;
   $('edRecLabel').textContent=S.loop?`Record bars ${S.loop.a+1}–${S.loop.b+1}`:`Record from bar ${Math.max(0,ED.bar)+1}`;
+  markSelNote();
 }
-// the note before the end of this bar (for ties)
-function prevNoteRef(){
-  for(let b=ED.bar;b>=-1;b--){const t=melGet(b).split(' ').filter(Boolean);if(t.length)return {bar:b,toks:t};if(b<ED.bar)break;}
+function markSelNote(){
+  for(const e of document.querySelectorAll('.staff .selnote'))e.classList.remove('selnote');
+  if(ED.open&&ED.part==='melody'&&ED.note!=null)NOT.els.get(ED.bar+':'+ED.note)?.classList.add('selnote');
+}
+// selecting a note shows its length on the length buttons
+function selectNote(i){
+  ED.note=i;
+  if(i!=null){const n=melTok(toksOf(ED.bar)[i]);if(n){ED.len=n.d;ED.dot=n.dot;ED.tri=n.tri;}}
+  melMsg(i==null?'Adding notes at the end of the bar.':'Tap a key to change this note, or pick a new length.');
+  renderMelEditor();
+}
+// The note Tie works on: the selected one, else the last note in the bar (or before it).
+function tieTarget(){
+  if(ED.note!=null){const t=toksOf(ED.bar);return t[ED.note]&&!t[ED.note].startsWith('r')?{bar:ED.bar,toks:t,i:ED.note}:null;}
+  for(let b=ED.bar;b>=Math.max(-1,ED.bar-1);b--){const t=toksOf(b);if(t.length)return t[t.length-1].startsWith('r')?null:{bar:b,toks:t,i:t.length-1};}
   return null;
 }
+function toggleTie(){
+  const tt=tieTarget();if(!tt)return;
+  const on=!tt.toks[tt.i].endsWith('~');
+  tt.toks[tt.i]=on?tt.toks[tt.i]+'~':tt.toks[tt.i].replace(/~$/,'');
+  melSet(tt.bar,tt.toks.join(' '));
+  melMsg(on?'Tied to the next note (it can be in the next bar).':'Tie removed.');
+  renderGrid();renderEditor();
+}
 function melAdd(pitch){   // pitch name, or 'r' for a rest
-  const tok=pitch+ED.len+(ED.dot?'.':'')+(ED.tri?'t':''),cur=melGet(ED.bar),cap=curBpb(),used=melBeats(cur),nb=melTok(tok).beats;
+  const tok=pitch+ED.len+(ED.dot?'.':'')+(ED.tri?'t':''),cap=curBpb();
+  if(ED.note!=null){   // change the selected note
+    const toks=toksOf(ED.bar),old=melTok(toks[ED.note]);
+    const tied=old.tie&&pitch!=='r'?'~':'';
+    const next=[...toks];next[ED.note]=tok+tied;
+    if(melBeats(next.join(' '))>cap+1e-6){melMsg('That won’t fit in this bar.');return;}
+    melSet(ED.bar,next.join(' '));
+    ED.note=ED.note+1<toks.length?ED.note+1:null;   // on to the next note, like a notation program
+    if(ED.note!=null){const n=melTok(toks[ED.note]);ED.len=n.d;ED.dot=n.dot;ED.tri=n.tri;}
+    melMsg(ED.note!=null?`Changed. Now on note ${ED.note+1}.`:'Changed. Back to adding at the end.');
+    renderGrid();renderEditor();return;
+  }
+  const cur=melGet(ED.bar),used=melBeats(cur),nb=melTok(tok).beats;
   if(used+nb>cap+1e-6){melMsg(`That won’t fit: ${fmtBeats(cap-used)} beat${Math.abs(cap-used-1)<1e-6?'':'s'} left in this bar.`);return;}
-  if(ED.tie&&pitch!=='r'){const r=prevNoteRef();if(r){const k=r.toks.length-1;if(!r.toks[k].startsWith('r')){r.toks[k]=r.toks[k].replace(/~?$/,'~');melSet(r.bar,r.toks.join(' '));}}ED.tie=false;}
-  melSet(ED.bar,(melGet(ED.bar)+' '+tok).trim());
+  melSet(ED.bar,(cur+' '+tok).trim());
   const full=Math.abs(used+nb-cap)<1e-6,last=rawBars().length-1;
   if(full&&ED.bar<last){ED.bar++;melMsg(`${ED.bar===0?'Pickup':'Bar '+ED.bar} is full. On to bar ${ED.bar+1}.`);}
   else melMsg(full?'Last bar done.':'');
   renderGrid();renderEditor();
 }
+// a new length (or dot / triplet) for the selected note
+function setSelLength(){
+  if(ED.note==null){renderMelEditor();return;}
+  const toks=toksOf(ED.bar),old=melTok(toks[ED.note]);
+  const next=[...toks];next[ED.note]=(old.p||'r')+ED.len+(ED.dot?'.':'')+(ED.tri?'t':'')+(old.tie?'~':'');
+  if(melBeats(next.join(' '))>curBpb()+1e-6){melMsg('That’s too long for the space left in this bar.');ED.len=old.d;ED.dot=old.dot;ED.tri=old.tri;renderMelEditor();return;}
+  melSet(ED.bar,next.join(' '));melMsg('');renderGrid();renderEditor();
+}
 function melDel(){
-  let t=melGet(ED.bar).split(' ').filter(Boolean);
-  if(!t.length&&ED.bar>-1){ED.bar--;t=melGet(ED.bar).split(' ').filter(Boolean);}
-  if(t.length){t.pop();if(t.length)t[t.length-1]=t[t.length-1].replace(/~$/,'');melSet(ED.bar,t.join(' '));}
+  if(ED.note!=null){
+    const t=toksOf(ED.bar);t.splice(ED.note,1);melSet(ED.bar,t.join(' '));
+    if(ED.note>=t.length)ED.note=null;else{const n=melTok(t[ED.note]);ED.len=n.d;ED.dot=n.dot;ED.tri=n.tri;}
+    melMsg('');renderGrid();renderEditor();return;
+  }
+  let t=toksOf(ED.bar);
+  if(!t.length&&ED.bar>-1){ED.bar--;t=toksOf(ED.bar);}
+  if(t.length){t.pop();melSet(ED.bar,t.join(' '));}   // the note before keeps its tie
   melMsg('');renderGrid();renderEditor();
 }
 // Preview one bar. Uses the playback timeline, so ties are honoured: a note tied into the next bar
@@ -465,7 +534,8 @@ function kbHeight(){
   return Math.min(v,kbMax());
 }
 function applyKbHeight(){
-  const h=kbHeight(),kb=$('kb');
+  // entering a melody on a phone: a shorter keyboard leaves room to see the staff
+  const h=document.body.classList.contains('melEdit')?Math.min(kbHeight(),150):kbHeight(),kb=$('kb');
   if(kb.style.height!==h+'px'){kb.style.height=h+'px';}
   kb.hidden=h===0;
   $('kbToggle').textContent=h===0?'Show keys':'Hide';
@@ -773,10 +843,10 @@ function init(){
   $('edInput').addEventListener('sl-change',applyBarText);
   $('edPrev').onclick=()=>moveBar(-1);$('edNext').onclick=()=>moveBar(1);
   $('edPartCh').onclick=()=>setPart('chords');$('edPartMel').onclick=()=>setPart('melody');
-  for(const b of document.querySelectorAll('#edLens .len'))b.onclick=()=>{ED.len=b.dataset.len;if(!['q','e'].includes(ED.len))ED.tri=false;renderMelEditor();};
-  $('edDot').onclick=()=>{ED.dot=!ED.dot;if(ED.dot)ED.tri=false;renderMelEditor();};
-  $('edTri').onclick=()=>{ED.tri=!ED.tri;if(ED.tri){ED.dot=false;if(!['q','e'].includes(ED.len))ED.len='e';}renderMelEditor();};
-  $('edTie').onclick=()=>{ED.tie=!ED.tie;melMsg(ED.tie?'The next note will be tied to the one before it.':'');renderMelEditor();};
+  for(const b of document.querySelectorAll('#edLens .len'))b.onclick=()=>{ED.len=b.dataset.len;if(!['q','e'].includes(ED.len))ED.tri=false;setSelLength();};
+  $('edDot').onclick=()=>{ED.dot=!ED.dot;if(ED.dot)ED.tri=false;setSelLength();};
+  $('edTri').onclick=()=>{ED.tri=!ED.tri;if(ED.tri){ED.dot=false;if(!['q','e'].includes(ED.len))ED.len='e';}setSelLength();};
+  $('edTie').onclick=toggleTie;
   $('edRest').onclick=()=>melAdd('r');$('edMelDel').onclick=melDel;$('edHear').onclick=hearBar;$('edRec').onclick=recStart;
   $('recSnap').addEventListener('sl-change',e=>{REC.snap=e.target.value==='snap';recRestore();recApply();});
   $('recKeep').onclick=()=>recDone(true);$('recDiscard').onclick=()=>recDone(false);
