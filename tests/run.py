@@ -658,6 +658,30 @@ async def melody_tap_notes_on_staff(c):
     ok(not pg.errors, pg.errors)
 
 @test
+async def melody_insert_notes(c):
+    pg = await c.page(PHONE, storage={'chart': BLUES, 'keySig': 'F', 'melody': {'pickup': '', 'bars': ['F4q A4q C5q', 'F4q G4q A4q Bb4q']}})
+    await pg.wait_for_function('document.querySelectorAll(".staff svg").length>0', timeout=8000)
+    await tap_note(pg, 0, 1)                          # select A4
+    ok(await pg.is_visible('#edInsNote'), 'Insert shown with a note selected')
+    await pg.click('#edInsNote')
+    await pg.click('#edLens [data-len="e"]')          # in Insert, a length is for the new notes
+    ok(await ev(pg, 'melGet(0)') == 'F4q A4q C5q', 'the selected note keeps its length')
+    await key_down(pg, 67)                            # G4 eighth before A4
+    ok(await ev(pg, 'melGet(0)') == 'F4q G4e A4q C5q' and await ev(pg, 'ED.note') == 2, await ev(pg, 'melGet(0)'))
+    await pg.click('#edRest')                         # an eighth rest before A4 too
+    ok(await ev(pg, 'melGet(0)') == 'F4q G4e re A4q C5q', await ev(pg, 'melGet(0)'))
+    await key_down(pg, 69)                            # bar is full now
+    ok('full' in await pg.text_content('#edMelMsg') and await ev(pg, 'melGet(0)') == 'F4q G4e re A4q C5q', 'full bar refuses')
+    # Insert off: a key changes the selected note again
+    await pg.click('#edInsNote'); await key_down(pg, 70)
+    ok(await ev(pg, 'melGet(0)') == 'F4q G4e re Bb4q C5q', await ev(pg, 'melGet(0)'))
+    # held keys make an inserted chord
+    await ev(pg, 'melSet(0,"F4q A4q C5q");ED.note=1;ED.insert=true;renderGrid();renderEditor()')
+    await key_hold(pg, 64); await key_hold(pg, 67); await key_up(pg, 64); await key_up(pg, 67)
+    ok(await ev(pg, 'melGet(0)') == 'F4q E4+G4q A4q C5q', await ev(pg, 'melGet(0)'))
+    ok(not pg.errors, pg.errors)
+
+@test
 async def melody_arrow_keys_step_notes(c):
     pg = await c.page(LAPTOP, storage={'chart': BLUES, 'melody': {'pickup': '', 'bars': ['F4h G4h', 'A4w']}})
     await pg.wait_for_function('document.querySelectorAll(".staff svg").length>0', timeout=8000)

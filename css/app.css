@@ -307,4 +307,4 @@ body.wide #melKeysBtn,body.short #melKeysBtn{display:inline-flex}
 #songMsg{transition:opacity .4s}
 #songMsg.fading{opacity:0}
 #songMsg.problem{color:var(--danger)}
-#edAddEnd[hidden]{display:none}
+#edAddEnd[hidden],#edInsNote[hidden]{display:none}

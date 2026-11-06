@@ -259,7 +259,7 @@ function loopTap(i){
 }
 
 // ---------- Bar editor ----------
-const ED={open:false,bar:0,slot:0,mode:'root',text:false,part:'chords',len:'q',dot:false,tri:false,note:null,chord:false};   // note: selected note in the bar (null = adding at the end)
+const ED={open:false,bar:0,slot:0,mode:'root',text:false,part:'chords',len:'q',dot:false,tri:false,note:null,chord:false,insert:false};   // insert: keys add before the selected note   // note: selected note in the bar (null = adding at the end)
 const rawBars=()=>splitChart(S.chart);
 function edToks(){const raw=rawBars();return raw[ED.bar]?resolveToks(raw,ED.bar):[];}
 function edChords(){return edToks().filter(t=>t!=='/'&&t!=='%');}
@@ -378,7 +378,9 @@ const showPitch=p=>p.replace('#','♯').replace(/^([A-G])b/,'$1♭');
 function renderMelEditor(){
   const toks=toksOf(ED.bar);
   if(ED.note!=null&&ED.note>=toks.length)ED.note=null;
-  $('edAddEnd').hidden=ED.note==null;
+  if(ED.note==null)ED.insert=false;
+  $('edAddEnd').hidden=$('edInsNote').hidden=ED.note==null;
+  $('edInsNote').setAttribute('aria-pressed',String(ED.insert));
   // one button per note; the selected one is the one you're changing
   const box=$('edNotes');box.innerHTML='';
   toks.forEach((t,i)=>{
@@ -398,7 +400,7 @@ function renderMelEditor(){
   for(const b of document.querySelectorAll('#edLens .len'))b.setAttribute('aria-pressed',String(b.dataset.len===ED.len));
   $('edDot').setAttribute('aria-pressed',String(ED.dot));$('edTri').setAttribute('aria-pressed',String(ED.tri));
   const tt=tieTarget();$('edTie').setAttribute('aria-pressed',String(!!(tt&&tt.toks[tt.i].endsWith('~'))));$('edTie').disabled=!tt;
-  if(ED.note!=null)$('edRest').setAttribute('aria-label','Make this note a rest');else $('edRest').removeAttribute('aria-label');
+  if(ED.note!=null)$('edRest').setAttribute('aria-label',ED.insert?'Insert a rest':'Make this note a rest');else $('edRest').removeAttribute('aria-label');
   $('edChord').setAttribute('aria-pressed',String(ED.chord));
   const used=melBeats(melGet(ED.bar)),cap=curBpb();
   $('edFill').textContent=`${fmtBeats(used)} of ${cap} beats`;
@@ -436,6 +438,12 @@ function selectNote(i){
   melMsg(i==null?'Adding notes at the end of the bar.':'Tap a key to change this note, or pick a new length.');
   renderMelEditor();
 }
+function toggleInsert(){
+  ED.insert=!ED.insert;STACK.ref=null;
+  if(!ED.insert&&ED.note!=null){const n=melTok(toksOf(ED.bar)[ED.note]);if(n){ED.len=n.d;ED.dot=n.dot;ED.tri=n.tri;}}
+  melMsg(ED.insert?'Insert: keys (and Rest) add new notes before the selected one, using the room at the end of the bar.':'Insert off: keys change the selected note.');
+  renderMelEditor();
+}
 // The note Tie works on: the selected one, else the last note in the bar (or before it).
 function tieTarget(){
   if(ED.note!=null){const t=toksOf(ED.bar);return t[ED.note]&&!t[ED.note].startsWith('r')?{bar:ED.bar,toks:t,i:ED.note}:null;}
@@ -452,6 +460,13 @@ function toggleTie(){
 }
 function melAdd(pitch){   // pitch name, or 'r' for a rest; returns {bar,i} of the note it wrote
   const tok=pitch+ED.len+(ED.dot?'.':'')+(ED.tri?'t':''),cap=curBpb();
+  if(ED.note!=null&&ED.insert){   // Insert: a new note before the selected one, using the room at the end of the bar
+    const toks=toksOf(ED.bar),free=cap-melBeats(toks.join(' ')),nb=melTok(tok).beats;
+    if(nb>free+1e-6){melMsg(free>1e-6?`Only ${fmtBeats(free)} beat${Math.abs(free-1)<1e-6?'':'s'} free in this bar. Pick a shorter length, or shorten or delete a note first.`:'This bar is full. Shorten or delete a note first to make room.');return null;}
+    toks.splice(ED.note,0,tok);melSet(ED.bar,toks.join(' '));
+    const at={bar:ED.bar,i:ED.note};ED.note++;   // stay on the same note, now one further along
+    melMsg('Inserted. Keep going, or turn Insert off.');renderGrid();renderEditor();return at;
+  }
   if(ED.note!=null&&ED.chord&&pitch!=='r'){   // Chord on: build the selected note up
     STACK.ref={bar:ED.bar,i:ED.note};STACK.held=new Set();melStack(pitch,pitchMidi(pitch));return STACK.ref;
   }
@@ -478,7 +493,7 @@ function melAdd(pitch){   // pitch name, or 'r' for a rest; returns {bar,i} of t
 }
 // a new length (or dot / triplet) for the selected note
 function setSelLength(){
-  if(ED.note==null){renderMelEditor();return;}
+  if(ED.note==null||ED.insert){renderMelEditor();return;}   // in Insert, lengths are for the new notes
   const toks=toksOf(ED.bar),old=melTok(toks[ED.note]);
   const next=[...toks];next[ED.note]=(old.p||'r')+ED.len+(ED.dot?'.':'')+(ED.tri?'t':'')+(old.tie?'~':'');
   if(melBeats(next.join(' '))>curBpb()+1e-6){melMsg('That’s too long for the space left in this bar.');ED.len=old.d;ED.dot=old.dot;ED.tri=old.tri;renderMelEditor();return;}
@@ -888,6 +903,7 @@ function wireKeys(){
     const tag=(document.activeElement?.tagName||'').toLowerCase();
     if(['sl-input','sl-textarea','input','textarea','sl-radio-group','sl-select'].includes(tag))return;
     if((e.key==='Delete'||e.key==='Backspace')&&ED.part==='melody'&&!ED.text){melDel();e.preventDefault();return;}   // remove a wrong note
+    if(e.key==='Insert'&&ED.part==='melody'&&!ED.text&&ED.note!=null){toggleInsert();e.preventDefault();return;}
     if(ED.part==='melody'&&!ED.text&&(e.key==='ArrowLeft'||e.key==='ArrowRight')){stepNote(e.key==='ArrowLeft'?-1:1);e.preventDefault();}
     else if(e.key==='ArrowLeft'){moveBar(-1);e.preventDefault();}
     else if(e.key==='ArrowRight'){moveBar(1);e.preventDefault();}
@@ -940,6 +956,7 @@ function init(){
   $('edTie').onclick=toggleTie;
   $('edRest').onclick=()=>{STACK.ref=null;melAdd('r');};
   $('edAddEnd').onclick=()=>selectNote(null);
+  $('edInsNote').onclick=toggleInsert;
   $('edChord').onclick=()=>{ED.chord=!ED.chord;if(!ED.chord)STACK.ref=null;
     melMsg(ED.chord?'Chord: keys you tap stack onto the last note (or the selected one). Tap a key again to take it out. Turn Chord off to go on.':'');renderMelEditor();};$('edMelDel').onclick=melDel;$('edHear').onclick=hearBar;$('edRec').onclick=recStart;
   $('recSnap').addEventListener('sl-change',e=>{REC.snap=e.target.value==='snap';recRestore();recApply();});
