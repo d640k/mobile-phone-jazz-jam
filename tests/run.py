@@ -539,6 +539,24 @@ async def melody_playback_pickup_and_highlight(c):
     ok(not pg.errors, pg.errors)
 
 @test
+async def chart_scroll_reads_ahead(c):
+    # 24 bars of melody on a phone: lines are taller than the view can hold
+    long = BLUES + '\n' + BLUES
+    pg = await mel_page(c, PHONE, extra={'chart': long, 'melody': {'pickup': '', 'bars': MEL['bars'] * 2}})
+    rows = await ev(pg, 'document.querySelectorAll("#grid .sys").length')
+    for bar in (5, 9, 13, 17, 21):
+        await ev(pg, f'(()=>{{const c=CELLS[{bar}];curCell=null;followLine(c);}})()')
+        await pg.wait_for_timeout(500)
+        r = await ev(pg, f'''(()=>{{const w=$("chartWrap").getBoundingClientRect(),row=CELLS[{bar}].closest(".sys"),nx=row.nextElementSibling;
+          const a=row.getBoundingClientRect();const fits=!nx||!nx.classList.contains("sys")||nx.getBoundingClientRect().bottom<=w.bottom+1;
+          return [a.top>=w.top-1&&a.bottom<=w.bottom+1,fits]}})()''')
+        ok(r[0], f'bar {bar+1}: playing line not fully visible')
+        ok(r[1], f'bar {bar+1}: next line not visible')
+    # back to bar 1 scrolls up again
+    await ev(pg, 'followLine(CELLS[0])'); await pg.wait_for_timeout(500)
+    ok(await ev(pg, '$("chartWrap").scrollTop') < 5, 'scrolls back to the top')
+
+@test
 async def melody_hear_bar_honours_ties(c):
     pg = await c.page(storage={'chart': '| C | C | C |', 'melody': {'pickup': '', 'bars': ['E4q F4q~ F4q G4q~', 'G4h A4h~', 'A4q rq rh']}, 'bpm': 60})
     await ev(pg, 'window.__v=[];melVoice=(m,t,d)=>__v.push([m,Math.round((t-ctx.currentTime)*100)/100,Math.round(d*100)/100]);0')

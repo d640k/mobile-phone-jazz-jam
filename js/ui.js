@@ -178,7 +178,7 @@ function showBeat(ev){
   const feel=ev.stroll?'comp out':(ev.feel||'');
   $('feelChip').textContent=feel;$('feelChip').hidden=!feel;
   const cell=CELLS[lb+off];
-  if(cell!==curCell){if(curCell)curCell.classList.remove('cur');if(cell){cell.classList.add('cur');if(ev.beat%sg.bpb===0)cell.scrollIntoView({block:'nearest'});}curCell=cell;}
+  if(cell!==curCell){if(curCell)curCell.classList.remove('cur');if(cell){cell.classList.add('cur');if(ev.beat%sg.bpb===0)followLine(cell);}curCell=cell;}
   setTones(seg.chord);
 }
 // the melody note being played: amber on the staff; violet on the keys, the next one outlined
@@ -189,6 +189,20 @@ function showMel(e){
   const tl=getTimeline().events,i=tl.indexOf(e);
   if(e.midi!=null)keyEl(e.midi)?.classList.add('mel');
   for(let j=i+1;j<tl.length;j++)if(tl[j].midi!=null){if(tl[j].midi!==e.midi)keyEl(tl[j].midi)?.classList.add('melnext');break;}
+}
+// Keep the playing line on screen, plus the line after it so you can read ahead.
+// If both don't fit, the playing line goes to the top.
+function followLine(cell){
+  const wrap=$('chartWrap'),row=cell.closest('.sys');if(!row)return;
+  const next=row.nextElementSibling&&row.nextElementSibling.classList.contains('sys')?row.nextElementSibling:null;
+  const box=wrap.getBoundingClientRect(),r=row.getBoundingClientRect(),pad=6;
+  let target=wrap.scrollTop;
+  if(r.top<box.top)target+=r.top-box.top-pad;                       // playing line above the view (e.g. back to bar 1)
+  else{
+    const bottom=(next||row).getBoundingClientRect().bottom;
+    if(bottom>box.bottom)target+=Math.min(bottom-box.bottom+pad,r.top-box.top-pad);
+  }
+  if(Math.abs(target-wrap.scrollTop)>1)wrap.scrollTo({top:target,behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});
 }
 function setPlayUI(on){
   $('play').classList.toggle('playing',on);$('playLabel').textContent=on?'Stop':'Play';
