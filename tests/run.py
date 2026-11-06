@@ -376,6 +376,189 @@ async def keyboard_plays_and_tones(c):
     ok(n >= 3, 'chord tones marked: %d' % n)
     await pg.click('#play')
 
+# ---------------- melody ----------------
+MEL = {'pickup': 'C5e D5e', 'bars': ['F5q D5e C5e A4h', 'Ab4e Bb4e C5e D5e F5h', 'Eb5q. C5e A4h', 'rq G4e A4e C5q Eb5q',
+       'D5h. rq', 'D5e B4e Ab4e F4e D5q rq', 'C5w', 'rq F#4e A4e C5e Eb5e D5q', 'D5q. Bb4e G4h~', 'G4e G4e Bb4e C5e E5h',
+       'F5q C5q F#4et A4et C5et D5q', 'G4h rq C5e D5e']}
+MELSONG = {'chart': BLUES, 'melody': MEL, 'keySig': 'F', 'countIn': False}
+
+async def mel_page(c, dev=PHONE, extra=None, scheme='dark'):
+    st = dict(MELSONG); st.update(extra or {})
+    pg = await c.page(dev, storage=st, scheme=scheme)
+    await pg.wait_for_function('document.querySelectorAll(".staff svg").length>0', timeout=8000)
+    return pg
+
+async def key_down(pg, m):
+    # tap an on-screen key by its MIDI number
+    await ev(pg, f'''(()=>{{const k=$("kb").querySelector('[data-m="{m}"]');const r=k.getBoundingClientRect();
+      const o={{pointerId:{m},clientX:r.left+r.width/2,clientY:r.bottom-12,bubbles:true}};
+      $("kb").dispatchEvent(new PointerEvent("pointerdown",o));$("kb").dispatchEvent(new PointerEvent("pointerup",o));0}})()''')
+
+@test
+async def melody_tokens(c):
+    pg = await c.page()
+    r = await ev(pg, '''[melBeats("F5q D5e C5e A4h"),melBeats("Eb5q. C5e A4h"),melBeats("C5et D5et E5et"),melTok("G4h~").tie,
+      melTok("Bb4e").midi,melTok("x5q"),midiName(70,"F"),midiName(66,"D"),midiName(61,"C")]''')
+    ok(r == [4, 4, 1, True, 70, None, 'Bb4', 'F#4', 'Db4'], r)
+
+@test
+async def melody_notation_renders(c):
+    for dev, name in ((PHONE, 'phone'), (LAND, 'landscape'), (LAPTOP, 'laptop')):
+        pg = await mel_page(c, dev, scheme='light' if name == 'laptop' else 'dark')
+        await c.shot(pg, 'melody-' + name)
+        ok(not pg.errors, (name, pg.errors))
+        n = await ev(pg, 'document.querySelectorAll(".staff svg").length')
+        rows = await ev(pg, 'document.querySelectorAll("#grid .sys").length')
+        ok(n == rows and n >= 2, f'{name}: {n} staves for {rows} lines')
+        ok(await pg.locator('#grid .cell.pick').count() == 1, 'pickup bar shown')
+        ok(await ev(pg, 'document.documentElement.scrollWidth<=innerWidth'), name + ': horizontal scroll')
+        # chord symbols never overlap within a bar
+        bad = await ev(pg, '''[...document.querySelectorAll("#grid .cell")].filter(c=>{const r=[...c.querySelectorAll(".chd")].map(x=>x.getBoundingClientRect());
+          return r.some((a,i)=>i&&a.left<r[i-1].right+2)}).map(c=>c.dataset.bar)''')
+        ok(not bad, f'{name}: chord symbols overlap in bars {bad}')
+    # chords-only view
+    await pg.locator('sl-tab[panel="song"]').click()
+    await pg.click('#cShowMel'); await pg.wait_for_timeout(200)
+    ok(await ev(pg, 'document.querySelectorAll(".staff svg").length') == 0, 'Show melody off hides the staff')
+
+@test
+async def melody_step_entry_phone(c):
+    pg = await c.page(PHONE, storage={'chart': BLUES, 'keySig': 'F'})
+    await pg.locator('#grid .cell').nth(0).click()
+    await pg.click('#edPartMel')
+    ok(await pg.is_visible('#edMel') and await pg.is_visible('#kbArea'), 'melody editor keeps the keyboard on a phone')
+    ok(not await pg.is_visible('#now'), 'now-playing steps aside while entering')
+    await pg.wait_for_function('document.querySelectorAll(".staff svg").length>0', timeout=8000)
+    await c.shot(pg, 'melody-entry-phone')
+    await pg.click('#edLens [data-len="e"]')
+    for m in (67, 69, 67, 64):          # G4 A4 G4 E4 eighths
+        await key_down(pg, m)
+    ok(await ev(pg, 'melGet(0)') == 'G4e A4e G4e E4e', await ev(pg, 'melGet(0)'))
+    ok(await pg.text_content('#edFill') == '2 of 4 beats', await pg.text_content('#edFill'))
+    await pg.click('#edLens [data-len="h"]')
+    await key_down(pg, 65)               # F4 half fills the bar -> moves on
+    ok(await ev(pg, 'ED.bar') == 1 and 'full' in await pg.text_content('#edMelMsg'), 'auto-advance')
+    await pg.click('#edLens [data-len="q"]'); await pg.click('#edDot')
+    await key_down(pg, 70)               # Bb4 dotted quarter (spelled for F major)
+    await pg.click('#edLens [data-len="e"]'); await pg.click('#edDot')
+    await pg.click('#edRest')
+    await pg.click('#edTri')
+    for m in (67, 68, 69):
+        await key_down(pg, m)
+    ok(await ev(pg, 'melGet(1)') == 'Bb4q. re G4et Ab4et A4et', await ev(pg, 'melGet(1)'))
+    await pg.click('#edMelDel')
+    ok(await ev(pg, 'melGet(1)') == 'Bb4q. re G4et Ab4et', 'delete last note')
+    # too long for the bar
+    await pg.click('#edTri'); await pg.click('#edLens [data-len="w"]'); await key_down(pg, 72)
+    ok('won' in await pg.text_content('#edMelMsg'), 'refuses a note that does not fit')
+    # tie: the next note ties to the previous one
+    await pg.click('#edPrev'); await pg.click('#edMelDel')            # bar 1: remove F4h
+    await pg.click('#edLens [data-len="q"]'); await key_down(pg, 65); await pg.click('#edTie'); await key_down(pg, 65)
+    ok(await ev(pg, 'melGet(0)') == 'G4e A4e G4e E4e F4q~ F4q', await ev(pg, 'melGet(0)'))
+    # text mode
+    await pg.click('#edText')
+    inp = pg.locator('#edInput input')
+    await inp.fill('F5q D5e C5e A4h'); await inp.press('Enter')
+    ok(await ev(pg, 'ED.bar') == 1 and await ev(pg, 'melGet(1)') == 'F5q D5e C5e A4h', 'typed melody (bar 1 filled, so entry moved to bar 2)')
+    await inp.fill('F5w D5q'); await inp.press('Enter')
+    ok('beats' in await pg.text_content('#edErr'), 'typed melody too long')
+    ok(not pg.errors, pg.errors)
+
+@test
+async def melody_pickup_and_bar_ops(c):
+    pg = await c.page(PHONE, storage={'chart': BLUES, 'melody': {'pickup': '', 'bars': ['F5w', 'Bb4w', 'A4w']}})
+    await pg.wait_for_function('document.querySelectorAll(".staff svg").length>0', timeout=8000)
+    await pg.locator('#grid .cell:not(.pick)').nth(0).click()
+    await pg.click('#edPartMel'); await pg.click('#edPrev')
+    ok(await ev(pg, 'ED.bar') == -1 and await pg.text_content('#edTitle') == 'Pickup', 'pickup reachable from bar 1')
+    ok(await pg.locator('#edPartCh').is_disabled(), 'no chords in a pickup')
+    await pg.click('#edLens [data-len="e"]'); await key_down(pg, 60); await key_down(pg, 62)
+    ok(await ev(pg, 'S.melody.pickup') == 'C4e D4e' and await pg.locator('#grid .cell.pick').count() == 1, 'pickup entered')
+    # insert/delete bars keep the melody with its bar
+    await pg.click('#edNext'); await pg.click('#edNext')               # bar 2 (index 1)
+    await pg.click('#edInsert')
+    ok(await ev(pg, 'S.melody.bars.slice(0,4)') == ['F5w', 'Bb4w', '', 'A4w'], await ev(pg, 'S.melody.bars.slice(0,4)'))
+    await pg.click('#edDelete')
+    ok(await ev(pg, 'S.melody.bars.slice(0,3)') == ['F5w', 'Bb4w', 'A4w'], await ev(pg, 'S.melody.bars.slice(0,3)'))
+
+@test
+async def melody_playback_pickup_and_highlight(c):
+    pg = await mel_page(c, extra={'countIn': True, 'bpm': 240, 'melKeys': True})
+    await ev(pg, 'window.__mel=[];const _s=showMel;showMel=e=>{if(e)__mel.push([e.bar,e.ni,performance.now()]);_s(e);};0')
+    await pg.click('#play'); await pg.wait_for_timeout(1700)
+    seen = await ev(pg, '__mel.map(x=>x[0]+":"+x[1])')
+    ok(seen[:2] == ['-1:0', '-1:1'] and '0:0' in seen, f'pickup should play at the end of the count-in: {seen[:6]}')
+    ok(await ev(pg, '!!document.querySelector(".staff .cur")'), 'current note highlighted on the staff')
+    await pg.click('#play')
+    # without a count-in the pickup still plays first, alone
+    pg = await mel_page(c, extra={'countIn': False, 'bpm': 240})
+    await ev(pg, 'window.__mel=[];const _s=showMel;showMel=e=>{if(e)__mel.push(e.bar+":"+e.ni);_s(e);};0')
+    await pg.click('#play'); await pg.wait_for_timeout(900)
+    seen = await ev(pg, '__mel')
+    ok(seen[:3] == ['-1:0', '-1:1', '0:0'], seen[:4])
+    await pg.click('#play')
+    ok(not pg.errors, pg.errors)
+
+@test
+async def melody_on_keys(c):
+    pg = await c.page(PHONE, storage={'chart': '| C | C |', 'melody': {'pickup': '', 'bars': ['E4h G4h', 'C5w']}, 'oct': 4})
+    await ev(pg, 'showMel(getTimeline().events[0])')
+    ok(await ev(pg, '$("kb").querySelector("[data-m=\'64\']").classList.contains("mel")'), 'melody note violet')
+    ok(await ev(pg, '$("kb").querySelector("[data-m=\'67\']").classList.contains("melnext")'), 'next note outlined')
+    await ev(pg, 'setMelKeys(false);showMel(getTimeline().events[0])')
+    ok(await ev(pg, '!$("kb").querySelector(".mel,.melnext")'), 'switch turns it off')
+    # the main-screen button only where there's room
+    ok(not await pg.is_visible('#melKeysBtn'), 'no Melody button on a phone in portrait')
+    for dev in (LAND, LAPTOP):
+        pg = await c.page(dev)
+        ok(await pg.is_visible('#melKeysBtn'), 'Melody button in landscape / laptop')
+        await pg.click('#melKeysBtn')
+        ok(await ev(pg, 'S.melKeys') is False and await pg.get_attribute('#melKeysBtn', 'aria-pressed') == 'false', 'toggles')
+
+@test
+async def melody_record_transcribe(c):
+    pg = await c.page(storage={'chart': BLUES})
+    # beats at 0.5 s, swing 62%: C5 quarter, eighth rest, D5 on the swung "and", E5 half
+    r = await ev(pg, '''(()=>{REC.from=0;REC.to=0;REC.marks=[0,1,2,3].map(b=>({t:b*0.5,bar:0,beat:b,beatDur:0.5,sw:0.62}));
+      REC.notes=[{m:72,t:0.0,off:0.47},{m:74,t:0.81,off:0.98},{m:76,t:1.0,off:1.98}];
+      return [recTranscribe(false)[0],recTranscribe(true)[0]]})()''')
+    ok(r[0] == 'C5q re D5e E5h', 'snapped: ' + r[0])
+    ok(r[1].startswith('C5q') and 'E5h' in r[1], 'as played: ' + r[1])
+    # a note held across the barline is tied
+    r = await ev(pg, '''(()=>{REC.from=0;REC.to=1;REC.marks=[0,1,2,3,4,5,6,7].map(b=>({t:b*0.5,bar:b>>2,beat:b%4,beatDur:0.5,sw:0.62}));
+      REC.notes=[{m:65,t:1.0,off:2.95}];return recTranscribe(false)})()''')
+    ok(r == ['rh F4h~', 'F4h rh'], r)
+
+@test
+async def melody_record_flow(c):
+    pg = await c.page(PHONE, storage={'chart': BLUES, 'bpm': 240})
+    await pg.locator('#grid .cell').nth(2).click()
+    await pg.click('#edPartMel')
+    ok(await pg.text_content('#edRecLabel') == 'Record from bar 3', await pg.text_content('#edRecLabel'))
+    await pg.click('#edRec')
+    ok(await ev(pg, 'REC.on&&P.playing') and await ev(pg, 'document.body.classList.contains("recording")'), 'recording')
+    await pg.wait_for_function('REC.marks.length>2', timeout=6000)
+    await key_down(pg, 65); await pg.wait_for_timeout(300); await key_down(pg, 69)
+    await pg.wait_for_timeout(300)
+    await pg.click('#play')
+    ok(await pg.is_visible('#recPanel') and not await ev(pg, 'P.playing'), 'review after stop')
+    await c.shot(pg, 'melody-record-review')
+    ok(await ev(pg, 'S.melody.bars.slice(2).some(Boolean)') and await ev(pg, '!S.melody.bars[0]'), 'take written from bar 3')
+    await pg.locator('#recSnap sl-radio-button[value="raw"]').click()
+    await pg.click('#recDiscard')
+    ok(not await ev(pg, 'S.melody.bars.some(Boolean)') and not await pg.is_visible('#recPanel'), 'discard restores')
+    ok(not pg.errors, pg.errors)
+
+@test
+async def melody_saved_with_song(c):
+    pg = await mel_page(c, LAPTOP)
+    await pg.locator('#songName input').fill('Blues head'); await pg.click('#saveSong')
+    ok(await ev(pg, 'S.songs["Blues head"].melody.pickup') == 'C5e D5e' and await ev(pg, 'S.songs["Blues head"].keySig') == 'F', 'saved')
+    await ev(pg, 'loadPreset("Blues in Bb")')
+    ok(not await ev(pg, 'melHas()'), 'a preset has no melody')
+    await ev(pg, 'loadSong("Blues head")'); await pg.wait_for_timeout(300)
+    ok(await ev(pg, 'melGet(10)') == MEL['bars'][10] and await ev(pg, 'S.keySig') == 'F', 'loaded back')
+
 # ---------------- accessibility ----------------
 @test
 async def axe_audit(c):
@@ -386,14 +569,27 @@ async def axe_audit(c):
     for name, dev, scheme, prep in [
         ('phone-dark', PHONE, 'dark', None), ('phone-light', PHONE, 'light', None),
         ('laptop-dark', LAPTOP, 'dark', None), ('laptop-light', LAPTOP, 'light', None),
-        ('editor-phone', PHONE, 'dark', 'editor'), ('sheet-phone', PHONE, 'light', 'sheet')]:
-        pg = await c.page(dev, storage={'chart': BLUES}, scheme=scheme)
+        ('editor-phone', PHONE, 'dark', 'editor'), ('sheet-phone', PHONE, 'light', 'sheet'),
+        ('melody-phone', PHONE, 'dark', 'melody'), ('melody-laptop-light', LAPTOP, 'light', 'melody')]:
+        pg = await c.page(dev, storage=MELSONG if prep == 'melody' else {'chart': BLUES}, scheme=scheme)
         if prep == 'editor': await pg.locator('#grid .cell').nth(5).click()
+        if prep == 'melody':
+            await pg.wait_for_function('document.querySelectorAll(".staff svg").length>0', timeout=8000)
+            await pg.locator('#grid .cell:not(.pick)').nth(3).click(); await pg.click('#edPartMel')
         if prep == 'sheet': await pg.click('#panelBtn'); await pg.wait_for_timeout(600)
         await pg.add_script_tag(content=src)
-        res = await ev(pg, '''axe.run(document,{resultTypes:["violations"]}).then(r=>r.violations.map(v=>
+        # label-title-only misfires on Shoelace selects (labelled across the shadow boundary); the
+        # accessibility-tree check below covers what it's for.
+        res = await ev(pg, '''axe.run(document,{resultTypes:["violations"],rules:{"label-title-only":{enabled:false}}}).then(r=>r.violations.map(v=>
             v.id+" ("+v.impact+"): "+v.nodes.slice(0,3).map(n=>n.target.join(" ")).join(" | ")))''')
         problems += [f'{name}: {r}' for r in res]
+        # every control a screen reader reaches must have a name (Chromium's own accessibility tree)
+        cdp = await pg.context.new_cdp_session(pg)
+        ax = (await cdp.send('Accessibility.getFullAXTree'))['nodes']
+        roles = ('combobox', 'button', 'checkbox', 'switch', 'slider', 'textbox', 'radio', 'tab')
+        nameless = [n['role']['value'] for n in ax if not n.get('ignored') and n.get('role', {}).get('value') in roles
+                    and not str(n.get('name', {}).get('value', '')).strip()]
+        if nameless: problems.append(f'{name}: unnamed controls {nameless}')
     ok(not problems, '\n      ' + '\n      '.join(problems))
 
 async def main():

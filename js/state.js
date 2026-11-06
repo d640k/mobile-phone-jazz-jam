@@ -1,4 +1,5 @@
 // ---------- State & storage ----------
+const APP_V='8';   // keep in step with ?v= in index.html and the cache name in sw.js
 // Mix defaults (slider positions) and per-output voicing: bus trims and bass EQ.
 // "phone" was tuned by ear on a phone speaker; "head" (headphones/speakers) is calibrated
 // to the same perceived balance using K-weighted loudness.
@@ -23,6 +24,8 @@ const S={
   songsDeleted:store.get('songsDeleted',{}), // name -> deleted-at (for Drive sync)
   theme:store.get('theme','system'),panelOpen:store.get('panelOpen',true),
   kbH:store.get('kbH',{}),kbLast:store.get('kbLast',{}),   // keyboard height per orientation (port/land); 0 = hidden
+  melody:Object.assign({pickup:'',bars:[]},store.get('melody',{})),keySig:store.get('keySig','C'),
+  showMel:store.get('showMel',true),melKeys:store.get('melKeys',true),melPlay:store.get('melPlay',false),
 };
 S.vol=S.vols[S.output];S.bassSound=S.bassSounds[S.output];
 // beats per bar for each style (default 4)

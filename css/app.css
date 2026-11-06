@@ -243,3 +243,52 @@ body.wide .edFoot{position:static;margin-bottom:0}
 #compBtn .off{display:none}
 #compBtn[aria-pressed="false"]{color:var(--dim)}
 #compBtn[aria-pressed="false"] .off{display:inline}
+
+/* ---------- Melody ---------- */
+.seg2{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;flex-shrink:0}
+.seg2 button{min-height:34px;border:0;background:var(--panel);color:var(--text);padding:0 12px;font:inherit;font-size:14px;cursor:pointer}
+.seg2 button[aria-pressed="true"]{background:var(--text);color:var(--bg);font-weight:600}
+.seg2 button:disabled{opacity:.45;cursor:default}
+.seg2 button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+#edMel{display:flex;flex-direction:column;gap:var(--sp-2);border-top:1px solid var(--line);padding-top:10px}
+#edMel[hidden]{display:none}
+.chips.c3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.chip.len svg{display:block;margin:auto}
+.chip .big{font-size:22px;line-height:1}
+.chip .tri{font-weight:700;font-size:16px}
+.fill{font-size:13px;color:var(--dim);font-variant-numeric:tabular-nums}
+.hint{font-size:13px;color:var(--dim);margin:0;min-height:18px}
+.recDot{width:10px;height:10px;border-radius:50%;background:var(--danger);display:inline-block}
+.btn.rec{border-color:var(--danger);color:var(--danger)}
+#recPanel{padding:10px var(--sp-3) var(--sp-3);display:flex;flex-direction:column;gap:var(--sp-2);border-top:1px solid var(--line);background:var(--surface)}
+#recPanel[hidden]{display:none}
+#recPanel h2{font-size:16px;margin:0}
+body.recording #play{background:var(--danger);border-color:var(--danger);color:var(--bg)}
+/* entering a melody on a phone: the now-playing block steps aside for the chart */
+body.melEdit #now{display:none}
+body.melEdit #editor{max-height:none;overflow:visible}
+body.melEdit .edFoot{position:static;margin-bottom:0}
+/* staff lines under each line of chords */
+#grid.mel .sys{position:relative;border-left:0}
+#grid.mel .cell{height:calc(24px + var(--staffH));border-right:0;padding-top:2px}
+#grid.mel .cell.end{border-right:0}
+#grid.mel .cell .n{position:absolute;top:2px;left:4px}
+#grid.mel .cell .ch{position:absolute;top:13px;left:0;right:0;height:22px}
+#grid.mel .cell .chd{position:absolute;top:0;padding-right:0}
+#grid.mel .cell .gap{display:none}
+.staff{position:absolute;left:0;top:28px;pointer-events:none;color:var(--text)}
+.staff svg{display:block;overflow:visible}
+.staff *{pointer-events:none!important}   /* VexFlow marks notes clickable; taps must reach the bar */
+.staff .vf-stavenote.cur path,.staff .vf-stavenote.cur rect{fill:var(--accent);stroke:var(--accent)}
+#grid{--staffH:70px}
+body.wide #grid{--staffH:85px}
+body.short #grid{--staffH:60px}
+#grid.mel .cell.pick .n{color:var(--dim)}
+/* melody on the keys: violet, the next note outlined */
+.k.w.mel{background:#cdbbff;box-shadow:inset 0 -6px 0 #b39ef2}
+.k.b.mel{background:#8c6cf0}
+.k.w.melnext{box-shadow:inset 0 0 0 3px #8c6cf0,inset 0 -6px 0 #ddd7cb}
+.k.b.melnext{box-shadow:inset 0 0 0 3px #b39ef2}
+/* the melody-on-keys button shows only where there's room */
+#melKeysBtn{display:none}
+body.wide #melKeysBtn,body.short #melKeysBtn{display:inline-flex}

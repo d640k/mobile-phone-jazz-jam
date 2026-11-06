@@ -30,11 +30,14 @@ function layout(){
     $('panelBtn').setAttribute('aria-expanded',String(!$('panel').hidden));
   }else{
     if(body.parentElement!==$('sheet'))$('sheet').appendChild(body);
-    if(ed.parentElement!==$('dock'))$('dock').appendChild(ed);
+    if(ed.parentElement!==$('dock')||ed.nextElementSibling!==$('recPanel'))$('dock').insertBefore(ed,$('kbArea'));
     $('panel').hidden=true;
     $('panelBtn').setAttribute('aria-expanded',String($('sheet').open));
   }
-  $('kbArea').hidden=!wide&&ED.open;
+  if($('recPanel').nextElementSibling!==$('kbArea'))$('dock').insertBefore($('recPanel'),$('kbArea'));
+  const melEd=ED.open&&ED.part==='melody';
+  document.body.classList.toggle('melEdit',melEd&&!wide);
+  $('kbArea').hidden=!wide&&ED.open&&!melEd;
   applyKbHeight();layoutLines();
 }
 function togglePanel(){
@@ -47,9 +50,18 @@ function togglePanel(){
 // Bars sit in lines separated by barlines. Each bar is as wide as its chords need;
 // lines hold 4 bars (8 on a short landscape phone) and break early only when the bars don't fit,
 // splitting 4 into 2+2 rather than 3+1. A section label always starts a new line.
-let CELLS=[];
+let CELLS=[],PICK=null;
+// melody view: the staff is shown when the song has a melody (or you're entering one)
+const melOn=()=>S.showMel&&(melHas()||(ED.open&&ED.part==='melody'));
 function renderGrid(){
-  const g=$('grid');g.innerHTML='';CELLS=[];
+  const g=$('grid');g.innerHTML='';CELLS=[];PICK=null;
+  if(melOn()&&(S.melody.pickup||(ED.open&&ED.bar===-1))){
+    const c=document.createElement('button');c.type='button';c.className='cell pick';c.dataset.bar=-1;
+    if(ED.open&&ED.bar===-1)c.classList.add('sel');
+    const n=document.createElement('span');n.className='n';n.textContent='Pickup';
+    const ch=document.createElement('span');ch.className='ch';
+    c.append(n,ch);c.setAttribute('aria-label','Pickup (melody before bar 1). Edit');PICK=c;
+  }
   chartSong.bars.forEach((b,i)=>{
     const c=document.createElement('button');c.type='button';c.className='cell';c.dataset.bar=i;
     if(S.loop&&i>=S.loop.a&&i<=S.loop.b)c.classList.add('inloop');
@@ -65,7 +77,7 @@ function renderGrid(){
     let at=0;
     b.forEach(x=>{
       if(x.beat>at){const gp=document.createElement('span');gp.className='gap';gp.style.flexGrow=x.beat-at;ch.appendChild(gp);}
-      const sp=document.createElement('span');sp.className='chd'+(x.dim?' rep':'');sp.style.flexGrow=x.len;
+      const sp=document.createElement('span');sp.className='chd'+(x.dim?' rep':'');sp.style.flexGrow=x.len;sp.dataset.beat=x.beat;
       chordInto(sp,x.t);ch.appendChild(sp);at=x.beat+x.len;
     });
     c.append(n,ch);
@@ -77,41 +89,53 @@ function renderGrid(){
 }
 function layoutLines(){
   const g=$('grid');if(!CELLS.length){g.innerHTML='';g.appendChild(addBarBtn());return;}
-  const focused=CELLS.indexOf(document.activeElement),top=$('chartWrap').scrollTop;
-  // 1) measure each bar at its natural width
+  const mel=melOn()&&!!NOT.vf;
+  if(melOn()&&!NOT.vf)loadNotation().then(()=>renderGrid()).catch(e=>{console.error(e);songMsg(e.message);});
+  g.classList.remove('mel');NOT.els.clear();NOT.cur=null;   // measure chords in normal flow first
+  const focused=document.activeElement,top=$('chartWrap').scrollTop;
+  const items=(mel&&PICK?[{el:PICK,bar:-1}]:[]).concat(CELLS.map((el,i)=>({el,bar:i})));
+  // 1) measure each bar at its natural width (chords, or the melody if that needs more room)
   const meas=document.createElement('div');meas.className='sys measure';g.innerHTML='';g.appendChild(meas);
-  CELLS.forEach(c=>{c.style.cssText='';c.style.removeProperty('--k');meas.appendChild(c);});
+  items.forEach(it=>{it.el.style.cssText='';it.el.querySelectorAll('.chd').forEach(c=>c.style.left='');meas.appendChild(it.el);});
   const W=g.clientWidth-2;
-  const nat=CELLS.map(c=>Math.ceil(c.getBoundingClientRect().width));
-  // 2) break into lines
+  const nat=items.map(it=>Math.ceil(it.el.getBoundingClientRect().width));
+  if(mel)items.forEach((it,k)=>{nat[k]=Math.max(nat[k],Math.ceil(notationMinWidth(melGet(it.bar))));});
+  const hw=mel?[Math.ceil(notationHeadWidth(true)),Math.ceil(notationHeadWidth(false))]:[0,0];
+  const head=li=>hw[li===0?0:1];
+  g.classList.toggle('mel',mel);
+  // 2) break into lines (a pickup rides along with bar 1)
   const per=document.body.classList.contains('short')?8:4;
+  const real=(a,b)=>{let n=0;for(let i=a;i<b;i++)if(items[i].bar>=0)n++;return n;};
   const lines=[];
-  const place=(a,b,split)=>{                // bars a..b-1 as one or more lines
-    let sum=0;for(let i=a;i<b;i++)sum+=nat[i];
-    if(sum<=W||b-a===1){lines.push([a,b,split]);return;}
+  const place=(a,b,split)=>{
+    let sum=head(lines.length);for(let i=a;i<b;i++)sum+=nat[i];
+    if(sum<=W||b-a===1||(b-a===2&&items[a].bar<0)){lines.push([a,b,split]);return;}
     const mid=a+Math.ceil((b-a)/2);place(a,mid,true);place(mid,b,true);
   };
   let start=0;
-  for(let i=1;i<=CELLS.length;i++){
-    if(i===CELLS.length||chartSong.labels[i]||i-start===per){place(start,i,false);start=i;}
+  for(let i=1;i<=items.length;i++){
+    if(i===items.length||chartSong.labels[items[i].bar]||real(start,i)===per){place(start,i,false);start=i;}
   }
   // 3) build the lines; a short line keeps the bar spacing of a full one
   g.innerHTML='';
-  for(const [a,b,split] of lines){
+  const rows=[];
+  lines.forEach(([a,b,split],li)=>{
     const row=document.createElement('div');row.className='sys';
-    let sum=0;for(let i=a;i<b;i++)sum+=nat[i];
-    const share=!split&&b-a<per?Math.max(sum,W*(b-a)/per):W;
+    let sum=head(li);for(let i=a;i<b;i++)sum+=nat[i];
+    const n=real(a,b),share=!split&&n<per?Math.max(sum,W*n/per):W;
     row.style.width=Math.min(W,share)+'px';
     for(let i=a;i<b;i++){
-      const c=CELLS[i];c.style.flex=`1 1 ${nat[i]}px`;
+      const c=items[i].el,extra=i===a?head(li):0;c.style.flex=`1 1 ${nat[i]+extra}px`;
       if(b-a===1&&nat[i]>W)c.style.setProperty('--k',Math.max(0.6,W/nat[i]).toFixed(2));
       row.appendChild(c);
     }
-    g.appendChild(row);
-  }
+    g.appendChild(row);rows.push([row,items.slice(a,b)]);
+  });
   g.appendChild(addBarBtn());
+  if(mel)rows.forEach(([row,its],li)=>{try{drawStaffRow(row,its,li===0);}catch(e){console.error(e);}});
   $('chartWrap').scrollTop=top;
-  if(focused>=0)CELLS[focused].focus();
+  if(focused&&g.contains(focused))focused.focus();
+  const sel=g.querySelector('.cell.sel');if(sel)sel.scrollIntoView({block:'nearest'});
 }
 function addBarBtn(){
   const add=document.createElement('button');add.type='button';add.className='addBar';add.id='addBar';add.textContent='+ Bar';add.setAttribute('aria-label','Add a bar at the end');
@@ -156,6 +180,15 @@ function showBeat(ev){
   if(cell!==curCell){if(curCell)curCell.classList.remove('cur');if(cell){cell.classList.add('cur');if(ev.beat%sg.bpb===0)cell.scrollIntoView({block:'nearest'});}curCell=cell;}
   setTones(seg.chord);
 }
+// the melody note being played: amber on the staff; violet on the keys, the next one outlined
+function showMel(e){
+  markNote(e&&e.midi!=null?e.bar:null,e?e.ni:0);
+  for(const k of $('kb').querySelectorAll('.mel,.melnext'))k.classList.remove('mel','melnext');
+  if(!e||!S.melKeys)return;
+  const tl=getTimeline().events,i=tl.indexOf(e);
+  if(e.midi!=null)keyEl(e.midi)?.classList.add('mel');
+  for(let j=i+1;j<tl.length;j++)if(tl[j].midi!=null){if(tl[j].midi!==e.midi)keyEl(tl[j].midi)?.classList.add('melnext');break;}
+}
 function setPlayUI(on){
   $('play').classList.toggle('playing',on);$('playLabel').textContent=on?'Stop':'Play';
   $('play').setAttribute('aria-label',on?'Stop (Space)':'Play (Space)');
@@ -165,7 +198,7 @@ function setPlayUI(on){
 function applyChartText(text){
   const oldLen=chartSong.bars.length;
   S.chart=text;store.set('chart',S.chart);
-  chartSong=parseChart(S.chart,curBpb());
+  chartSong=parseChart(S.chart,curBpb());melFit(chartSong.bars.length);melTimeline=null;
   if(S.loop&&(chartSong.bars.length!==oldLen||S.loop.b>=chartSong.bars.length))clearLoop(true);
   if(P.playing){if(!chartSong.segs.length)stop();else song=loopSong();}else song=chartSong;
   renderGrid();if(!P.playing)showBeat(null);
@@ -206,13 +239,14 @@ function loopTap(i){
 }
 
 // ---------- Bar editor ----------
-const ED={open:false,bar:0,slot:0,mode:'root',text:false};
+const ED={open:false,bar:0,slot:0,mode:'root',text:false,part:'chords',len:'q',dot:false,tri:false,tie:false};
 const rawBars=()=>splitChart(S.chart);
 function edToks(){const raw=rawBars();return raw[ED.bar]?resolveToks(raw,ED.bar):[];}
 function edChords(){return edToks().filter(t=>t!=='/'&&t!=='%');}
-function openEditor(rawIndex){
-  if(LOOP.sel)return;
+function openEditor(rawIndex,part){
+  if(LOOP.sel||REC.review)return;
   ED.open=true;ED.bar=rawIndex;ED.slot=0;ED.mode='root';
+  if(part)ED.part=part;if(rawIndex<0)ED.part='melody';
   if($('sheet').open)$('sheet').hide();
   $('editor').hidden=false;layout();renderGrid();renderEditor();
   $('edTitle').focus?.();
@@ -237,10 +271,13 @@ function updateSlot(fn){
 }
 function renderEditor(){
   if(!ED.open)return;
-  const raw=rawBars(),n=chartSong.src.indexOf(ED.bar)+1;
-  $('edTitle').textContent=`Edit bar ${n||ED.bar+1}`;
+  const raw=rawBars(),n=chartSong.src.indexOf(ED.bar)+1,isMel=ED.part==='melody';
+  $('edTitle').textContent=ED.bar<0?'Pickup':`Bar ${n||ED.bar+1}`;
   $('edText').setAttribute('aria-pressed',String(ED.text));
-  $('edPicker').hidden=ED.text;$('edTextBox').hidden=!ED.text;
+  $('edPartCh').setAttribute('aria-pressed',String(!isMel));$('edPartMel').setAttribute('aria-pressed',String(isMel));$('edPartCh').disabled=ED.bar<0;
+  $('edPicker').hidden=ED.text||isMel;$('edMel').hidden=ED.text||!isMel;$('edTextBox').hidden=!ED.text;
+  $('edInsert').hidden=$('edDelete').hidden=ED.bar<0;
+  if(isMel)renderMelEditor();
   const chords=edChords();
   ED.slot=Math.min(ED.slot,Math.max(0,chords.length-1));
   // chord slots
@@ -270,13 +307,21 @@ function renderEditor(){
     b.setAttribute('aria-pressed',String(p.ext.includes(e)));
     b.onclick=()=>updateSlot(x=>{x.ext=x.ext.includes(e)?x.ext.filter(y=>y!==e):[...x.ext,e];if(x.q==='7alt')x.q='7';});exts.appendChild(b);});
   // text mode
-  if(document.activeElement!==$('edInput')){$('edInput').value=(raw[ED.bar]?resolveToks(raw,ED.bar):[]).join(' ');$('edErr').textContent='';}
-  $('edInput').label=`Chords in bar ${n||ED.bar+1}`;
-  $('edPrev').disabled=ED.bar<=0;$('edNext').disabled=ED.bar>=raw.length-1;
+  if(document.activeElement!==$('edInput')){$('edInput').value=isMel?melGet(ED.bar):(raw[ED.bar]?resolveToks(raw,ED.bar):[]).join(' ');$('edErr').textContent='';}
+  $('edInput').label=isMel?(ED.bar<0?'Pickup melody':`Melody in bar ${n||ED.bar+1}`):`Chords in bar ${n||ED.bar+1}`;
+  $('edInput').helpText=isMel?'Notes like F5q D5e C5e A4h: pitch, then w h q e s; add . for dotted, t for triplet, ~ to tie. r is a rest. Enter applies.':'Up to 4 chords, separated by spaces. “/” holds a beat, e.g. C7 / / F7. Enter applies.';
+  $('edPrev').disabled=ED.bar<=(isMel?-1:0);$('edNext').disabled=ED.bar>=raw.length-1;
   $('edDelete').disabled=raw.length<2;
 }
 function applyBarText(){
   const v=$('edInput').value.trim(),toks=v.split(/\s+/).filter(Boolean);
+  if(ED.part==='melody'){
+    const bad=toks.filter(t=>!melTok(t));
+    if(bad.length){$('edErr').textContent=`Don’t know ${bad.map(b=>'“'+b+'”').join(', ')}. Use e.g. F5q, Bb4e., re.`;return;}
+    const used=melBeats(v);
+    if(used>curBpb()+1e-6){$('edErr').textContent=`That’s ${fmtBeats(used)} beats; a bar holds ${curBpb()}.`;return;}
+    $('edErr').textContent='';melSet(ED.bar,toks.join(' '));renderGrid();renderEditor();return;
+  }
   if(!toks.length){$('edErr').textContent='Type at least one chord.';return;}
   if(toks.length>curBpb()){$('edErr').textContent=`At most ${curBpb()} chords or “/” in a bar.`;return;}
   const bad=toks.filter(t=>t!=='/'&&t!=='%'&&!parseChord(t));
@@ -284,10 +329,11 @@ function applyBarText(){
   if(toks[0]==='/'){$('edErr').textContent='Start the bar with a chord.';return;}
   $('edErr').textContent='';setBarToks(toks);
 }
-function moveBar(d){const raw=rawBars();ED.bar=Math.max(0,Math.min(raw.length-1,ED.bar+d));ED.slot=0;renderGrid();renderEditor();}
+function moveBar(d){const raw=rawBars();ED.bar=Math.max(ED.part==='melody'?-1:0,Math.min(raw.length-1,ED.bar+d));ED.slot=0;renderGrid();renderEditor();}
+function setPart(p){ED.part=p;if(p==='chords'&&ED.bar<0)ED.bar=0;ED.text=false;layout();renderGrid();renderEditor();}
 function insertBar(){
   const raw=rawBars(),cur=raw[ED.bar]?resolveToks(raw,ED.bar).filter(t=>t!=='%'):['C'];
-  raw.splice(ED.bar+1,0,{label:null,toks:cur.length?cur:['C']});ED.bar++;ED.slot=0;
+  raw.splice(ED.bar+1,0,{label:null,toks:cur.length?cur:['C']});melInsertBar(ED.bar+1);ED.bar++;ED.slot=0;
   applyChartText(barsToText(raw));renderEditor();
 }
 function deleteBar(){
@@ -295,12 +341,79 @@ function deleteBar(){
   const keep=resolveToks(raw,ED.bar);
   if(raw[ED.bar+1]&&raw[ED.bar+1].toks.join(' ')==='%')raw[ED.bar+1].toks=keep;   // don't break a following "%"
   if(raw[ED.bar].label&&raw[ED.bar+1]&&!raw[ED.bar+1].label)raw[ED.bar+1].label=raw[ED.bar].label;
-  raw.splice(ED.bar,1);ED.bar=Math.min(ED.bar,raw.length-1);ED.slot=0;
+  raw.splice(ED.bar,1);melDeleteBar(ED.bar);ED.bar=Math.min(ED.bar,raw.length-1);ED.slot=0;
   applyChartText(barsToText(raw));renderEditor();
 }
 function addBarAtEnd(){
   const raw=rawBars();raw.push({label:null,toks:raw.length?resolveToks(raw,raw.length-1):['C']});
   applyChartText(barsToText(raw));openEditor(raw.length-1);
+}
+
+// ---------- Melody entry (bar editor, Melody) ----------
+const fmtBeats=b=>{const w=Math.floor(b+1e-6),f=b-w,fr=f>0.7?'¾':f>0.6?'⅔':f>0.4?'½':f>0.3?'⅓':f>0.2?'¼':'';return (w||!fr?String(w):'')+fr;};
+function melMsg(t){$('edMelMsg').textContent=t;}
+function renderMelEditor(){
+  for(const b of document.querySelectorAll('#edLens .len'))b.setAttribute('aria-pressed',String(b.dataset.len===ED.len));
+  $('edDot').setAttribute('aria-pressed',String(ED.dot));$('edTri').setAttribute('aria-pressed',String(ED.tri));$('edTie').setAttribute('aria-pressed',String(ED.tie));
+  const used=melBeats(melGet(ED.bar)),cap=curBpb();
+  $('edFill').textContent=`${fmtBeats(used)} of ${cap} beats`;
+  $('edRecLabel').textContent=S.loop?`Record bars ${S.loop.a+1}–${S.loop.b+1}`:`Record from bar ${Math.max(0,ED.bar)+1}`;
+}
+// the note before the end of this bar (for ties)
+function prevNoteRef(){
+  for(let b=ED.bar;b>=-1;b--){const t=melGet(b).split(' ').filter(Boolean);if(t.length)return {bar:b,toks:t};if(b<ED.bar)break;}
+  return null;
+}
+function melAdd(pitch){   // pitch name, or 'r' for a rest
+  const tok=pitch+ED.len+(ED.dot?'.':'')+(ED.tri?'t':''),cur=melGet(ED.bar),cap=curBpb(),used=melBeats(cur),nb=melTok(tok).beats;
+  if(used+nb>cap+1e-6){melMsg(`That won’t fit: ${fmtBeats(cap-used)} beat${Math.abs(cap-used-1)<1e-6?'':'s'} left in this bar.`);return;}
+  if(ED.tie&&pitch!=='r'){const r=prevNoteRef();if(r){const k=r.toks.length-1;if(!r.toks[k].startsWith('r')){r.toks[k]=r.toks[k].replace(/~?$/,'~');melSet(r.bar,r.toks.join(' '));}}ED.tie=false;}
+  melSet(ED.bar,(melGet(ED.bar)+' '+tok).trim());
+  const full=Math.abs(used+nb-cap)<1e-6,last=rawBars().length-1;
+  if(full&&ED.bar<last){ED.bar++;melMsg(`${ED.bar===0?'Pickup':'Bar '+ED.bar} is full. On to bar ${ED.bar+1}.`);}
+  else melMsg(full?'Last bar done.':'');
+  renderGrid();renderEditor();
+}
+function melDel(){
+  let t=melGet(ED.bar).split(' ').filter(Boolean);
+  if(!t.length&&ED.bar>-1){ED.bar--;t=melGet(ED.bar).split(' ').filter(Boolean);}
+  if(t.length){t.pop();if(t.length)t[t.length-1]=t[t.length-1].replace(/~$/,'');melSet(ED.bar,t.join(' '));}
+  melMsg('');renderGrid();renderEditor();
+}
+function hearBar(){
+  initAudio();const bd=60/S.bpm,t0=ctx.currentTime+0.06,sw=(STYLES[S.style]||{}).straight?0.5:S.swing/100;
+  let at=0;
+  for(const n of melNotes(melGet(ED.bar))){const f=at-Math.floor(at+1e-6);if(n.midi!=null)melVoice(n.midi,t0+(Math.floor(at+1e-6)+(Math.abs(f-0.5)<1e-3?sw:f))*bd,n.beats*bd*0.92);at+=n.beats;}
+}
+// ---------- Recording ----------
+function recUI(on){document.body.classList.toggle('recording',on);loopHint(on?`Recording bars ${REC.from+1}–${REC.to+1}. Play along; tap Stop when you’re done.`:'');}
+function recStart(){
+  const from=S.loop?S.loop.a:Math.max(0,ED.bar),to=S.loop?S.loop.b:chartSong.bars.length-1;
+  if(P.playing)stop();
+  if(ED.open)closeEditor();
+  Object.assign(REC,{on:true,review:false,notes:[],marks:[],from,to,lastBar:null,held:new Map()});
+  recUI(true);start(S.loop?0:from,true);
+}
+function recFinish(){
+  REC.on=false;if(P.playing)stop();recUI(false);
+  if(!REC.notes.length){songMsg('Nothing was recorded.');return;}
+  REC.backup=[];for(let b=REC.from;b<=REC.to;b++)REC.backup.push(melGet(b));
+  REC.review=true;$('recSnap').value=REC.snap?'snap':'raw';
+  recApply();$('recPanel').hidden=false;$('recKeep').focus();
+}
+function recApply(){
+  recTranscribe(!REC.snap).forEach((str,k)=>melSet(REC.from+k,str));
+  $('recTitle').textContent=`Take · bars ${REC.from+1}–${REC.to+1}`;
+  $('recCount').textContent=`${REC.notes.length} note${REC.notes.length===1?'':'s'}`;
+  $('recNote').textContent=REC.snap?'Lined up to the beat (swung eighths). Odd spots? Fix them in the bar editor. Tap Play to hear it with the band.':'Lined up to 16ths and triplets: closer to exactly what you played.';
+  renderGrid();
+}
+function recRestore(){REC.backup.forEach((str,k)=>melSet(REC.from+k,str));}
+function recDone(keep){
+  if(P.playing)stop();
+  if(!keep)recRestore();
+  REC.review=false;$('recPanel').hidden=true;renderGrid();
+  songMsg(keep?'Melody kept. Save the song to keep it for good.':'');
 }
 
 // ---------- Keyboard (on screen) ----------
@@ -387,10 +500,10 @@ function press(id,m,vel=100,silent=false){
   if(!silent)initAudio();
   if(sustained.has(m)){sustained.get(m).releaseNow();sustained.delete(m);}
   const h=silent?SILENT:keyVoice(m,vel);
-  active.set(id,{m,h});markDown(m,true);
+  active.set(id,{m,h});markDown(m,true);recNoteOn(m);
 }
 function release(id){
-  const a=active.get(id);if(!a)return;active.delete(id);markDown(a.m,false);
+  const a=active.get(id);if(!a)return;active.delete(id);markDown(a.m,false);recNoteOff(a.m);
   if(sustain){if(sustained.has(a.m))sustained.get(a.m).releaseNow();sustained.set(a.m,a.h);}
   else a.h.releaseNow();
 }
@@ -399,7 +512,7 @@ function wireKeyboard(){
   kb.addEventListener('pointerdown',e=>{
     e.preventDefault();
     try{kb.setPointerCapture(e.pointerId);}catch(_){}
-    const m=keyAt(e.clientX,e.clientY);if(m!=null)press(e.pointerId,m);
+    const m=keyAt(e.clientX,e.clientY);if(m!=null){press(e.pointerId,m);melKey(m);}
   });
   kb.addEventListener('pointermove',e=>{
     if(!active.has(e.pointerId))return;
@@ -412,6 +525,10 @@ function wireKeyboard(){
   // Cancel the browser's touch gestures on the keys (stops Android's long-press buzz).
   for(const ev of ['touchstart','touchmove','touchend'])kb.addEventListener(ev,e=>{if(e.cancelable)e.preventDefault();},{passive:false});
 }
+// in melody entry, a key adds a note
+function melKey(m){if(ED.open&&ED.part==='melody'&&!ED.text&&!REC.on)melAdd(midiName(m,S.keySig));}
+function setMelKeys(on){S.melKeys=!!on;store.set('melKeys',S.melKeys);$('cMelKeys').checked=S.melKeys;$('melKeysBtn').setAttribute('aria-pressed',String(S.melKeys));if(!S.melKeys)for(const k of $('kb').querySelectorAll('.mel,.melnext'))k.classList.remove('mel','melnext');}
+function setKeySig(k){S.keySig=NOTE_KEYS.includes(k)?k:'C';store.set('keySig',S.keySig);$('keySig').value=S.keySig;renderGrid();}
 function setSustain(on){
   sustain=on;$('cSus').checked=sustain;
   if(!sustain){sustained.forEach(h=>h.releaseNow());sustained.clear();}
@@ -470,7 +587,7 @@ async function midiConnect(fromUser){
 }
 function midiMessage(e){
   const [st,d1,d2=0]=e.data,cmd=st&0xf0;
-  if(cmd===0x90&&d2>0)press('midi'+d1,d1,d2,!S.midiSound);
+  if(cmd===0x90&&d2>0){press('midi'+d1,d1,d2,!S.midiSound);melKey(d1);}
   else if(cmd===0x80||(cmd===0x90&&d2===0))release('midi'+d1);
   else if(cmd===0xB0&&d1===64)setSustain(d2>=64);                     // sustain pedal
   else if(cmd===0xB0&&d1===1&&S.keyInst==='organ'){                  // mod wheel: Leslie slow/fast
@@ -514,6 +631,7 @@ function saveSong(){
   if(!chartSong.segs.length){songMsg('Nothing to save: the chart is empty.');return;}
   if(S.songs[name]&&name!==S.songName&&!confirm(`Replace the saved “${name}”?`))return;
   S.songs[name]={chart:S.chart,bpm:S.bpm,swing:S.swing,style:S.style,feel:S.bassFeel,dynamics:S.dynamics,section:S.section,saved:Date.now()};
+  if(melHas())Object.assign(S.songs[name],{melody:JSON.parse(JSON.stringify(S.melody)),keySig:S.keySig});
   if(!store.set('songs',S.songs)){delete S.songs[name];songMsg('Couldn’t save: this browser is blocking storage.');return;}
   delete S.songsDeleted[name];store.set('songsDeleted',S.songsDeleted);songsChanged();
   setSongName(name);refreshSongList();
@@ -522,6 +640,9 @@ function saveSong(){
 function loadChart(chart,name,opts={}){
   if(ED.open)closeEditor();clearLoop(true);
   if(opts.style)setStyle(opts.style);
+  S.melody=opts.melody?JSON.parse(JSON.stringify(opts.melody)):{pickup:'',bars:[]};melSave();melTimeline=null;
+  S.keySig=NOTE_KEYS.includes(opts.keySig)?opts.keySig:'C';store.set('keySig',S.keySig);$('keySig').value=S.keySig;
+  if(REC.review){REC.review=false;$('recPanel').hidden=true;}
   applyChartText(chart);setSongName(name);
   if(opts.bpm)setBpm(opts.bpm);
   if(opts.swing)setSlider('Swing',opts.swing);
@@ -529,7 +650,7 @@ function loadChart(chart,name,opts={}){
 function loadSong(name){
   const s=S.songs[name];if(!s)return;
   setStyle(s.style||'swing');
-  loadChart(s.chart,name,{bpm:s.bpm,swing:s.swing});
+  loadChart(s.chart,name,{bpm:s.bpm,swing:s.swing,melody:s.melody,keySig:s.keySig});
   setSection(s.section||'std',false);if(s.feel)setFeel(s.feel);if(s.dynamics!=null)setDynamics(s.dynamics);
   songMsg(`Loaded “${name}”.`);
 }
@@ -630,10 +751,10 @@ function init(){
   $('grid').addEventListener('click',e=>{
     if(e.target.closest('#addBar')){if(!LOOP.sel)addBarAtEnd();return;}
     const c=e.target.closest('.cell');if(!c)return;
-    const i=+c.dataset.bar;
-    if(LOOP.sel)loopTap(i);
-    else if(ED.open&&chartSong.src[i]===ED.bar)closeEditor();
-    else openEditor(chartSong.src[i]);
+    const i=+c.dataset.bar,raw=i<0?-1:chartSong.src[i];
+    if(LOOP.sel){if(i>=0)loopTap(i);}
+    else if(ED.open&&raw===ED.bar)closeEditor();
+    else openEditor(raw);
   });
   // bar editor
   $('edDone').onclick=closeEditor;
@@ -643,6 +764,15 @@ function init(){
   $('edInput').addEventListener('keydown',e=>{if(e.key==='Enter'){applyBarText();e.preventDefault();}});
   $('edInput').addEventListener('sl-change',applyBarText);
   $('edPrev').onclick=()=>moveBar(-1);$('edNext').onclick=()=>moveBar(1);
+  $('edPartCh').onclick=()=>setPart('chords');$('edPartMel').onclick=()=>setPart('melody');
+  for(const b of document.querySelectorAll('#edLens .len'))b.onclick=()=>{ED.len=b.dataset.len;if(!['q','e'].includes(ED.len))ED.tri=false;renderMelEditor();};
+  $('edDot').onclick=()=>{ED.dot=!ED.dot;if(ED.dot)ED.tri=false;renderMelEditor();};
+  $('edTri').onclick=()=>{ED.tri=!ED.tri;if(ED.tri){ED.dot=false;if(!['q','e'].includes(ED.len))ED.len='e';}renderMelEditor();};
+  $('edTie').onclick=()=>{ED.tie=!ED.tie;melMsg(ED.tie?'The next note will be tied to the one before it.':'');renderMelEditor();};
+  $('edRest').onclick=()=>melAdd('r');$('edMelDel').onclick=melDel;$('edHear').onclick=hearBar;$('edRec').onclick=recStart;
+  $('recSnap').addEventListener('sl-change',e=>{REC.snap=e.target.value==='snap';recRestore();recApply();});
+  $('recKeep').onclick=()=>recDone(true);$('recDiscard').onclick=()=>recDone(false);
+  $('recAgain').onclick=()=>{recRestore();REC.review=false;$('recPanel').hidden=true;if(S.loop)recStart();else{ED.bar=REC.from;recStart();}};
   $('edInsert').onclick=insertBar;$('edDelete').onclick=deleteBar;
   // song
   refreshSongList();
@@ -657,6 +787,8 @@ function init(){
   $('section').addEventListener('sl-change',e=>setSection(e.target.value,true));setSection(S.section,false);
   $('bassFeel').addEventListener('sl-change',e=>setFeel(e.target.value));setFeel(S.bassFeel);
   $('cDyn').addEventListener('sl-change',e=>setDynamics(e.target.checked));setDynamics(S.dynamics);
+  $('keySig').value=S.keySig;$('keySig').addEventListener('sl-change',e=>setKeySig(e.target.value));
+  $('cShowMel').checked=S.showMel;$('cShowMel').addEventListener('sl-change',e=>{S.showMel=e.target.checked;store.set('showMel',S.showMel);renderGrid();});
   $('cCount').checked=S.countIn;$('cCount').addEventListener('sl-change',e=>{S.countIn=e.target.checked;store.set('countIn',S.countIn);});
   bindSlider('Tempo',()=>S.bpm,v=>setBpm(v),v=>v+' bpm');
   bindSlider('Swing',()=>S.swing,v=>{S.swing=v;store.set('swing',v);},v=>v===50?'straight':v+'%');
@@ -682,6 +814,8 @@ function init(){
   $('cSmp').checked=S.samples;$('cSmp').addEventListener('sl-change',e=>{S.samples=e.target.checked;store.set('samples',S.samples);});
   $('cTones').checked=S.tones;$('cTones').addEventListener('sl-change',e=>{S.tones=e.target.checked;store.set('tones',S.tones);const c=curTones;curTones=undefined;setTones(c);});
   $('cSus').addEventListener('sl-change',e=>setSustain(e.target.checked));
+  setMelKeys(S.melKeys);$('cMelKeys').addEventListener('sl-change',e=>setMelKeys(e.target.checked));$('melKeysBtn').onclick=()=>setMelKeys(!S.melKeys);
+  $('cMelPlay').checked=S.melPlay;$('cMelPlay').addEventListener('sl-change',e=>{S.melPlay=e.target.checked;store.set('melPlay',S.melPlay);});
   $('cTrem').checked=S.trem;$('cTrem').addEventListener('sl-change',e=>{S.trem=e.target.checked;store.set('trem',S.trem);applyVolumes();});
   // keyboard strip
   $('keyInst').value=S.keyInst;
