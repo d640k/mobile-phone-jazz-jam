@@ -2,6 +2,7 @@
 const P={playing:false,step:0,nextTime:0,timer:null,countSteps:0,walker:null,compPrev:null,compPlan:null,uiQ:[]};
 // fromBar: start part-way through the chart (recording "from bar N"); count:true forces a count-in.
 function start(fromBar=0,count=false){
+  if(typeof hearStop==='function')hearStop();
   if(!chartSong.segs.length){openSheet();return;}
   initAudio();
   song=loopSong();P.pending=null;

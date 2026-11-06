@@ -761,6 +761,33 @@ async def melody_hear_bar_honours_ties(c):
     ok(r == [[67, 1.9], [69, 2.85]], r)
 
 @test
+async def melody_hear_from_here(c):
+    pg = await c.page(PHONE, storage={'chart': BLUES, 'bpm': 240, 'melody': {'pickup': 'C5e D5e', 'bars': ['F4q G4q A4q C5q', 'Bb4h~ Bb4h', 'A4w']}})
+    await pg.wait_for_function('document.querySelectorAll(".staff svg").length>0', timeout=8000)
+    await ev(pg, 'window.__v=[];const _mv=melVoice;melVoice=(m,t,d,v,b)=>{__v.push([m,Math.round(d*100)/100]);_mv(m,t,d,v,b);};0')
+    await tap_note(pg, 0, 1); await pg.click('#edAddEnd')
+    await pg.click('#edHearAll')
+    ok(await pg.get_attribute('#edHearAll', 'aria-pressed') == 'true' and await pg.text_content('#edHearAllLabel') == 'Stop', 'playing')
+    ok(await ev(pg, '__v.map(x=>x[0])') == [65, 67, 69, 72, 70, 69], await ev(pg, '__v'))
+    ok(await ev(pg, '__v[4][1]') == 0.95, 'tied Bb held for 4 beats (at 240 bpm)')
+    await pg.wait_for_timeout(1200)
+    ok(await ev(pg, '!!document.querySelector("#grid .cell.cur")') and await ev(pg, '!!document.querySelector(".staff .cur")'), 'bar and note lit while hearing')
+    await pg.click('#edHearAll')
+    ok(await pg.get_attribute('#edHearAll', 'aria-pressed') == 'false' and not await ev(pg, '!!document.querySelector("#grid .cell.cur")'), 'stops')
+    # from the pickup: the whole song
+    await pg.click('#edPrev'); await ev(pg, '__v=[]'); await pg.click('#edHearAll')
+    ok((await ev(pg, '__v.map(x=>x[0])'))[:3] == [72, 74, 65], 'from the pickup')
+    # Play stops the preview
+    await pg.click('#play'); await pg.wait_for_timeout(200)
+    ok(await ev(pg, '!PREV.on'), 'Play stops the preview'); await pg.click('#play')
+    # with a loop: just the looped bars
+    await ev(pg, 'setLoop(1,2)'); await pg.locator('#grid .cell:not(.pick)').nth(0).click(); await pg.click('#edPartMel')
+    ok(await pg.text_content('#edHearAllLabel') == 'Hear the loop', 'loop label')
+    await ev(pg, '__v=[]'); await pg.click('#edHearAll')
+    ok(await ev(pg, '__v.map(x=>x[0])') == [70, 69], await ev(pg, '__v'))
+    ok(not pg.errors, pg.errors)
+
+@test
 async def melody_on_keys(c):
     pg = await c.page(PHONE, storage={'chart': '| C | C |', 'melody': {'pickup': '', 'bars': ['E4h G4h', 'C5w']}, 'oct': 4})
     await ev(pg, 'showMel(getTimeline().events[0])')
@@ -795,7 +822,7 @@ async def melody_record_flow(c):
     pg = await c.page(PHONE, storage={'chart': BLUES, 'bpm': 240})
     await pg.locator('#grid .cell').nth(2).click()
     await pg.click('#edPartMel')
-    ok(await pg.text_content('#edRecLabel') == 'Record from bar 3', await pg.text_content('#edRecLabel'))
+    ok(await pg.get_attribute('#edRec', 'aria-label') == 'Record from bar 3', await pg.get_attribute('#edRec', 'aria-label'))
     await pg.click('#edRec')
     ok(await ev(pg, 'REC.on&&P.playing') and await ev(pg, 'document.body.classList.contains("recording")'), 'recording')
     await pg.wait_for_function('REC.marks.length>2', timeout=6000)

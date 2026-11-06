@@ -77,13 +77,13 @@ function getTimeline(){
   return melTimeline;
 }
 // scheduled melody note on the keyboard instrument (used for "Play the melody" and "Hear this bar")
-function melVoice(m,t,dur,vel=82){
+function melVoice(m,t,dur,vel=82,bus=busKy){
   const k=S.keyInst;
   if((k==='piano'||k==='rhodes')&&keysReady(k)){
-    const {src,g,d}=sampNote(k,m,vel,t,busKy);
+    const {src,g,d}=sampNote(k,m,vel,t,bus);
     const rt=t+dur;g.gain.setTargetAtTime(0,rt,d.rel);src.stop(rt+d.rel*10);return;
   }
-  epNote(m,t,0.3*Math.pow(vel/100,1.2),busKy).releaseAt(t+dur);
+  epNote(m,t,0.3*Math.pow(vel/100,1.2),bus).releaseAt(t+dur);
 }
 // Schedule the melody notes that start inside one eighth-note step.
 // beatPos: position of the step in beats, relative to bar 1 of the chart (negative during the count-in);

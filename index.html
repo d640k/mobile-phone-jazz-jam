@@ -19,10 +19,10 @@
  const dark=t==='dark'||(t==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);
  document.documentElement.dataset.theme=dark?'dark':'light';document.documentElement.classList.toggle('sl-theme-dark',dark);})();
 </script>
-<link rel="stylesheet" href="vendor/shoelace/light.css?v=18">
-<link rel="stylesheet" href="vendor/shoelace/dark.css?v=18">
-<link rel="stylesheet" href="css/app.css?v=18">
-<script type="module" src="vendor/shoelace/shoelace.js?v=18"></script>
+<link rel="stylesheet" href="vendor/shoelace/light.css?v=19">
+<link rel="stylesheet" href="vendor/shoelace/dark.css?v=19">
+<link rel="stylesheet" href="css/app.css?v=19">
+<script type="module" src="vendor/shoelace/shoelace.js?v=19"></script>
 </head>
 <body>
 <div id="app">
@@ -119,8 +119,9 @@
           </div>
           <p id="edMelMsg" class="hint" role="status">Pick a length and tap keys to add notes. Tap a note on the staff to change it.</p>
           <div class="row">
-            <button id="edHear" class="btn small"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg>Hear this bar</button>
-            <button id="edRec" class="btn small rec"><span class="recDot" aria-hidden="true"></span><span id="edRecLabel">Record from bar 1</span></button>
+            <button id="edHear" class="btn small" aria-label="Hear this bar"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg>Hear bar</button>
+            <button id="edHearAll" class="btn small" aria-pressed="false"><svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5v11l9-5.5z" fill="currentColor"/></svg><span id="edHearAllLabel">Hear from here</span></button>
+            <button id="edRec" class="btn small rec"><span class="recDot" aria-hidden="true"></span><span id="edRecLabel">Record</span></button>
           </div>
         </div>
         <div id="edTextBox" hidden>
@@ -237,21 +238,21 @@
   <button id="textApply" slot="footer" class="btn primary">Apply</button>
 </sl-dialog>
 
-<script src="js/theory.js?v=18"></script>
-<script src="js/chartedit.js?v=18"></script>
-<script src="js/presets.js?v=18"></script>
-<script src="js/state.js?v=18"></script>
-<script src="js/sections.js?v=18"></script>
-<script src="js/samples.js?v=18"></script>
-<script src="js/audio.js?v=18"></script>
-<script src="js/melody.js?v=18"></script>
-<script src="js/notation.js?v=18"></script>
-<script src="js/scheduler.js?v=18"></script>
-<script src="js/styles/swing.js?v=18"></script>
-<script src="js/styles/bossa.js?v=18"></script>
-<script src="js/styles/waltz.js?v=18"></script>
-<script src="js/styles/samba.js?v=18"></script>
-<script src="js/drive.js?v=18"></script>
-<script src="js/ui.js?v=18"></script>
+<script src="js/theory.js?v=19"></script>
+<script src="js/chartedit.js?v=19"></script>
+<script src="js/presets.js?v=19"></script>
+<script src="js/state.js?v=19"></script>
+<script src="js/sections.js?v=19"></script>
+<script src="js/samples.js?v=19"></script>
+<script src="js/audio.js?v=19"></script>
+<script src="js/melody.js?v=19"></script>
+<script src="js/notation.js?v=19"></script>
+<script src="js/scheduler.js?v=19"></script>
+<script src="js/styles/swing.js?v=19"></script>
+<script src="js/styles/bossa.js?v=19"></script>
+<script src="js/styles/waltz.js?v=19"></script>
+<script src="js/styles/samba.js?v=19"></script>
+<script src="js/drive.js?v=19"></script>
+<script src="js/ui.js?v=19"></script>
 </body>
 </html>

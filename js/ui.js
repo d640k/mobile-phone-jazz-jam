@@ -404,7 +404,8 @@ function renderMelEditor(){
   $('edChord').setAttribute('aria-pressed',String(ED.chord));
   const used=melBeats(melGet(ED.bar)),cap=curBpb();
   $('edFill').textContent=`${fmtBeats(used)} of ${cap} beats`;
-  $('edRecLabel').textContent=S.loop?`Record bars ${S.loop.a+1}–${S.loop.b+1}`:`Record from bar ${Math.max(0,ED.bar)+1}`;
+  $('edRec').setAttribute('aria-label',S.loop?`Record bars ${S.loop.a+1} to ${S.loop.b+1}`:`Record from bar ${Math.max(0,ED.bar)+1}`);
+  $('edRec').title=$('edRec').getAttribute('aria-label');hearUI();
   markSelNote();
 }
 function markSelNote(){
@@ -511,22 +512,62 @@ function melDel(){
   if(t.length){t.pop();melSet(ED.bar,t.join(' '));}   // the note before keeps its tie
   melMsg('');renderGrid();renderEditor();
 }
-// Preview one bar. Uses the playback timeline, so ties are honoured: a note tied into the next bar
-// rings for its full length, and a note tied in from the previous bar sounds from beat 1.
-function hearBar(){
-  initAudio();const bd=60/S.bpm,t0=ctx.currentTime+0.06,sw=(STYLES[S.style]||{}).straight?0.5:S.swing/100;
-  const tl=getTimeline(),bpb=curBpb();
-  const a=ED.bar<0?-tl.pickupBeats:ED.bar*bpb,b=ED.bar<0?0:a+bpb;
+// ---------- Hearing the melody (no band) ----------
+// Uses the playback timeline, so ties are honoured: a note tied into the next bar rings for its
+// full length, and a note tied in from before the start sounds at once. Notes go through their own
+// gain node so Stop can cut them; the note playing lights up as during playback.
+const PREV={on:false,bus:null,q:[],i:0,end:0,raf:0};
+function hearRange(a,b){
+  hearStop();initAudio();
+  const bd=60/S.bpm,t0=ctx.currentTime+0.08,sw=(STYLES[S.style]||{}).straight?0.5:S.swing/100;
   const when=x=>{const f=x-Math.floor(x+1e-6);return (Math.floor(x+1e-6)+(Math.abs(f-0.5)<1e-3?sw:f))*bd;};
-  for(const e of tl.events){
+  const bus=ctx.createGain();bus.connect(busKy);
+  Object.assign(PREV,{on:true,bus,q:[],i:0,end:t0+(b-a)*bd});
+  for(const e of getTimeline().events){
     if(e.midi==null||e.abs>=b-1e-6||e.abs+e.dur<=a+1e-6)continue;
-    const from=Math.max(e.abs,a)-a;
-    for(const m of e.midis)melVoice(m,t0+when(from),(e.abs+e.dur-a-from)*bd*0.95,m===e.midi?82:64);
+    const from=Math.max(e.abs,a)-a,t=t0+when(from);
+    for(const m of e.midis)melVoice(m,t,(e.abs+e.dur-a-from)*bd*0.95,m===e.midi?82:64,bus);
+    PREV.q.push({t,e});
   }
+  hearUI();PREV.raf=requestAnimationFrame(hearTick);
+}
+function hearTick(){
+  if(!PREV.on)return;
+  const now=ctx.currentTime;
+  while(PREV.i<PREV.q.length&&PREV.q[PREV.i].t<=now){
+    const {e}=PREV.q[PREV.i++];showMel(e);
+    const cell=e.bar<0?PICK:CELLS[e.bar];
+    if(cell&&cell!==curCell){if(curCell)curCell.classList.remove('cur');cell.classList.add('cur');followLine(cell);curCell=cell;}
+  }
+  if(now>=PREV.end+0.1){hearStop();return;}
+  PREV.raf=requestAnimationFrame(hearTick);
+}
+function hearStop(){
+  if(!PREV.on)return;
+  PREV.on=false;cancelAnimationFrame(PREV.raf);
+  try{PREV.bus.gain.setTargetAtTime(0,ctx.currentTime,0.02);const b=PREV.bus;setTimeout(()=>b.disconnect(),300);}catch(e){}
+  if(!P.playing){showMel(null);if(curCell){curCell.classList.remove('cur');curCell=null;}}
+  hearUI();
+}
+function hearUI(){
+  $('edHearAll').setAttribute('aria-pressed',String(PREV.on));
+  $('edHearAllLabel').textContent=PREV.on?'Stop':(S.loop?'Hear the loop':'Hear from here');
+}
+function hearBar(){
+  const tl=getTimeline(),bpb=curBpb(),a=ED.bar<0?-tl.pickupBeats:ED.bar*bpb;
+  hearRange(a,ED.bar<0?0:a+bpb);
+}
+// from the bar you're on to the end of the song (or just the looped bars)
+function hearFromHere(){
+  if(PREV.on){hearStop();return;}
+  const tl=getTimeline(),bpb=curBpb();
+  if(S.loop)return hearRange(S.loop.a*bpb,(S.loop.b+1)*bpb);
+  hearRange(ED.bar<0?-tl.pickupBeats:ED.bar*bpb,chartSong.bars.length*bpb);
 }
 // ---------- Recording ----------
 function recUI(on){document.body.classList.toggle('recording',on);loopHint(on?`Recording bars ${REC.from+1}–${REC.to+1}. Play along; tap Stop when you’re done.`:'');}
 function recStart(){
+  hearStop();
   const from=S.loop?S.loop.a:Math.max(0,ED.bar),to=S.loop?S.loop.b:chartSong.bars.length-1;
   if(P.playing)stop();
   if(ED.open)closeEditor();
@@ -958,7 +999,7 @@ function init(){
   $('edAddEnd').onclick=()=>selectNote(null);
   $('edInsNote').onclick=toggleInsert;
   $('edChord').onclick=()=>{ED.chord=!ED.chord;if(!ED.chord)STACK.ref=null;
-    melMsg(ED.chord?'Chord: keys you tap stack onto the last note (or the selected one). Tap a key again to take it out. Turn Chord off to go on.':'');renderMelEditor();};$('edMelDel').onclick=melDel;$('edHear').onclick=hearBar;$('edRec').onclick=recStart;
+    melMsg(ED.chord?'Chord: keys you tap stack onto the last note (or the selected one). Tap a key again to take it out. Turn Chord off to go on.':'');renderMelEditor();};$('edMelDel').onclick=melDel;$('edHear').onclick=hearBar;$('edHearAll').onclick=hearFromHere;$('edRec').onclick=recStart;
   $('recSnap').addEventListener('sl-change',e=>{REC.snap=e.target.value==='snap';recRestore();recApply();});
   $('recKeep').onclick=()=>recDone(true);$('recDiscard').onclick=()=>recDone(false);
   $('recAgain').onclick=()=>{recRestore();REC.review=false;$('recPanel').hidden=true;if(S.loop)recStart();else{ED.bar=REC.from;recStart();}};
