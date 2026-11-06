@@ -16,6 +16,26 @@ function melTok(t){
 }
 // the token for a note with these pitches (sorted low to high), or a rest
 function melJoin(ps,len){return (ps.length?[...new Set(ps)].sort((x,y)=>pitchMidi(x)-pitchMidi(y)).join('+'):'r')+len;}
+// Rests that complete a bar after its last note (shown, never stored or played). Finish the
+// current beat first (a sixteenth/eighth, or triplet eighths), then whole beats: a whole-bar rest
+// for an empty bar, half rests on beats 1 and 3 in 4/4, otherwise quarters.
+function fillRests(used,bpb){
+  const out=[],eps=1e-6;let p=used;
+  if(p>=bpb-eps)return out;
+  const f=p-Math.floor(p+eps);
+  if(f>eps){
+    const k=Math.round(f*3);
+    if(Math.abs(f-k/3)<1e-3&&k>0&&k<3){for(let j=k;j<3;j++)out.push('et');}
+    else{const rem=1-f;if(Math.abs((rem*4)%2-1)<1e-3)out.push('s');if(rem>=0.5-eps)out.push('e');}
+    p=Math.ceil(p-eps);
+  }
+  if(p<eps&&!out.length)return ['w'];
+  while(p<bpb-eps){
+    if(bpb===4&&p%2===0&&p+2<=bpb){out.push('h');p+=2;}
+    else{out.push('q');p+=1;}
+  }
+  return out;
+}
 function melNotes(str){return (str||'').split(/\s+/).filter(Boolean).map(melTok).filter(Boolean);}
 function melBeats(str){return melNotes(str).reduce((s,n)=>s+n.beats,0);}
 // key signatures offered for notation, and how black keys are spelled in each

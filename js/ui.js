@@ -99,7 +99,11 @@ function layoutLines(){
   items.forEach(it=>{it.el.style.cssText='';it.el.querySelectorAll('.chd').forEach(c=>c.style.left='');meas.appendChild(it.el);});
   const W=g.clientWidth-2;
   const nat=items.map(it=>Math.ceil(it.el.getBoundingClientRect().width));
-  if(mel)items.forEach((it,k)=>{nat[k]=Math.max(nat[k],Math.ceil(notationMinWidth(melGet(it.bar))));});
+  // with the staff, chords sit over their notes: a bar needs its chord text (plus gaps), not tile padding
+  if(mel)items.forEach((it,k)=>{
+    const ch=[...it.el.querySelectorAll('.chd')].reduce((w,c)=>w+c.getBoundingClientRect().width+8,8);
+    nat[k]=Math.max(it.bar<0?0:ch,Math.ceil(notationMinWidth(melGet(it.bar),it.bar)));
+  });
   const hw=mel?[Math.ceil(notationHeadWidth(true)),Math.ceil(notationHeadWidth(false))]:[0,0];
   const head=li=>hw[li===0?0:1];
   g.classList.toggle('mel',mel);
@@ -125,7 +129,8 @@ function layoutLines(){
     const n=real(a,b),share=!split&&n<per?Math.max(sum,W*n/per):W;
     row.style.width=Math.min(W,share)+'px';
     for(let i=a;i<b;i++){
-      const c=items[i].el,extra=i===a?head(li):0;c.style.flex=`1 1 ${nat[i]+extra}px`;
+      // with the staff, spare width goes mostly to the bars with more in them
+      const c=items[i].el,extra=i===a?head(li):0;c.style.flex=`${mel?(nat[i]/50).toFixed(2):1} 1 ${nat[i]+extra}px`;
       if(b-a===1&&nat[i]>W)c.style.setProperty('--k',Math.max(0.6,W/nat[i]).toFixed(2));
       row.appendChild(c);
     }
@@ -408,9 +413,8 @@ function markSelNote(){
 function noteAt(i,x){
   const hs=NOT.hits.get(i)||[];if(!hs.length)return null;
   let best=null,bd=1e9;for(const h of hs){const d=Math.abs(h.x-x);if(d<bd){bd=d;best=h;}}
-  const last=hs[hs.length-1];
-  if(x>last.x+22)return null;   // after the last note: add at the end
-  return best.ni;
+  if(x>hs[hs.length-1].x+22)return null;   // after everything: add at the end
+  return best.ni;                           // a filler rest is null too
 }
 // ← → step through the notes, on into the next / previous bar
 function stepNote(d){

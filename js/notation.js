@@ -17,14 +17,17 @@ function loadNotation(){
 const VF_DUR={w:'w',h:'h',q:'q',e:'8',s:'16'};
 const vfKey=p=>p[0].toLowerCase()+p.slice(1,-1)+'/'+p.slice(-1);
 // VexFlow notes for one bar's melody string
-function vfBar(str){
+// fill: complete the bar with filler rests (not for a pickup)
+function vfBar(str,fill=true){
   const VF=NOT.vf,ns=melNotes(str),notes=[],tuplets=[],meta=[];
+  if(fill){const used=ns.reduce((s,n)=>s+n.beats,0);for(const d of fillRests(used,curBpb())){const r=melTok('r'+d);r.filler=true;ns.push(r);}}
   let tri=[],triBeats=0,at=0;
-  const flush=()=>{if(tri.length>1)tuplets.push(new VF.Tuplet(tri,{num_notes:3,notes_occupied:2}));tri=[];triBeats=0;};
+  const flush=()=>{if(tri.length>1)tuplets.push(new VF.Tuplet(tri,{num_notes:3,notes_occupied:2,location:VF.Tuplet.LOCATION_BOTTOM}))   /* below: keeps the chord row clear */;tri=[];triBeats=0;};
   ns.forEach((n,ni)=>{
-    const sn=new VF.StaveNote({keys:n.p?n.ps.map(vfKey):['b/4'],duration:VF_DUR[n.d]+(n.p?'':'r'),dots:n.dot?1:0,auto_stem:true});
+    const whole=!n.p&&n.d==='w'&&ns.length===1;   // a whole-bar rest sits in the middle of the bar
+    const sn=new VF.StaveNote({keys:n.p?n.ps.map(vfKey):[whole?'d/5':'b/4'],duration:VF_DUR[n.d]+(n.p?'':'r'),dots:n.dot?1:0,auto_stem:true,align_center:whole});
     if(n.dot)VF.Dot.buildAndAttach([sn],{all:true});
-    notes.push(sn);meta.push({n,start:at,ni});at+=n.beats;
+    notes.push(sn);meta.push({n,start:at,ni,filler:!!n.filler});at+=n.beats;
     if(n.tri){tri.push(sn);triBeats+=n.beats;if(Math.abs(triBeats-Math.round(triBeats))<1e-6&&triBeats>0)flush();}
     else flush();
   });
@@ -54,11 +57,13 @@ function beamGroups(ns,starts){
   return out;
 }
 // width (px) a bar's melody needs
-function notationMinWidth(str){
-  const VF=NOT.vf;if(!melNotes(str).length)return 44;
-  const b=vfBar(str);
+function notationMinWidth(str,bar){
+  const VF=NOT.vf;if(bar<0&&!melNotes(str).length)return 44;
+  const b=vfBar(str,bar>=0);
   const w=new VF.Formatter().joinVoices([b.voice]).preCalculateMinTotalWidth([b.voice]);
-  return (w+26)*notationScale();
+  // comfortable spacing grows with duration (as engravers do), plus room for accidentals
+  const ideal=b.meta.reduce((s,m)=>s+12+12*Math.sqrt(m.n.beats)+(m.n.p&&/[#b]/.test(m.n.p.slice(1))?8:0),0);
+  return (Math.max(w,ideal)+22)*notationScale();
 }
 // width (px) of clef + key signature (+ time signature on the first line)
 function notationHeadWidth(first){
@@ -89,7 +94,7 @@ function drawStaffRow(row,items,first){
     else st.setBegBarType(VF.Barline.type.NONE);
     if(it.bar===chartSong.bars.length-1)st.setEndBarType(VF.Barline.type.END);
     st.setContext(c).draw();
-    const str=melGet(it.bar),b=vfBar(str);
+    const str=melGet(it.bar),b=vfBar(str,it.bar>=0);
     const chords=it.el.querySelectorAll('.chd');
     if(!b.notes.length){
       // no melody here: chords spread by beats across the bar
@@ -108,21 +113,24 @@ function drawStaffRow(row,items,first){
       const sn=b.notes[i];
       if(i===0&&tiePending){drawTie(c,tiePending,m.n.p?sn:null);tiePending=null;}
       if(i===0&&tieCarry){if(m.n.p)drawTie(c,null,sn);tieCarry=false;}
-      if(m.n.tie){
-        const nx=b.notes[i+1];
-        if(nx&&b.meta[i+1].n.p)drawTie(c,sn,nx);
+      if(m.n.tie){   // filler rests don't count: a tie at the end of what you wrote goes on to the next bar
+        const nm=b.meta[i+1],nx=nm&&!nm.filler?b.notes[i+1]:null;
+        if(nx&&nm.n.p)drawTie(c,sn,nx);
         else if(!nx)tiePending=sn;
       }
-      const el=sn.getSVGElement&&sn.getSVGElement();
-      if(el)NOT.els.set(it.bar+':'+m.ni,el);
-      // where the note sits, for tapping it
+      // where the note sits, for tapping it; a filler rest (ni null) means "add at the end"
       const hx=((sn.getNoteHeadBeginX()+sn.getNoteHeadEndX())/2)*K;
       if(!NOT.hits.has(it.bar))NOT.hits.set(it.bar,[]);
-      NOT.hits.get(it.bar).push({ni:m.ni,x:hx});
+      NOT.hits.get(it.bar).push({ni:m.filler?null:m.ni,x:hx});
+      if(m.filler)return;
+      const el=sn.getSVGElement&&sn.getSVGElement();
+      if(el)NOT.els.set(it.bar+':'+m.ni,el);
     });
     // chord symbols sit over the note on their beat (or between notes)
-    const xs=b.meta.map((m,i)=>({beat:m.start,x:b.notes[i].getAbsoluteX()*K-it.el.offsetLeft}));
-    const end=(st.getNoteEndX()-6)*K-it.el.offsetLeft;
+    // anchor chords on the notes you wrote (not on filler rests); with none, spread by beats
+    const x0=st.getNoteStartX()*K-it.el.offsetLeft,end=(st.getNoteEndX()-6)*K-it.el.offsetLeft;
+    const xs=b.meta.filter(m=>!m.filler).map(m=>({beat:m.start,x:b.notes[b.meta.indexOf(m)].getAbsoluteX()*K-it.el.offsetLeft}));
+    if(!xs.length)xs.push({beat:0,x:x0});
     const xAt=beat=>{
       let lo=xs[0],hi=null;for(const p of xs){if(p.beat<=beat+1e-6)lo=p;else{hi=p;break;}}
       if(Math.abs(lo.beat-beat)<1e-6||beat<lo.beat)return lo.x;

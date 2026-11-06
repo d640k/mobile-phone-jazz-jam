@@ -437,6 +437,39 @@ async def melody_beaming(c):
     ok(await groups('C5e D5e E5e F5e G5e A5e', 'waltz') == [6], '3/4: the bar beams as one')
 
 @test
+async def melody_filler_rests(c):
+    pg = await c.page()
+    async def fill(str, style='swing'):
+        return await ev(pg, f'(()=>{{setStyle("{style}");return fillRests(melBeats("{str}"),curBpb())}})()')
+    ok(await fill('') == ['w'], 'empty bar: whole-bar rest')
+    ok(await fill('C5q D5q E5q') == ['q'], 'three quarters: quarter rest')
+    ok(await fill('C5q D5q E5q re') == ['e'], 'then an eighth rest you added: eighth to finish')
+    ok(await fill('C5q') == ['q', 'h'], 'beat 2: quarter, then half on beat 3')
+    ok(await fill('C5h') == ['h'], 'half')
+    ok(await fill('C5e') == ['e', 'q', 'h'], 'eighth to the beat, quarter, half')
+    ok(await fill('C5s') == ['s', 'e', 'q', 'h'], 'sixteenth, eighth, quarter, half')
+    ok(await fill('C5e.') == ['s', 'q', 'h'], 'after a dotted eighth')
+    ok(await fill('C5et') == ['et', 'et', 'q', 'h'], 'finish the triplet')
+    ok(await fill('C5q D5q', 'waltz') == ['q'], '3/4')
+    ok(await fill('', 'waltz') == ['w'], '3/4 empty bar')
+    ok(await fill('C5w') == [], 'full bar: nothing')
+    # drawn on the staff, but not saved, not played, not tappable
+    pg = await c.page(PHONE, storage={'chart': BLUES, 'melody': {'pickup': 'C5e', 'bars': ['F4q G4q A4q', '']}})
+    await pg.wait_for_function('document.querySelectorAll(".staff svg").length>0', timeout=8000)
+    rests = await ev(pg, 'document.querySelectorAll(".staff .vf-stavenote").length')
+    ok(rests >= 4 + 12, f'filler rests drawn in every bar ({rests} notes/rests)')
+    ok(await ev(pg, 'melGet(0)') == 'F4q G4q A4q' and await ev(pg, 'getTimeline().events.filter(e=>e.bar===0).length') == 3, 'not stored or played')
+    ok(await ev(pg, 'NOT.hits.get(0).filter(h=>h.ni!=null).length') == 3 and await ev(pg, 'NOT.hits.get(1).every(h=>h.ni==null)'), 'filler rests are not selectable notes')
+    await tap_note(pg, 0, 2)
+    x, y = await ev(pg, '''(()=>{const h=NOT.hits.get(0).find(h=>h.ni==null),row=CELLS[0].closest('.sys').getBoundingClientRect();return [row.left+h.x,row.top+48]})()''')
+    await pg.mouse.click(x, y)
+    ok(await ev(pg, '[ED.bar,ED.note]') == [0, None], 'tapping the filler rest: add at the end')
+    await key_down(pg, 72)
+    ok(await ev(pg, 'melGet(0)') == 'F4q G4q A4q C5q', await ev(pg, 'melGet(0)'))
+    await c.shot(pg, 'melody-filler-rests')
+    ok(not pg.errors, pg.errors)
+
+@test
 async def melody_notation_renders(c):
     for dev, name in ((PHONE, 'phone'), (LAND, 'landscape'), (LAPTOP, 'laptop')):
         pg = await mel_page(c, dev, scheme='light' if name == 'laptop' else 'dark')
