@@ -140,7 +140,7 @@ function layoutLines(){
   if(mel)rows.forEach(([row,its],li)=>{try{drawStaffRow(row,its,li===0);}catch(e){console.error(e);}});
   $('chartWrap').scrollTop=top;
   if(focused&&g.contains(focused))focused.focus();
-  const sel=g.querySelector('.cell.sel');if(sel)sel.scrollIntoView({block:'nearest'});
+  showSel();
   markSelNote();
 }
 function addBarBtn(){
@@ -194,6 +194,14 @@ function showMel(e){
   const tl=getTimeline().events,i=tl.indexOf(e);
   for(const m of e.midis||[])keyEl(m)?.classList.add('mel');
   for(let j=i+1;j<tl.length;j++)if(tl[j].midi!=null){for(const m of tl[j].midis)if(!(e.midis||[]).includes(m))keyEl(m)?.classList.add('melnext');break;}
+}
+// Keep the bar being edited (its whole line) in view. Run again whenever the chart area changes
+// size, because opening the editor shrinks it after the bar was first scrolled to.
+function showSel(){
+  const sel=$('grid').querySelector('.cell.sel');if(!sel)return;
+  const wrap=$('chartWrap'),row=sel.closest('.sys')||sel,box=wrap.getBoundingClientRect(),r=row.getBoundingClientRect(),pad=6;
+  if(r.top<box.top)wrap.scrollTop+=r.top-box.top-pad;
+  else if(r.bottom>box.bottom)wrap.scrollTop+=Math.min(r.bottom-box.bottom+pad,r.top-box.top-pad);
 }
 // Keep the playing line on screen, plus the line after it so you can read ahead.
 // If both don't fit, the playing line goes to the top.
@@ -1072,6 +1080,7 @@ function init(){
   for(const mq of [MQ_WIDE,MQ_SHORT])mq.addEventListener('change',layout);
   let rt;addEventListener('resize',()=>{clearTimeout(rt);rt=setTimeout(()=>{layout();layoutLines();},150);});
   requestAnimationFrame(uiLoop);
+  new ResizeObserver(()=>{if(ED.open)showSel();}).observe($('chartWrap'));
   if(document.fonts)document.fonts.ready.then(layoutLines);
 }
 // Shoelace components are ES modules; wait for them before touching their properties.

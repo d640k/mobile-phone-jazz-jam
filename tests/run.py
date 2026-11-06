@@ -682,6 +682,19 @@ async def melody_insert_notes(c):
     ok(not pg.errors, pg.errors)
 
 @test
+async def editing_keeps_the_bar_in_view(c):
+    # a long chart with a melody; tap a note low on the screen: once the editor is open the bar must be visible
+    long = BLUES + '\n' + BLUES
+    pg = await mel_page(c, PHONE, extra={'chart': long, 'melody': {'pickup': '', 'bars': MEL['bars'] * 2}})
+    for bar in (6, 9, 2):
+        await ev(pg, 'closeEditor&&ED.open&&closeEditor()')
+        x, y = await ev(pg, f'''(()=>{{const c=CELLS[{bar}];c.scrollIntoView({{block:'end'}});const h=NOT.hits.get({bar})[0],r=c.closest('.sys').getBoundingClientRect();return [r.left+h.x,r.top+48]}})()''')
+        await pg.mouse.click(x, y); await pg.wait_for_timeout(400)
+        r = await ev(pg, f'''(()=>{{const w=$("chartWrap").getBoundingClientRect(),r=CELLS[{bar}].closest('.sys').getBoundingClientRect();return [ED.open,ED.bar,r.top>=w.top-1&&r.bottom<=w.bottom+1]}})()''')
+        ok(r == [True, bar, True], f'bar {bar+1}: {r}')
+    await c.shot(pg, 'edit-bar-in-view')
+
+@test
 async def melody_arrow_keys_step_notes(c):
     pg = await c.page(LAPTOP, storage={'chart': BLUES, 'melody': {'pickup': '', 'bars': ['F4h G4h', 'A4w']}})
     await pg.wait_for_function('document.querySelectorAll(".staff svg").length>0', timeout=8000)
