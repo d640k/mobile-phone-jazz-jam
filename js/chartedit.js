@@ -17,6 +17,11 @@ function resolveToks(raw,i){
 
 // ----- one chord symbol <-> picker parts {root, q, ext[], bass} -----
 const PICK_ROOTS=['C','Db','D','Eb','E','F','F#','G','Ab','A','Bb','B'];
+// the root buttons, spelled with flats or with sharps
+const ROOTS_FLAT=['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
+const ROOTS_SHARP=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const ENHARMONIC={'C#':'Db','D#':'Eb','F#':'Gb','G#':'Ab','A#':'Bb','Db':'C#','Eb':'D#','Gb':'F#','Ab':'G#','Bb':'A#'};
+const spellingOf=n=>n&&n.length===2?(n[1]==='#'?'sharp':'flat'):null;
 // [label shown, quality token]
 const PICK_QUALS=[['maj',''],['maj7','maj7'],['6','6'],['7','7'],['sus','7sus4'],['alt','7alt'],['m','m'],['m7','m7'],['m6','m6'],['mΔ','m(maj7)'],['ø','m7b5'],['dim7','dim7']];
 const PICK_EXTS=['b9','9','#9','11','#11','13','b13'];

@@ -310,19 +310,25 @@ function renderEditor(){
   ED.slot=Math.min(ED.slot,Math.max(0,chords.length-1));
   // chord slots
   const slots=$('edSlots');slots.innerHTML='';
-  chords.forEach((c,j)=>{const b=document.createElement('button');b.type='button';b.className='slot';b.textContent=c;
+  const pretty=c=>c.replace(/^([A-G])b/,'$1\u266d').replace(/\/([A-G])b/,'/$1\u266d').replace(/b(?=\d)/g,'\u266d').replace(/#/g,'\u266f');
+  chords.forEach((c,j)=>{const b=document.createElement('button');b.type='button';b.className='slot';b.textContent=pretty(c);
     b.setAttribute('aria-pressed',String(j===ED.slot));b.setAttribute('aria-label',`Chord ${j+1}: ${c}`);b.onclick=()=>{ED.slot=j;renderEditor();};slots.appendChild(b);});
   if(chords.length<curBpb()){const a=document.createElement('button');a.type='button';a.className='btn small';a.textContent='+ Chord';
     a.onclick=()=>{const c=chords[chords.length-1]||'C';setBarToks([...chords,c]);ED.slot=chords.length;renderEditor();};slots.appendChild(a);}
   if(chords.length>1){const r=document.createElement('button');r.type='button';r.className='btn small';r.textContent='Remove chord';
     r.onclick=()=>{const c=[...chords];c.splice(ED.slot,1);ED.slot=Math.max(0,ED.slot-1);setBarToks(c);};slots.appendChild(r);}
   const p=chordParts(chords[ED.slot])||{root:null,q:null,ext:[],bass:null};
-  // root / bass note
+  // root / bass note, spelled with flats or sharps: as the chord is written, else as you last chose
+  // for this chord, else from the key signature
   $('edNoteMode').value=ED.mode;$('edNoteHead').textContent=ED.mode==='bass'?'Bass note':'Root';
+  const key=ED.bar+':'+ED.slot+':'+ED.mode;if(ED.spellKey!==key){ED.spellKey=key;ED.spell=null;}
+  const spell=ED.spell||spellingOf(ED.mode==='bass'?p.bass:p.root)||spellingOf(p.root)||(SHARP_KEYS.includes(S.keySig)?'sharp':'flat');
+  $('edFlat').setAttribute('aria-pressed',String(spell==='flat'));$('edSharp').setAttribute('aria-pressed',String(spell==='sharp'));
   const roots=$('edRoots');roots.innerHTML='';
-  PICK_ROOTS.forEach(r=>{const b=document.createElement('button');b.type='button';b.className='chip';b.textContent=r;
+  (spell==='sharp'?ROOTS_SHARP:ROOTS_FLAT).forEach(r=>{const b=document.createElement('button');b.type='button';b.className='chip';b.textContent=r.replace('#','\u266f').replace(/^([A-G])b/,'$1\u266d');
+    b.setAttribute('aria-label',r.replace('#',' sharp').replace(/^([A-G])b/,'$1 flat'));
     const on=ED.mode==='bass'?p.bass===r:p.root===r;b.setAttribute('aria-pressed',String(on));
-    b.onclick=()=>updateSlot(x=>{if(ED.mode==='bass')x.bass=r===x.root?null:r;else x.root=r;});roots.appendChild(b);});
+    b.onclick=()=>updateSlot(x=>{if(ED.mode==='bass')x.bass=r===x.root||ENHARMONIC[r]===x.root?null:r;else x.root=r;});roots.appendChild(b);});
   $('edNoBass').hidden=ED.mode!=='bass';$('edNoBass').setAttribute('aria-pressed',String(!p.bass));
   // quality
   const quals=$('edQuals');quals.innerHTML='';
@@ -994,6 +1000,14 @@ function init(){
   $('edDone').onclick=closeEditor;
   $('edText').onclick=()=>{ED.text=!ED.text;renderEditor();if(ED.text)setTimeout(()=>$('edInput').focus(),0);};
   $('edNoteMode').addEventListener('sl-change',e=>{ED.mode=e.target.value;renderEditor();});
+  // ♭ / ♯: respells the chord's root (or bass note) if it's on a black key, and the buttons
+  const setSpell=sp=>{
+    ED.spell=sp;
+    const p=chordParts(edChords()[ED.slot]),f=ED.mode==='bass'?'bass':'root';
+    if(p&&p[f]&&spellingOf(p[f])&&spellingOf(p[f])!==sp)updateSlot(x=>{x[f]=ENHARMONIC[x[f]]||x[f];});
+    else renderEditor();
+  };
+  $('edFlat').onclick=()=>setSpell('flat');$('edSharp').onclick=()=>setSpell('sharp');
   $('edNoBass').onclick=()=>updateSlot(x=>{x.bass=null;});
   $('edInput').addEventListener('keydown',e=>{if(e.key==='Enter'){applyBarText();e.preventDefault();}});
   $('edInput').addEventListener('sl-change',applyBarText);

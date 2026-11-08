@@ -192,6 +192,43 @@ async def editor_picker_root_quality_ext_bass(c):
     ok(not pg.errors, pg.errors)
 
 @test
+async def editor_flats_and_sharps(c):
+    pg = await c.page(storage={'chart': '| Dbmaj7 | F#m7 B7 | Ebm7 | Ab7 |', 'keySig': 'C'})
+    # every spelling parses and sounds the same pitch class
+    r = await ev(pg, '["Gbm7","F#m7","C#7","Db7","D#m7","Ebm7","G#7","Ab7","A#7","Bb7"].map(t=>parseChord(t)&&parseChord(t).root)')
+    ok(r == [6, 6, 1, 1, 3, 3, 8, 8, 10, 10], r)
+    await pg.locator('#grid .cell').nth(1).click()
+    roots = lambda: ev(pg, '[...document.querySelectorAll("#edRoots .chip")].map(b=>b.textContent).join(" ")')
+    ok(await roots() == 'C C\u266f D D\u266f E F F\u266f G G\u266f A A\u266f B', 'F#m7 shows sharps: ' + await roots())
+    ok(await pg.get_attribute('#edSharp', 'aria-pressed') == 'true', 'sharp switch on')
+    await pg.click('#edFlat')
+    await c.shot(pg, 'editor-flats')
+    ok(await ev(pg, 'splitChart(S.chart)[1].toks.join(" ")') == 'Gbm7 B7', 'respelled: ' + await ev(pg, 'splitChart(S.chart)[1].toks.join(" ")'))
+    ok(await roots() == 'C D\u266d D E\u266d E F G\u266d G A\u266d A B\u266d B', await roots())
+    ok('G\u266d' in await ev(pg, 'CELLS[1].querySelector(".ch").textContent'), 'chart shows Gb')
+    # the second chord (B7, white key): buttons follow the key signature, a pick uses that spelling
+    await pg.locator('#edSlots .slot').nth(1).click()
+    ok(await pg.get_attribute('#edFlat', 'aria-pressed') == 'true', 'C major: flats by default')
+    await pg.click('#edSharp'); await pg.locator('#edRoots .chip[aria-label="C sharp"]').click()
+    ok(await ev(pg, 'splitChart(S.chart)[1].toks.join(" ")') == 'Gbm7 C#7', await ev(pg, 'splitChart(S.chart)[1].toks.join(" ")'))
+    # bass note: its own spelling; same pitch as the root means no bass note
+    await pg.locator('#edNoteMode sl-radio-button[value="bass"]').click()
+    await pg.click('#edFlat'); await pg.locator('#edRoots .chip[aria-label="D flat"]').click()
+    ok(await ev(pg, 'splitChart(S.chart)[1].toks.join(" ")') == 'Gbm7 C#7', 'Db bass under C#7 = no bass note')
+    await pg.locator('#edRoots .chip[aria-label="G flat"]').click()
+    ok(await ev(pg, 'splitChart(S.chart)[1].toks.join(" ")') == 'Gbm7 C#7/Gb', await ev(pg, 'splitChart(S.chart)[1].toks.join(" ")'))
+    # a sharp key signature starts with sharps
+    await ev(pg, 'setKeySig("E")'); await pg.click('#edNext')
+    ok(await pg.get_attribute('#edSharp', 'aria-pressed') == 'false' and await pg.get_attribute('#edFlat', 'aria-pressed') == 'true', 'Ebm7 stays flat as written')
+    await pg.click('#edNext')                         # Ab7 (bar 4), root mode: flat as written
+    await pg.locator('#edNoteMode sl-radio-button[value="root"]').click()
+    ok(await pg.get_attribute('#edFlat', 'aria-pressed') == 'true', 'Ab7 flat')
+    await pg.click('#edPrev'); await pg.click('#edPrev'); await pg.locator('#edSlots .slot').nth(1).click()
+    await ev(pg, 'updateSlot(x=>{x.root="E";x.bass=null;})')   # a white-key chord in E major: sharps
+    ok(await pg.get_attribute('#edSharp', 'aria-pressed') == 'true', 'E major key: sharps for a white-key chord')
+    ok(not pg.errors, pg.errors)
+
+@test
 async def editor_two_chords_and_text_toggle(c):
     pg = await c.page(storage={'chart': BLUES})
     await pg.locator('#grid .cell').nth(1).click()          # Bb7
