@@ -254,6 +254,29 @@ async def editor_flat5_sharp5(c):
     ok(not pg.errors, pg.errors)
 
 @test
+async def editor_section_labels(c):
+    pg = await c.page(storage={'chart': BLUES})
+    await pg.locator('#grid .cell').nth(0).click()
+    await pg.locator('#edSecs .chip', has_text='A').click()
+    await pg.click('#edNext'); await pg.click('#edNext'); await pg.click('#edNext'); await pg.click('#edNext')   # bar 5
+    inp = pg.locator('#edSecName input'); await inp.fill('Bridge'); await inp.press('Enter')
+    labels = await ev(pg, 'chartSong.labels.slice(0,6)')
+    ok(labels == ['A', None, None, None, 'Bridge', None], labels)
+    ok(await ev(pg, 'CELLS[4].querySelector(".lbl").textContent') == 'Bridge', 'shown on the chart')
+    ok(4 in await ev(pg, '[...document.querySelectorAll("#grid .sys")].map(r=>+r.firstElementChild.dataset.bar)'), 'starts a line')
+    ok(await ev(pg, 'splitChart(S.chart)[0].label') == 'A' and await ev(pg, 'splitChart(S.chart)[0].toks.join()') == 'F7', await ev(pg, 'S.chart'))
+    # brackets can't break the chart text
+    await inp.fill('[x]|y'); await inp.press('Enter')
+    ok(await ev(pg, 'chartSong.labels[4]') == 'xy' and await ev(pg, 'chartSong.bars.length') == 12, await ev(pg, 'chartSong.labels[4]'))
+    await pg.locator('#edSecs .chip[aria-label="No section label"]').click()
+    ok(await ev(pg, 'chartSong.labels[4]') is None, 'removed')
+    await c.shot(pg, 'editor-section')
+    # the rhythm-section setting still works (a name clash once broke it)
+    await ev(pg, 'setSection("blakey",false)')
+    ok(await ev(pg, 'S.section') == 'blakey', 'rhythm section setting intact')
+    ok(not pg.errors, pg.errors)
+
+@test
 async def editor_two_chords_and_text_toggle(c):
     pg = await c.page(storage={'chart': BLUES})
     await pg.locator('#grid .cell').nth(1).click()          # Bb7

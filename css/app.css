@@ -164,6 +164,9 @@ button,select,input{font:inherit;color:inherit}
 .sech{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);font-weight:600}
 .chips{display:grid;gap:5px}
 .chips.c5{grid-template-columns:repeat(5,minmax(0,1fr))}
+.secRow{gap:6px;align-items:center}
+.secRow #edSecs{flex:1}
+.secRow sl-input{width:96px;flex-shrink:0}
 .chips.c6{grid-template-columns:repeat(6,minmax(0,1fr))}
 .chips.c7{grid-template-columns:repeat(7,minmax(0,1fr))}
 .chip{min-height:44px;border-radius:var(--r-s);border:1px solid var(--line);background:var(--panel);font-size:15px;cursor:pointer;touch-action:manipulation;padding:0 2px}
@@ -171,6 +174,7 @@ button,select,input{font:inherit;color:inherit}
 .chip.wide{width:100%}
 .edFoot{display:flex;justify-content:space-between;gap:6px;flex-wrap:wrap;padding:var(--sp-2) 0 0;position:sticky;bottom:calc(-1 * var(--sp-3));margin-bottom:calc(-1 * var(--sp-3));padding-bottom:var(--sp-3);background:var(--surface);border-top:1px solid var(--line)}
 sl-radio-group.hideLabel::part(form-control-label){position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+sl-input.hideLabel::part(form-control-label){position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
 
 /* Settings forms */
 sl-tab-group{--indicator-color:var(--accent);--track-color:var(--line)}

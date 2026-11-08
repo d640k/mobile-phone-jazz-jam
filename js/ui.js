@@ -343,12 +343,27 @@ function renderEditor(){
     b.setAttribute('aria-pressed',String(p.ext.includes(e)||implied));
     if(implied){b.onclick=()=>updateSlot(x=>{x.q='m7';});exts.appendChild(b);return;}
     b.onclick=()=>updateSlot(x=>{x.ext=x.ext.includes(e)?x.ext.filter(y=>y!==e):[...x.ext,e];if(x.q==='7alt')x.q='7';});exts.appendChild(b);});
+  // section label (starts a new line on the chart)
+  const lab=raw[ED.bar]?raw[ED.bar].label:null,secs=$('edSecs');secs.innerHTML='';
+  [['','None'],['A','A'],['B','B'],['C','C'],['D','D']].forEach(([v,t])=>{
+    const b=document.createElement('button');b.type='button';b.className='chip';b.textContent=t;
+    if(!v)b.setAttribute('aria-label','No section label');
+    b.setAttribute('aria-pressed',String((lab||'')===v));b.onclick=()=>setBarLabel(v);secs.appendChild(b);});
+  if(document.activeElement!==$('edSecName'))$('edSecName').value=lab&&!['A','B','C','D'].includes(lab)?lab:'';
   // text mode
   if(document.activeElement!==$('edInput')){$('edInput').value=isMel?melGet(ED.bar):(raw[ED.bar]?resolveToks(raw,ED.bar):[]).join(' ');$('edErr').textContent='';}
   $('edInput').label=isMel?(ED.bar<0?'Pickup melody':`Melody in bar ${n||ED.bar+1}`):`Chords in bar ${n||ED.bar+1}`;
   $('edInput').helpText=isMel?'Notes like F5q D5e C5e A4h: pitch, then w h q e s; add . for dotted, t for triplet, ~ to tie. r is a rest; D4+F4+Bb4q is a chord. Enter applies.':'Up to 4 chords, separated by spaces. “/” holds a beat, e.g. C7 / / F7. Enter applies.';
   $('edPrev').disabled=ED.bar<=(isMel?-1:0);$('edNext').disabled=ED.bar>=raw.length-1;
   $('edDelete').disabled=raw.length<2;
+}
+// label the selected bar as the start of a section ('' removes it)
+function setBarLabel(v){
+  const raw=rawBars();if(!raw[ED.bar])return;
+  v=(v||'').replace(/[\[\]|]/g,'').trim().slice(0,12);
+  if((raw[ED.bar].label||'')===v)return;   // unchanged (e.g. the text box losing focus): don't redraw mid-tap
+  raw[ED.bar].label=v||null;
+  applyChartText(barsToText(raw));renderEditor();
 }
 function applyBarText(){
   const v=$('edInput').value.trim(),toks=v.split(/\s+/).filter(Boolean);
@@ -1021,6 +1036,8 @@ function init(){
   $('edTri').onclick=()=>{ED.tri=!ED.tri;if(ED.tri){ED.dot=false;if(!['q','e'].includes(ED.len))ED.len='e';}setSelLength();};
   $('edTie').onclick=toggleTie;
   $('edRest').onclick=()=>{STACK.ref=null;melAdd('r');};
+  $('edSecName').addEventListener('sl-change',e=>setBarLabel(e.target.value));
+  $('edSecName').addEventListener('keydown',e=>{if(e.key==='Enter'){setBarLabel(e.target.value);e.preventDefault();}});
   $('edAddEnd').onclick=()=>selectNote(null);
   $('edInsNote').onclick=toggleInsert;
   $('edChord').onclick=()=>{ED.chord=!ED.chord;if(!ED.chord)STACK.ref=null;
