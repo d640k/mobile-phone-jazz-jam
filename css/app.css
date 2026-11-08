@@ -163,6 +163,7 @@ button,select,input{font:inherit;color:inherit}
 .sec{border-top:1px solid var(--line);padding:10px 0;display:flex;flex-direction:column;gap:var(--sp-2)}
 .sech{font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--dim);font-weight:600}
 .chips{display:grid;gap:5px}
+.chips.c5{grid-template-columns:repeat(5,minmax(0,1fr))}
 .chips.c6{grid-template-columns:repeat(6,minmax(0,1fr))}
 .chips.c7{grid-template-columns:repeat(7,minmax(0,1fr))}
 .chip{min-height:44px;border-radius:var(--r-s);border:1px solid var(--line);background:var(--panel);font-size:15px;cursor:pointer;touch-action:manipulation;padding:0 2px}

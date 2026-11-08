@@ -333,12 +333,15 @@ function renderEditor(){
   // quality
   const quals=$('edQuals');quals.innerHTML='';
   PICK_QUALS.forEach(([t,q])=>{const b=document.createElement('button');b.type='button';b.className='chip';b.textContent=t;
-    if(t==='ø')b.setAttribute('aria-label','half-diminished');if(t==='mΔ')b.setAttribute('aria-label','minor major 7');
+    if(q==='m7b5')b.setAttribute('aria-label','m7 flat 5 (half-diminished)');if(t==='mΔ')b.setAttribute('aria-label','minor major 7');
     b.setAttribute('aria-pressed',String(p.q===q));b.onclick=()=>updateSlot(x=>{x.q=q;if(q==='7alt'||q==='dim7')x.ext=[];});quals.appendChild(b);});
   // extensions
   const exts=$('edExts');exts.innerHTML='';
-  PICK_EXTS.forEach(e=>{const b=document.createElement('button');b.type='button';b.className='chip';b.textContent=e;
-    b.setAttribute('aria-pressed',String(p.ext.includes(e)));
+  PICK_EXTS.forEach(e=>{const b=document.createElement('button');b.type='button';b.className='chip';b.textContent=e.replace('b','\u266d').replace('#','\u266f');
+    b.setAttribute('aria-label',e.replace('b','flat ').replace('#','sharp '));
+    const implied=e==='b5'&&p.q==='m7b5';   // m7b5 already has its flat 5: tapping it goes back to m7
+    b.setAttribute('aria-pressed',String(p.ext.includes(e)||implied));
+    if(implied){b.onclick=()=>updateSlot(x=>{x.q='m7';});exts.appendChild(b);return;}
     b.onclick=()=>updateSlot(x=>{x.ext=x.ext.includes(e)?x.ext.filter(y=>y!==e):[...x.ext,e];if(x.q==='7alt')x.q='7';});exts.appendChild(b);});
   // text mode
   if(document.activeElement!==$('edInput')){$('edInput').value=isMel?melGet(ED.bar):(raw[ED.bar]?resolveToks(raw,ED.bar):[]).join(' ');$('edErr').textContent='';}

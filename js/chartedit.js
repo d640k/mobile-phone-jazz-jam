@@ -23,12 +23,12 @@ const ROOTS_SHARP=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const ENHARMONIC={'C#':'Db','D#':'Eb','F#':'Gb','G#':'Ab','A#':'Bb','Db':'C#','Eb':'D#','Gb':'F#','Ab':'G#','Bb':'A#'};
 const spellingOf=n=>n&&n.length===2?(n[1]==='#'?'sharp':'flat'):null;
 // [label shown, quality token]
-const PICK_QUALS=[['maj',''],['maj7','maj7'],['6','6'],['7','7'],['sus','7sus4'],['alt','7alt'],['m','m'],['m7','m7'],['m6','m6'],['mΔ','m(maj7)'],['ø','m7b5'],['dim7','dim7']];
-const PICK_EXTS=['b9','9','#9','11','#11','13','b13'];
+const PICK_QUALS=[['maj',''],['maj7','maj7'],['6','6'],['7','7'],['sus','7sus4'],['alt','7alt'],['m','m'],['m7','m7'],['m6','m6'],['mΔ','m(maj7)'],['m7♭5','m7b5'],['dim7','dim7']];
+const PICK_EXTS=['b5','#5','b9','9','#9','11','#11','13','b13'];
 // quality spellings people type -> [quality token, implied extensions]
 const Q_FORMS=[
   ['m(maj7)','m(maj7)',[]],['mMaj7','m(maj7)',[]],['m(Maj7)','m(maj7)',[]],['mmaj7','m(maj7)',[]],['-maj7','m(maj7)',[]],
-  ['m7b5','m7b5',[]],['ø7','m7b5',[]],['ø','m7b5',[]],['-7b5','m7b5',[]],
+  ['m9b5','m7b5',['9']],['m7b5','m7b5',[]],['ø7','m7b5',[]],['ø','m7b5',[]],['-7b5','m7b5',[]],
   ['maj13','maj7',['9','13']],['maj9','maj7',['9']],['maj7','maj7',[]],['Maj7','maj7',[]],['M7','maj7',[]],['Δ7','maj7',[]],['Δ','maj7',[]],['^7','maj7',[]],
   ['m13','m7',['9','13']],['m11','m7',['9','11']],['m9','m7',['9']],['m7','m7',[]],['-7','m7',[]],['mi7','m7',[]],['min7','m7',[]],
   ['m69','m6',['9']],['m6','m6',[]],['-6','m6',[]],
@@ -48,7 +48,7 @@ function chordParts(tok){
   for(const [form,q,ext] of Q_FORMS){
     if(!rest.startsWith(form.replace(/[()]/g,'')))continue;
     const tail=rest.slice(form.replace(/[()]/g,'').length);
-    const found=tail.match(/b9|#9|#11|b13|9|11|13/g)||[];
+    const found=tail.match(/b5|#5|b9|#9|#11|b13|9|11|13/g)||[];
     if(found.join('')!==tail)continue;                        // something we can't show as buttons
     return {root:m[1],q,ext:[...new Set([...ext,...found])],bass};
   }
@@ -58,6 +58,9 @@ function chordFromParts(p){
   if(!p.q&&p.raw)return p.raw;
   let q=p.q??'';const ext=PICK_EXTS.filter(x=>p.ext.includes(x));
   const has=x=>ext.includes(x),drop=(...xs)=>xs.forEach(x=>{const i=ext.indexOf(x);if(i>=0)ext.splice(i,1);});
+  // m7 + b5 is m7b5 (half-diminished); with a 9 it's written m9b5
+  if(q==='m7'&&has('b5')){q='m7b5';drop('b5');}
+  if(q==='m7b5'&&has('9')){q='m9b5';drop('9');}
   // fold natural extensions into the usual spelling: C7+9 -> C9, Cm7+9+11 -> Cm11, C7+13 -> C13
   if(['7','maj7','m7'].includes(q)&&has('13')){q=q.replace('7','13');drop('13','9','11');}
   else if(['7','m7'].includes(q)&&has('11')&&!has('#11')){q=q.replace('7','11');drop('11','9');}

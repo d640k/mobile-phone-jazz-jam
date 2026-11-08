@@ -79,7 +79,7 @@ async def engine_parse_and_labels(c):
 @test
 async def engine_chord_codec_roundtrip(c):
     pg = await c.page()
-    bad = await ev(pg, '''(()=>{const L=["C","Cm","C7","Cmaj7","C6","C69","Cm7","Cm6","Cm69","Cm(maj7)","Cm7b5","Cdim7",
+    bad = await ev(pg, '''(()=>{const L=["C","Cm","C7","Cmaj7","C6","C69","Cm7","Cm6","Cm69","Cm(maj7)","Cm7b5","Cm9b5","C7b5","C7#5","C7#5#9","C9#5","C7b5b9","Bbm7b5","Cdim7",
       "C7sus4","C9sus4","C7alt","C9","C13","C7b9","C7#9","C7#11","C13b9","C7b9b13","Cmaj9","Cmaj7#11","Cm9","Cm11","C7/E","Bb7/Ab","F#m7b5","Ebmaj7"];
       return L.filter(t=>{const p=chordParts(t);return !p||chordFromParts(p)!==t;})})()''')
     ok(bad == [], 'codec mangles: %r' % bad)
@@ -174,8 +174,8 @@ async def editor_picker_root_quality_ext_bass(c):
     await chip(pg, 'edQuals', '7').click()  # "7" (index 0 is maj7)
     t = await ev(pg, 'splitChart(S.chart)[5].toks.join(" ")')
     ok(t == 'C7', 'root+quality gave %r' % t)
-    await chip(pg, 'edExts', 'b9').click()
-    await chip(pg, 'edExts', '13').click()
+    await pg.locator('#edExts [aria-label="flat 9"]').click()
+    await pg.locator('#edExts [aria-label="13"]').click()
     t = await ev(pg, 'splitChart(S.chart)[5].toks.join(" ")')
     ok(t == 'C13b9', 'extensions gave %r' % t)
     # bass note
@@ -226,6 +226,31 @@ async def editor_flats_and_sharps(c):
     await pg.click('#edPrev'); await pg.click('#edPrev'); await pg.locator('#edSlots .slot').nth(1).click()
     await ev(pg, 'updateSlot(x=>{x.root="E";x.bass=null;})')   # a white-key chord in E major: sharps
     ok(await pg.get_attribute('#edSharp', 'aria-pressed') == 'true', 'E major key: sharps for a white-key chord')
+    ok(not pg.errors, pg.errors)
+
+@test
+async def editor_flat5_sharp5(c):
+    pg = await c.page(storage={'chart': '| Bbm7 | C7 | Dm7 |'})
+    await pg.locator('#grid .cell').nth(0).click()
+    ok(await pg.locator('#edQuals [aria-label^="m7 flat 5"]').text_content() == 'm7\u266d5', 'm7b5 button labelled as written')
+    await pg.locator('#edExts [aria-label="flat 5"]').click()          # m7 + flat 5 = m7b5
+    tok = lambda i: ev(pg, f'splitChart(S.chart)[{i}].toks.join(" ")')
+    ok(await tok(0) == 'Bbm7b5', await tok(0))
+    ok(await pg.locator('#edQuals [aria-label^="m7 flat 5"]').get_attribute('aria-pressed') == 'true'
+       and await pg.locator('#edExts [aria-label="flat 5"]').get_attribute('aria-pressed') == 'true', 'shown as m7b5 with its flat 5')
+    await pg.locator('#edExts [aria-label="9"]').click()
+    ok(await tok(0) == 'Bbm9b5', await tok(0))
+    await pg.locator('#edExts [aria-label="9"]').click(); await pg.locator('#edExts [aria-label="flat 5"]').click()
+    ok(await tok(0) == 'Bbm7', 'tap flat 5 again: back to m7 ' + await tok(0))
+    await pg.click('#edNext')
+    await pg.locator('#edExts [aria-label="sharp 5"]').click(); await pg.locator('#edExts [aria-label="sharp 9"]').click()
+    ok(await tok(1) == 'C7#5#9', await tok(1))
+    await pg.locator('#edExts [aria-label="sharp 5"]').click(); await pg.locator('#edExts [aria-label="sharp 9"]').click()
+    await pg.locator('#edExts [aria-label="flat 5"]').click()
+    ok(await tok(1) == 'C7b5', await tok(1))
+    # the sound: b5 / #5 replace the fifth
+    r = await ev(pg, '[parseChord("C7b5").arp,parseChord("C7#5").arp,parseChord("Bbm7b5").kind]')
+    ok(r == [[0, 4, 6, 10], [0, 4, 8, 10], 'm7b5'], r)
     ok(not pg.errors, pg.errors)
 
 @test
