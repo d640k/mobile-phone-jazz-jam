@@ -740,6 +740,33 @@ async def melody_chords(c):
     ok(not pg.errors, pg.errors)
 
 @test
+async def melody_chord_mode_full_bar(c):
+    pg = await c.page(PHONE, storage={'chart': BLUES, 'keySig': 'C'})
+    await pg.locator('#grid .cell').nth(0).click(); await pg.click('#edPartMel')
+    await pg.wait_for_function('document.querySelectorAll(".staff svg").length>0', timeout=8000)
+    await pg.click('#edLens [data-len="w"]'); await pg.click('#edChord')
+    for m in (60, 64, 67):                     # a whole-note C chord: the first note fills the bar
+        await key_down(pg, m)
+    ok(await ev(pg, 'melGet(0)') == 'C4+E4+G4w' and await ev(pg, 'ED.bar') == 0, 'stayed to finish the chord: ' + await ev(pg, 'melGet(0)'))
+    ok('Finish the chord' in await pg.text_content('#edMelMsg'), 'says what to do')
+    # a length starts the next chord, which goes in the next bar
+    await pg.click('#edLens [data-len="h"]')
+    for m in (62, 65):
+        await key_down(pg, m)
+    await pg.click('#edLens [data-len="h"]')
+    for m in (64, 67):
+        await key_down(pg, m)
+    ok(await ev(pg, '[melGet(0),melGet(1)]') == ['C4+E4+G4w', 'D4+F4h E4+G4h'], await ev(pg, '[melGet(0),melGet(1)]'))
+    ok(await ev(pg, 'ED.bar') == 1, 'still in bar 2 (full, but building chords)')
+    # turning Chord on starts a fresh chord instead of stacking onto the last one
+    await pg.click('#edChord'); await pg.click('#edChord'); await key_down(pg, 69)
+    ok(await ev(pg, '[melGet(1),melGet(2),ED.bar]') == ['D4+F4h E4+G4h', 'A4h', 2], await ev(pg, '[melGet(1),melGet(2),ED.bar]'))
+    # single notes: a key in a full bar carries on in the next bar
+    await pg.click('#edChord'); await ev(pg, 'ED.bar=1;renderEditor()'); await key_down(pg, 72)
+    ok(await ev(pg, '[melGet(1),melGet(2)]') == ['D4+F4h E4+G4h', 'A4h C5h'], await ev(pg, '[melGet(1),melGet(2)]'))
+    ok(not pg.errors, pg.errors)
+
+@test
 async def melody_delete_key(c):
     pg = await c.page(LAPTOP, storage={'chart': BLUES, 'melody': {'pickup': '', 'bars': ['F4q G4q A4q C5q']}})
     await pg.wait_for_function('document.querySelectorAll(".staff svg").length>0', timeout=8000)

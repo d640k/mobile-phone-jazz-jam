@@ -573,12 +573,16 @@ function melAdd(pitch){   // pitch name, or 'r' for a rest; returns {bar,i} of t
     melMsg(ED.note!=null?`Changed. Now on note ${ED.note+1}.`:'Changed. Back to adding at the end.');
     renderGrid();renderEditor();return at;
   }
-  const cur=isSlashBar(melGet(ED.bar))?'':vGet(ED.bar),used=melBeats(cur),nb=melTok(tok).beats;
+  let cur=isSlashBar(melGet(ED.bar))?'':vGet(ED.bar),used=melBeats(cur);const nb=melTok(tok).beats;
+  // this bar is already full (e.g. you stayed to finish a chord): carry on in the next bar
+  if(used>=cap-1e-6&&ED.bar<rawBars().length-1){ED.bar++;cur=isSlashBar(melGet(ED.bar))?'':vGet(ED.bar);used=melBeats(cur);}
   if(used+nb>cap+1e-6){melMsg(`That won’t fit: ${fmtBeats(cap-used)} beat${Math.abs(cap-used-1)<1e-6?'':'s'} left in this bar.`);return null;}
   vSet(ED.bar,(cur+' '+tok).trim());
   const at={bar:ED.bar,i:toksOf(ED.bar).length-1};
   const full=Math.abs(used+nb-cap)<1e-6,last=rawBars().length-1;
-  if(full&&ED.bar<last){ED.bar++;melMsg(`${ED.bar===0?'Pickup':'Bar '+ED.bar} is full. On to bar ${ED.bar+1}.`);}
+  // a full bar moves on, except while building a chord: you stay to finish it
+  if(full&&ED.chord)melMsg('Bar full. Finish the chord, then tap a length to start the next one (it goes in the next bar).');
+  else if(full&&ED.bar<last){ED.bar++;melMsg(`${ED.bar===0?'Pickup':'Bar '+ED.bar} is full. On to bar ${ED.bar+1}.`);}
   else melMsg(full?'Last bar done.':'');
   renderGrid();renderEditor();return at;
 }
@@ -1103,7 +1107,11 @@ function init(){
   $('edInput').addEventListener('sl-change',applyBarText);
   $('edPrev').onclick=()=>moveBar(-1);$('edNext').onclick=()=>moveBar(1);
   $('edPartCh').onclick=()=>setPart('chords');$('edPartMel').onclick=()=>setPart('melody');
-  for(const b of document.querySelectorAll('#edLens .len'))b.onclick=()=>{ED.len=b.dataset.len;if(!['q','e'].includes(ED.len))ED.tri=false;setSelLength();};
+  for(const b of document.querySelectorAll('#edLens .len'))b.onclick=()=>{
+    ED.len=b.dataset.len;if(!['q','e'].includes(ED.len))ED.tri=false;
+    // building chords: a length starts the next chord
+    if(ED.chord&&ED.note==null&&STACK.ref){STACK.ref=null;melMsg('Next chord: tap its notes.');}
+    setSelLength();};
   $('edDot').onclick=()=>{ED.dot=!ED.dot;if(ED.dot)ED.tri=false;setSelLength();};
   $('edTri').onclick=()=>{ED.tri=!ED.tri;if(ED.tri){ED.dot=false;if(!['q','e'].includes(ED.len))ED.len='e';}setSelLength();};
   $('edTie').onclick=toggleTie;
@@ -1119,8 +1127,8 @@ function init(){
     if(on&&ED.bar<rawBars().length-1)ED.bar++;   // like a full bar: on to the next one
     melMsg(on?'Slashes: keep time on the chords. Tap a key there to write a melody instead.':'Slashes removed.');
     renderGrid();renderEditor();};
-  $('edChord').onclick=()=>{ED.chord=!ED.chord;if(!ED.chord)STACK.ref=null;
-    melMsg(ED.chord?'Chord: keys you tap stack onto the last note (or the selected one). Tap a key again to take it out. Turn Chord off to go on.':'');renderMelEditor();};$('edMelDel').onclick=melDel;$('edHear').onclick=hearBar;$('edHearAll').onclick=hearFromHere;$('edRec').onclick=recStart;
+  $('edChord').onclick=()=>{ED.chord=!ED.chord;STACK.ref=ED.chord&&ED.note!=null?{bar:ED.bar,i:ED.note}:null;STACK.held=new Set();
+    melMsg(ED.chord?'Chord: tap the notes of a chord; they stack. Tap a length to start the next chord. Tap a note again to take it out.':'');renderMelEditor();};$('edMelDel').onclick=melDel;$('edHear').onclick=hearBar;$('edHearAll').onclick=hearFromHere;$('edRec').onclick=recStart;
   $('recSnap').addEventListener('sl-change',e=>{REC.snap=e.target.value==='snap';recRestore();recApply();});
   $('recKeep').onclick=()=>recDone(true);$('recDiscard').onclick=()=>recDone(false);
   $('recAgain').onclick=()=>{recRestore();REC.review=false;$('recPanel').hidden=true;if(S.loop)recStart();else{ED.bar=REC.from;recStart();}};
