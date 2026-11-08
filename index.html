@@ -19,10 +19,10 @@
  const dark=t==='dark'||(t==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);
  document.documentElement.dataset.theme=dark?'dark':'light';document.documentElement.classList.toggle('sl-theme-dark',dark);})();
 </script>
-<link rel="stylesheet" href="vendor/shoelace/light.css?v=30">
-<link rel="stylesheet" href="vendor/shoelace/dark.css?v=30">
-<link rel="stylesheet" href="css/app.css?v=30">
-<script type="module" src="vendor/shoelace/shoelace.js?v=30"></script>
+<link rel="stylesheet" href="vendor/shoelace/light.css?v=31">
+<link rel="stylesheet" href="vendor/shoelace/dark.css?v=31">
+<link rel="stylesheet" href="css/app.css?v=31">
+<script type="module" src="vendor/shoelace/shoelace.js?v=31"></script>
 </head>
 <body>
 <div id="app">
@@ -137,12 +137,24 @@
           <sl-input id="edInput" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" help-text="Up to 4 chords, separated by spaces. “/” holds a beat, e.g. C7 / / F7. Enter applies."></sl-input>
           <p id="edErr" class="err" role="alert"></p>
         </div>
+        <p id="edMsg" class="hint barMsg" role="status"></p>
         <div class="edFoot">
           <button id="edPrev" class="btn small" aria-label="Previous bar">‹</button>
           <button id="edUndo" class="btn small" aria-label="Undo" title="Undo (Ctrl+Z)" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 010 11H11"/></svg></button>
           <button id="edRedo" class="btn small" aria-label="Redo" title="Redo (Ctrl+Shift+Z)" disabled><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 000 11H13"/></svg></button>
           <button id="edInsert" class="btn small" aria-label="Insert a bar after this one">+ Bar</button>
-          <button id="edDelete" class="btn small danger" aria-label="Delete this bar">− Bar</button>
+          <span class="barsWrap">
+            <button id="edBars" class="btn small" aria-expanded="false" aria-controls="barsMenu">Bars…</button>
+            <div id="barsMenu" class="barsMenu" hidden>
+              <p id="barsWhat" class="hint"></p>
+              <button id="mnSelect" class="btn small">Select bars…</button>
+              <button id="mnCopy" class="btn small">Copy</button>
+              <button id="mnCut" class="btn small">Cut</button>
+              <button id="mnPaste" class="btn small">Paste</button>
+              <button id="mnLoop" class="btn small">Loop these</button>
+              <button id="edDelete" class="btn small danger">Delete</button>
+            </div>
+          </span>
           <button id="edNext" class="btn small" aria-label="Next bar">›</button>
         </div>
       </section>
@@ -250,21 +262,21 @@
   <button id="textApply" slot="footer" class="btn primary">Apply</button>
 </sl-dialog>
 
-<script src="js/theory.js?v=30"></script>
-<script src="js/chartedit.js?v=30"></script>
-<script src="js/presets.js?v=30"></script>
-<script src="js/state.js?v=30"></script>
-<script src="js/sections.js?v=30"></script>
-<script src="js/samples.js?v=30"></script>
-<script src="js/audio.js?v=30"></script>
-<script src="js/melody.js?v=30"></script>
-<script src="js/notation.js?v=30"></script>
-<script src="js/scheduler.js?v=30"></script>
-<script src="js/styles/swing.js?v=30"></script>
-<script src="js/styles/bossa.js?v=30"></script>
-<script src="js/styles/waltz.js?v=30"></script>
-<script src="js/styles/samba.js?v=30"></script>
-<script src="js/drive.js?v=30"></script>
-<script src="js/ui.js?v=30"></script>
+<script src="js/theory.js?v=31"></script>
+<script src="js/chartedit.js?v=31"></script>
+<script src="js/presets.js?v=31"></script>
+<script src="js/state.js?v=31"></script>
+<script src="js/sections.js?v=31"></script>
+<script src="js/samples.js?v=31"></script>
+<script src="js/audio.js?v=31"></script>
+<script src="js/melody.js?v=31"></script>
+<script src="js/notation.js?v=31"></script>
+<script src="js/scheduler.js?v=31"></script>
+<script src="js/styles/swing.js?v=31"></script>
+<script src="js/styles/bossa.js?v=31"></script>
+<script src="js/styles/waltz.js?v=31"></script>
+<script src="js/styles/samba.js?v=31"></script>
+<script src="js/drive.js?v=31"></script>
+<script src="js/ui.js?v=31"></script>
 </body>
 </html>

@@ -311,9 +311,19 @@ body.wide #melKeysBtn,body.short #melKeysBtn{display:inline-flex}
 .slot.note .mod{font-size:13px}
 .staff .vf-stavenote.selnote path{fill:var(--teal);stroke:var(--teal)}
 .row.wrap{flex-wrap:wrap}
+/* bar selection and the Bars menu */
+.cell.insel{background:color-mix(in srgb,var(--accent) 20%,transparent)}
+.barsWrap{position:relative;display:inline-flex}
+.barsMenu{position:absolute;bottom:calc(100% + 6px);right:0;z-index:20;display:flex;flex-direction:column;gap:4px;min-width:190px;padding:8px;
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--r-m,10px);box-shadow:0 8px 24px rgba(0,0,0,.35)}
+.barsMenu[hidden]{display:none}
+.barsMenu .btn{justify-content:flex-start;width:100%}
+.barsMenu .hint{margin:0 0 4px;min-height:0}
+.barsMenu .btn:disabled{opacity:.45}
 
 /* song messages: confirmations fade out, problems stay */
 #songMsg{transition:opacity .4s}
 #songMsg.fading{opacity:0}
 #songMsg.problem{color:var(--danger)}
 #edAddEnd[hidden],#edInsNote[hidden]{display:none}
+.barMsg:empty{display:none}

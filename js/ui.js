@@ -67,6 +67,7 @@ function renderGrid(){
     if(S.loop&&i>=S.loop.a&&i<=S.loop.b)c.classList.add('inloop');
     if(LOOP.sel&&i===LOOP.first)c.classList.add('loopfirst');
     if(ED.open&&chartSong.src[i]===ED.bar)c.classList.add('sel');
+    if(SEL.a!=null&&chartSong.src[i]>=SEL.a&&chartSong.src[i]<=SEL.b)c.classList.add('insel');
     if(i===chartSong.bars.length-1)c.classList.add('end');
     else if(chartSong.labels[i+1])c.classList.add('secend');   // double bar line before a new section
     const n=document.createElement('span');n.className='n';
@@ -319,6 +320,7 @@ function openEditor(rawIndex,part){
   $('edTitle').focus?.();
 }
 function closeEditor(){
+  SEL.a=SEL.b=null;SEL.picking=false;barsMenu(false);
   ED.open=false;$('editor').hidden=true;layout();renderGrid();
   const i=chartSong.src.indexOf(ED.bar);const c=CELLS[i];if(c)c.focus();
 }
@@ -421,7 +423,7 @@ function applyBarText(){
   if(toks[0]==='/'){$('edErr').textContent='Start the bar with a chord.';return;}
   $('edErr').textContent='';setBarToks(toks);
 }
-function moveBar(d){const raw=rawBars();ED.note=null;STACK.ref=null;ED.bar=Math.max(ED.part==='melody'?-1:0,Math.min(raw.length-1,ED.bar+d));ED.slot=0;renderGrid();renderEditor();}
+function moveBar(d){const raw=rawBars();ED.note=null;STACK.ref=null;barMsg('');ED.bar=Math.max(ED.part==='melody'?-1:0,Math.min(raw.length-1,ED.bar+d));ED.slot=0;renderGrid();renderEditor();}
 function setPart(p){ED.part=p;ED.note=null;if(p==='chords'&&ED.bar<0)ED.bar=0;ED.text=false;layout();renderGrid();renderEditor();}
 function insertBar(){
   const raw=rawBars(),cur=raw[ED.bar]?resolveToks(raw,ED.bar).filter(t=>t!=='%'):['C'];
@@ -439,6 +441,79 @@ function deleteBar(){
 function addBarAtEnd(){
   const raw=rawBars();raw.push({label:null,toks:raw.length?resolveToks(raw,raw.length-1):['C']});
   applyChartText(barsToText(raw));openEditor(raw.length-1);
+}
+
+// ---------- Selecting bars; copy, cut, paste ----------
+// A selection is a range of bars (raw chart indices). Copy takes chords, both melody voices, slashes
+// and section labels. Paste replaces the selection, or with none goes in after the current bar.
+// Each is one undo step. Copy also puts the chords on the device clipboard as chart text.
+const SEL={a:null,b:null,picking:false},CLIP={bars:null,mel:null};
+function barMsg(t){$('edMsg').textContent=t||'';}
+const selRange=()=>SEL.a!=null?[SEL.a,SEL.b]:[ED.bar,ED.bar];
+function setSelection(a,b){SEL.a=Math.min(a,b);SEL.b=Math.max(a,b);SEL.picking=false;renderGrid();renderEditor();}
+function clearSelection(){if(SEL.a==null&&!SEL.picking)return;SEL.a=SEL.b=null;SEL.picking=false;renderGrid();if(ED.open)renderEditor();}
+const rangeText=(a,b)=>a===b?`bar ${a+1}`:`bars ${a+1}–${b+1}`;
+function copyBars(){
+  if(ED.bar<0)return;
+  const [a,b]=selRange(),raw=rawBars();
+  CLIP.bars=raw.slice(a,b+1).map((r,k)=>({label:r.label,toks:resolveToks(raw,a+k)}));   // "%" resolved: the copy stands alone
+  CLIP.mel=S.melody.bars.slice(a,b+1);while(CLIP.mel.length<CLIP.bars.length)CLIP.mel.push('');
+  try{navigator.clipboard&&navigator.clipboard.writeText(barsToText(CLIP.bars)).catch(()=>{});}catch(e){}
+  barMsg(`Copied ${rangeText(a,b)}.`);songMsg('');barsMenu(false);renderEditor();
+}
+// replace bars a..b (b = a-1: nothing) with the given bars and melody, as one undo step
+function spliceBars(a,b,bars,mel){
+  histMark();
+  const raw=rawBars(),n=b-a+1;
+  // a "%" right after the change must keep meaning the chord it meant before
+  if(raw[b+1]&&raw[b+1].toks.join(' ')==='%')raw[b+1].toks=resolveToks(raw,b+1);
+  melFit(raw.length);
+  raw.splice(a,n,...bars.map(x=>({label:x.label,toks:[...x.toks]})));
+  S.melody.bars.splice(a,n,...mel);melSave();melTimeline=null;
+  if(!raw.length)raw.push({label:null,toks:['C']});
+  applyChartText(barsToText(raw));
+}
+function cutBars(){
+  if(ED.bar<0)return;
+  const [a,b]=selRange();copyBars();
+  if(b-a+1>=rawBars().length){barMsg('Can’t cut every bar; copied instead.');return;}
+  spliceBars(a,b,[],[]);ED.bar=Math.min(a,rawBars().length-1);SEL.a=SEL.b=null;
+  barMsg(`Cut ${rangeText(a,b)}.`);renderGrid();renderEditor();
+}
+function pasteBars(){
+  if(!CLIP.bars||ED.bar<0)return;
+  const sel=SEL.a!=null,[a,b]=sel?selRange():[ED.bar+1,ED.bar];
+  spliceBars(a,b,CLIP.bars,[...CLIP.mel]);
+  ED.bar=a;ED.slot=0;ED.note=null;SEL.a=SEL.b=null;barsMenu(false);
+  barMsg(sel?`Replaced with ${CLIP.bars.length} bar${CLIP.bars.length>1?'s':''}.`:`Pasted ${CLIP.bars.length} bar${CLIP.bars.length>1?'s':''} after bar ${a}.`);
+  renderGrid();renderEditor();
+}
+function deleteBars(){
+  if(ED.bar<0)return;
+  const [a,b]=selRange();
+  if(a===b){barsMenu(false);SEL.a=SEL.b=null;return deleteBar();}
+  if(b-a+1>=rawBars().length)return;
+  const raw=rawBars();
+  const keepLabel=raw[a].label&&raw[b+1]&&!raw[b+1].label?raw[a].label:null;
+  spliceBars(a,b,[],[]);
+  if(keepLabel){const r=rawBars();r[a].label=keepLabel;applyChartText(barsToText(r));}
+  ED.bar=Math.min(a,rawBars().length-1);SEL.a=SEL.b=null;barsMenu(false);renderGrid();renderEditor();
+}
+// the Bars menu: what it acts on, and what's possible
+function barsMenu(open){
+  const m=$('barsMenu');if(open==null)open=m.hidden;
+  m.hidden=!open;$('edBars').setAttribute('aria-expanded',String(open));
+  if(!open)return;
+  const [a,b]=selRange(),sel=SEL.a!=null,pick=ED.bar<0;
+  $('barsWhat').textContent=pick?'The pickup can’t be copied.':sel?`Selected: ${rangeText(a,b)}`:`This bar (${a+1}). Select bars to work on several.`;
+  $('mnSelect').textContent=sel?'Clear selection':'Select bars…';
+  for(const id of ['mnCopy','mnCut','edDelete','mnLoop'])$(id).disabled=pick;
+  $('mnLoop').textContent=`Loop ${rangeText(a,b)}`;
+  $('mnPaste').disabled=pick||!CLIP.bars;
+  $('mnPaste').textContent=!CLIP.bars?'Paste (nothing copied)':sel?`Paste over ${rangeText(a,b)}`:`Paste after bar ${a+1}`;
+  $('edDelete').textContent=`Delete ${rangeText(a,b)}`;
+  $('edDelete').disabled=pick||b-a+1>=rawBars().length;
+  $('mnSelect').focus();
 }
 
 // ---------- Melody entry (bar editor, Melody) ----------
@@ -1033,9 +1108,19 @@ function wireKeys(){
   document.addEventListener('keyup',e=>{if(isSpace(e)&&!spaceIsNative()){e.preventDefault();e.stopPropagation();}},true);
   document.addEventListener('keydown',e=>{
     if(e.key==='Escape'){
+      if(!$('barsMenu').hidden){barsMenu(false);$('edBars').focus();e.preventDefault();return;}
+      if(SEL.a!=null||SEL.picking){clearSelection();e.preventDefault();return;}
       if(LOOP.sel){clearLoop(false);e.preventDefault();}
       else if(ED.open&&!$('textDlg').open){closeEditor();e.preventDefault();}
       return;
+    }
+    // Ctrl+C / Ctrl+X / Ctrl+V on bars, in the editor (not while typing)
+    if(ED.open&&(e.ctrlKey||e.metaKey)&&!e.altKey&&/^[cxv]$/i.test(e.key)){
+      const t=(document.activeElement?.tagName||'').toLowerCase();
+      if(!['sl-input','sl-textarea','input','textarea'].includes(t)){
+        const k=e.key.toLowerCase();if(k==='c')copyBars();else if(k==='x')cutBars();else pasteBars();
+        e.preventDefault();return;
+      }
     }
     // Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y (not while typing, where the text box has its own undo)
     if((e.ctrlKey||e.metaKey)&&!e.altKey&&/^[zy]$/i.test(e.key)){
@@ -1073,6 +1158,8 @@ function init(){
     const c=e.target.closest('.cell');if(!c)return;
     const i=+c.dataset.bar,raw=i<0?-1:chartSong.src[i];
     if(LOOP.sel){if(i>=0)loopTap(i);return;}
+    // choosing the other end of a bar selection (after Select bars…, or Shift+click)
+    if(ED.open&&i>=0&&(SEL.picking||e.shiftKey)&&ED.bar>=0){const anchor=SEL.a!=null&&!SEL.picking?(SEL.a===ED.bar?SEL.a:SEL.b):ED.bar;setSelection(anchor,raw);barMsg(`Selected ${rangeText(SEL.a,SEL.b)}. Bars… to copy, cut, paste or delete.`);return;}
     // With the staff showing: a tap on a note selects it; on the staff elsewhere, Melody;
     // on the chord symbols, Chords.
     if($('grid').classList.contains('mel')&&!REC.review){
@@ -1133,7 +1220,12 @@ function init(){
   $('recKeep').onclick=()=>recDone(true);$('recDiscard').onclick=()=>recDone(false);
   $('recAgain').onclick=()=>{recRestore();REC.review=false;$('recPanel').hidden=true;if(S.loop)recStart();else{ED.bar=REC.from;recStart();}};
   $('edUndo').onclick=undo;$('edRedo').onclick=redo;
-  $('edInsert').onclick=insertBar;$('edDelete').onclick=deleteBar;
+  $('edInsert').onclick=insertBar;$('edDelete').onclick=deleteBars;
+  $('edBars').onclick=e=>{e.stopPropagation();barsMenu();};
+  $('mnSelect').onclick=()=>{barsMenu(false);if(SEL.a!=null){clearSelection();return;}SEL.picking=true;barMsg('Tap the last bar of the selection (this bar is the first).');renderEditor();};
+  $('mnCopy').onclick=copyBars;$('mnCut').onclick=cutBars;$('mnPaste').onclick=pasteBars;
+  $('mnLoop').onclick=()=>{const [a,b]=selRange();barsMenu(false);SEL.a=SEL.b=null;closeEditor();setLoop(a,b);};
+  document.addEventListener('pointerdown',e=>{if(!$('barsMenu').hidden&&!e.target.closest('.barsWrap'))barsMenu(false);});
   // song
   refreshSongList();
   $('openSong').addEventListener('sl-change',e=>{

@@ -189,7 +189,7 @@ async def editor_picker_root_quality_ext_bass(c):
     ok(await pg.is_visible('#editor') and not await pg.is_visible('#kbArea'), 'editor should replace keyboard on phone')
     ok(await pg.locator('#grid .cell.sel').count() == 1, 'selected bar')
     await c.shot(pg, 'editor-phone')
-    foot = await ev(pg, '$("edDelete").getBoundingClientRect().bottom<=innerHeight')
+    foot = await ev(pg, '$("edNext").getBoundingClientRect().bottom<=innerHeight')
     ok(foot, 'editor footer buttons must be on screen')
     await chip(pg, 'edRoots', 'C').click()
     await chip(pg, 'edQuals', '7').click()  # "7" (index 0 is maj7)
@@ -325,7 +325,7 @@ async def editor_insert_delete_move_add(c):
     await pg.locator('#grid .cell').nth(0).click()
     await pg.click('#edInsert')
     ok(await ev(pg, 'chartSong.bars.length') == 13 and await ev(pg, 'ED.bar') == 1, 'insert')
-    await pg.click('#edDelete')
+    await pg.click('#edBars'); await pg.click('#edDelete')
     ok(await ev(pg, 'chartSong.bars.length') == 12, 'delete')
     await pg.click('#edNext'); await pg.click('#edNext')
     ok(await ev(pg, 'ED.bar') == 3, 'next')
@@ -343,9 +343,62 @@ async def editor_percent_bar_and_labels_survive(c):
     ok(raw[1] == [None, 'C6'] and raw[0] == ['A', 'Cmaj7'] and raw[4][0] == 'B', raw)
     # deleting a bar followed by % keeps that bar's chord
     await pg.click('#edNext')                                # bar 3 Dm7 G7, followed by %
-    await pg.click('#edDelete')
+    await pg.click('#edBars'); await pg.click('#edDelete')
     raw = await ev(pg, 'splitChart(S.chart).map(b=>b.toks.join(" "))')
     ok(raw[2] == 'Dm7 G7', raw)
+
+@test
+async def editor_copy_cut_paste(c):
+    chart = '[A] C | Am7 | Dm7 | G7 |\n[B] F | % | E7 | Am7 |'
+    pg = await c.page(PHONE, storage={'chart': chart, 'melody': {'pickup': '', 'bars': ['C5w', 'A4w', '', '', 'F4h & C4h', '', '', '/']}})
+    raw = lambda: ev(pg, 'splitChart(S.chart).map(b=>(b.label?"["+b.label+"] ":"")+b.toks.join(" "))')
+    mel = lambda: ev(pg, 'S.melody.bars.slice(0,chartSong.bars.length)')
+    await pg.locator('#grid .cell').nth(0).click()
+    # select bars 1-4 (tap Select bars…, then bar 4)
+    await pg.click('#edBars'); await pg.click('#mnSelect'); await pg.locator('#grid .cell').nth(3).click()
+    ok(await ev(pg, '[SEL.a,SEL.b]') == [0, 3] and await pg.locator('#grid .cell.insel').count() == 4, 'selected 1-4')
+    await pg.click('#edBars')
+    await c.shot(pg, 'bars-menu')
+    ok(await pg.text_content('#barsWhat') == 'Selected: bars 1–4', await pg.text_content('#barsWhat'))
+    await pg.click('#mnCopy')
+    ok(await ev(pg, 'CLIP.bars.length') == 4 and 'Copied' in await pg.text_content('#edMsg'), 'copied')
+    # paste after bar 4 with no selection: AA
+    await ev(pg, 'clearSelection();ED.bar=3;renderEditor()')
+    await pg.click('#edBars')
+    ok(await pg.text_content('#mnPaste') == 'Paste after bar 4', await pg.text_content('#mnPaste'))
+    await pg.click('#mnPaste')
+    r = await raw()
+    ok(r[:9] == ['[A] C', 'Am7', 'Dm7', 'G7', '[A] C', 'Am7', 'Dm7', 'G7', '[B] F'], r)
+    m = await mel()
+    ok(m[:6] == ['C5w', 'A4w', '', '', 'C5w', 'A4w'] and m[8] == 'F4h & C4h' and m[11] == '/', m)
+    ok(await ev(pg, 'ED.bar') == 4, 'on the pasted bars')
+    # undo the paste in one step
+    await pg.click('#edUndo')
+    ok(len(await raw()) == 8, 'undo removes the whole paste')
+    await pg.click('#edRedo')
+    # paste over a selection replaces it (bar count changes): replace bars 10-11 (2 bars) with the 4 copied
+    await ev(pg, 'ED.bar=9;setSelection(9,10)')
+    await pg.click('#edBars'); await pg.click('#mnPaste')
+    r = await raw()
+    ok(len(r) == 14 and r[9:13] == ['[A] C', 'Am7', 'Dm7', 'G7'] and r[13] == 'Am7', r)
+    # a "%" right after a change keeps its chord: cut bar 9 (F), bar 10 was "%" of F
+    await ev(pg, 'applyChartText("| C | F | % | G |");melSet(0,"");ED.bar=1;SEL.a=SEL.b=null;renderGrid();renderEditor()')
+    await pg.click('#edBars'); await pg.click('#mnCut')
+    ok(await raw() == ['C', 'F', 'G'], await raw())
+    # delete a range; Ctrl shortcuts on the laptop
+    pg = await c.page(LAPTOP, storage={'chart': BLUES})
+    await pg.locator('#grid .cell').nth(4).click()
+    await pg.locator('#grid .cell').nth(7).click(modifiers=['Shift'])
+    ok(await ev(pg, '[SEL.a,SEL.b]') == [4, 7], 'shift-click extends')
+    await pg.keyboard.press('Control+c'); await ev(pg, 'clearSelection();ED.bar=11;renderEditor()')
+    await pg.keyboard.press('Control+v')
+    ok(await ev(pg, 'chartSong.bars.length') == 16, 'Ctrl+C, Ctrl+V')
+    await ev(pg, 'setSelection(12,15)'); await pg.click('#edBars'); await pg.click('#edDelete')
+    ok(await ev(pg, 'chartSong.bars.length') == 12, 'delete a range')
+    # Loop these
+    await ev(pg, 'ED.bar=0;setSelection(0,3)'); await pg.click('#edBars'); await pg.click('#mnLoop')
+    ok(await ev(pg, 'S.loop') == {'a': 0, 'b': 3} and not await ev(pg, 'ED.open'), 'loop the selection')
+    ok(not pg.errors, pg.errors)
 
 @test
 async def editor_in_side_panel_on_laptop(c):
@@ -1013,7 +1066,7 @@ async def melody_pickup_and_bar_ops(c):
     await pg.click('#edNext'); await pg.click('#edNext')               # bar 2 (index 1)
     await pg.click('#edInsert')
     ok(await ev(pg, 'S.melody.bars.slice(0,4)') == ['F5w', 'Bb4w', '', 'A4w'], await ev(pg, 'S.melody.bars.slice(0,4)'))
-    await pg.click('#edDelete')
+    await pg.click('#edBars'); await pg.click('#edDelete')
     ok(await ev(pg, 'S.melody.bars.slice(0,3)') == ['F5w', 'Bb4w', 'A4w'], await ev(pg, 'S.melody.bars.slice(0,3)'))
 
 @test
