@@ -903,6 +903,52 @@ async def melody_rhythm_slashes(c):
     ok(not pg.errors, pg.errors)
 
 @test
+async def melody_second_voice(c):
+    pg = await c.page(PHONE, storage={'chart': BLUES, 'keySig': 'F', 'melody': {'pickup': '', 'bars': ['C5e D5e E5e F5e G5h']}})
+    await pg.wait_for_function('document.querySelectorAll(".staff svg").length>0', timeout=8000)
+    await pg.locator('#grid .cell:not(.pick)').nth(0).click(); await pg.click('#edPartMel')
+    await pg.click('#edV2')
+    ok(await pg.get_attribute('#edV2', 'aria-pressed') == 'true' and await pg.text_content('#edFill') == '0 of 4 beats', 'voice 2 starts empty')
+    await pg.click('#edLens [data-len="h"]'); await key_down(pg, 69); await key_down(pg, 65)
+    ok(await ev(pg, 'melGet(0)') == 'C5e D5e E5e F5e G5h & A4h F4h', await ev(pg, 'melGet(0)'))
+    ok(await ev(pg, 'ED.bar') == 1 and await ev(pg, 'ED.voice') == 2, 'voice 2 full: on to bar 2, still voice 2')
+    # voice 1 untouched by voice-2 edits; beats counted per voice
+    ok(await ev(pg, 'melBeats(melGet(0))') == 4 and await ev(pg, 'melNotesV(melGet(0),2).length') == 2, 'per voice')
+    # stems: voice 1 up, voice 2 down
+    dirs = await ev(pg, '(()=>{const b=vfBar(melGet(0));return b.voices.map(v=>v.notes.filter((n,i)=>!v.meta[i].filler).map(n=>n.getStemDirection()))})()')
+    ok(dirs == [[1, 1, 1, 1, 1], [-1, -1]], dirs)
+    # playback plays both; the held voice-2 note overlaps the moving line
+    ev1 = await ev(pg, 'getTimeline().events.filter(e=>e.bar===0).map(e=>[e.voice,e.midi,e.start,e.dur])')
+    ok([2, 69, 0, 2] in ev1 and [1, 72, 0, 0.5] in ev1 and len(ev1) == 7, ev1)
+    await ev(pg, 'window.__v=[];melVoice=(m,t,d,v,b)=>__v.push(m);0')
+    await pg.click('#edPrev'); await pg.click('#edHear')
+    ok(sorted(await ev(pg, '__v')) == [65, 69, 72, 74, 76, 77, 79], await ev(pg, '__v'))
+    # tapping a low note picks voice 2, a high one voice 1
+    await tap_note(pg, 0, 0)
+    sel = await ev(pg, '[ED.voice,ED.note]')
+    x, y = await ev(pg, '''(()=>{const h=NOT.hits.get(0).find(h=>h.v===2&&h.ni===1),row=CELLS[0].closest('.sys').getBoundingClientRect();return [row.left+h.x,row.top+28+h.y]})()''')
+    await pg.mouse.click(x, y)
+    ok(await ev(pg, '[ED.voice,ED.note]') == [2, 1], 'tap the low F4: voice 2, note 2')
+    x, y = await ev(pg, '''(()=>{const h=NOT.hits.get(0).find(h=>h.v===1&&h.ni===4),row=CELLS[0].closest('.sys').getBoundingClientRect();return [row.left+h.x,row.top+28+h.y]})()''')
+    await pg.mouse.click(x, y)
+    ok(await ev(pg, '[ED.voice,ED.note]') == [1, 4], 'tap the high G5: voice 1, note 5')
+    # editing a selected voice-2 note; undo; text mode shows the voice
+    await ev(pg, 'setVoice(2);selectNote(0)'); await key_down(pg, 67)
+    ok(await ev(pg, 'melGet(0)') == 'C5e D5e E5e F5e G5h & G4h F4h', await ev(pg, 'melGet(0)'))
+    await pg.click('#edUndo')
+    ok(await ev(pg, 'melGet(0)') == 'C5e D5e E5e F5e G5h & A4h F4h' and await ev(pg, 'ED.voice') == 2, 'undo, still voice 2')
+    await pg.click('#edText')
+    ok(await pg.input_value('#edInput input') == 'A4h F4h', 'text mode shows voice 2')
+    await pg.click('#edText')
+    # the pickup has one voice
+    await ev(pg, 'ED.bar=-1;renderEditor()')
+    ok(await pg.locator('#edV2').is_disabled() and await ev(pg, 'ED.voice') == 1, 'pickup: voice 1 only')
+    # saved with the song
+    ok(' & ' in await ev(pg, 'JSON.stringify(S.melody)'), 'stored')
+    await c.shot(pg, 'melody-two-voices')
+    ok(not pg.errors, pg.errors)
+
+@test
 async def melody_pickup_and_bar_ops(c):
     pg = await c.page(PHONE, storage={'chart': BLUES, 'melody': {'pickup': '', 'bars': ['F5w', 'Bb4w', 'A4w']}})
     await pg.wait_for_function('document.querySelectorAll(".staff svg").length>0', timeout=8000)

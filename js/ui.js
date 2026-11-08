@@ -188,13 +188,20 @@ function showBeat(ev){
   setTones(seg.chord);
 }
 // the melody note being played: amber on the staff; violet on the keys, the next one outlined
+// the melody note being played: amber on the staff; violet on the keys, the next one outlined.
+// Each voice keeps its own mark, so a held voice-2 note stays lit while voice 1 moves.
+const MELMARK={1:{keys:[],next:[]},2:{keys:[],next:[]}};
 function showMel(e){
-  markNote(e&&e.midi!=null?e.bar:null,e?e.ni:0);
-  for(const k of $('kb').querySelectorAll('.mel,.melnext'))k.classList.remove('mel','melnext');
-  if(!e||!S.melKeys)return;
+  if(!e){markNote(null,0,1);markNote(null,0,2);for(const k of $('kb').querySelectorAll('.mel,.melnext'))k.classList.remove('mel','melnext');MELMARK[1]={keys:[],next:[]};MELMARK[2]={keys:[],next:[]};return;}
+  const v=e.voice||1;
+  markNote(e.midi!=null?e.bar:null,e.ni,v);
+  const M=MELMARK[v];
+  for(const m of [...M.keys,...M.next])keyEl(m)?.classList.remove('mel','melnext');
+  M.keys=[];M.next=[];
+  if(!S.melKeys)return;
   const tl=getTimeline().events,i=tl.indexOf(e);
-  for(const m of e.midis||[])keyEl(m)?.classList.add('mel');
-  for(let j=i+1;j<tl.length;j++)if(tl[j].midi!=null){for(const m of tl[j].midis)if(!(e.midis||[]).includes(m))keyEl(m)?.classList.add('melnext');break;}
+  for(const m of e.midis||[]){keyEl(m)?.classList.add('mel');M.keys.push(m);}
+  for(let j=i+1;j<tl.length;j++)if(tl[j].midi!=null&&(tl[j].voice||1)===v){for(const m of tl[j].midis)if(!(e.midis||[]).includes(m)){keyEl(m)?.classList.add('melnext');M.next.push(m);}break;}
 }
 // Keep the bar being edited (its whole line) in view. Run again whenever the chart area changes
 // size, because opening the editor shrinks it after the bar was first scrolled to.
@@ -229,7 +236,7 @@ function setPlayUI(on){
 // moment (one tap) share one snapshot, so a recorded take or a bar insert undoes in one step.
 // Loading a song starts a fresh history.
 const HIST={undo:[],redo:[],marked:false,restoring:false,max:100};
-const snapSong=()=>({chart:S.chart,melody:JSON.stringify(S.melody),bar:ED.bar,note:ED.note,part:ED.part});
+const snapSong=()=>({chart:S.chart,melody:JSON.stringify(S.melody),bar:ED.bar,note:ED.note,part:ED.part,voice:ED.voice});
 function histMark(){
   if(HIST.restoring||HIST.marked)return;
   HIST.marked=true;queueMicrotask(()=>{HIST.marked=false;});
@@ -247,7 +254,7 @@ function histGo(from,to){
     applyChartText(snap.chart);
   }finally{HIST.restoring=false;}
   if(ED.open){
-    ED.bar=Math.min(snap.bar,rawBars().length-1);ED.part=snap.part;
+    ED.bar=Math.min(snap.bar,rawBars().length-1);ED.part=snap.part;ED.voice=snap.voice||1;
     ED.note=snap.note!=null&&snap.note<toksOf(ED.bar).length?snap.note:null;STACK.ref=null;
     layout();renderGrid();renderEditor();
   }
@@ -299,7 +306,7 @@ function loopTap(i){
 }
 
 // ---------- Bar editor ----------
-const ED={open:false,bar:0,slot:0,mode:'root',text:false,part:'chords',len:'q',dot:false,tri:false,note:null,chord:false,insert:false};   // insert: keys add before the selected note   // note: selected note in the bar (null = adding at the end)
+const ED={open:false,bar:0,slot:0,mode:'root',text:false,part:'chords',len:'q',dot:false,tri:false,note:null,chord:false,insert:false,voice:1};   // insert: keys add before the selected note   // note: selected note in the bar (null = adding at the end)
 const rawBars=()=>splitChart(S.chart);
 function edToks(){const raw=rawBars();return raw[ED.bar]?resolveToks(raw,ED.bar):[];}
 function edChords(){return edToks().filter(t=>t!=='/'&&t!=='%');}
@@ -383,8 +390,8 @@ function renderEditor(){
     b.setAttribute('aria-pressed',String((lab||'')===v));b.onclick=()=>setBarLabel(v);secs.appendChild(b);});
   if(document.activeElement!==$('edSecName'))$('edSecName').value=lab&&!['A','B','C','D'].includes(lab)?lab:'';
   // text mode
-  if(document.activeElement!==$('edInput')){$('edInput').value=isMel?melGet(ED.bar):(raw[ED.bar]?resolveToks(raw,ED.bar):[]).join(' ');$('edErr').textContent='';}
-  $('edInput').label=isMel?(ED.bar<0?'Pickup melody':`Melody in bar ${n||ED.bar+1}`):`Chords in bar ${n||ED.bar+1}`;
+  if(document.activeElement!==$('edInput')){$('edInput').value=isMel?vGet(ED.bar):(raw[ED.bar]?resolveToks(raw,ED.bar):[]).join(' ');$('edErr').textContent='';}
+  $('edInput').label=isMel?(ED.bar<0?'Pickup melody':`${ED.voice===2?'Voice 2':'Melody'} in bar ${n||ED.bar+1}`):`Chords in bar ${n||ED.bar+1}`;
   $('edInput').helpText=isMel?'Notes like F5q D5e C5e A4h: pitch, then w h q e s; add . for dotted, t for triplet, ~ to tie. r is a rest; D4+F4+Bb4q is a chord; / alone gives rhythm slashes. Enter applies.':'Up to 4 chords, separated by spaces. “/” holds a beat, e.g. C7 / / F7. Enter applies.';
   $('edPrev').disabled=ED.bar<=(isMel?-1:0);$('edNext').disabled=ED.bar>=raw.length-1;
   $('edDelete').disabled=raw.length<2;
@@ -405,7 +412,7 @@ function applyBarText(){
     if(bad.length){$('edErr').textContent=`Don’t know ${bad.map(b=>'“'+b+'”').join(', ')}. Use e.g. F5q, Bb4e., re.`;return;}
     const used=melBeats(v);
     if(used>curBpb()+1e-6){$('edErr').textContent=`That’s ${fmtBeats(used)} beats; a bar holds ${curBpb()}.`;return;}
-    $('edErr').textContent='';melSet(ED.bar,toks.join(' '));renderGrid();renderEditor();return;
+    $('edErr').textContent='';vSet(ED.bar,toks.join(' '));renderGrid();renderEditor();return;
   }
   if(!toks.length){$('edErr').textContent='Type at least one chord.';return;}
   if(toks.length>curBpb()){$('edErr').textContent=`At most ${curBpb()} chords or “/” in a bar.`;return;}
@@ -438,7 +445,10 @@ function addBarAtEnd(){
 const fmtBeats=b=>{const w=Math.floor(b+1e-6),f=b-w,fr=f>0.7?'¾':f>0.6?'⅔':f>0.4?'½':f>0.3?'⅓':f>0.2?'¼':'';return (w||!fr?String(w):'')+fr;};
 function melMsg(t){$('edMelMsg').textContent=t;}
 const LEN_NAME={w:'whole',h:'half',q:'quarter',e:'eighth',s:'sixteenth'};
-const toksOf=bar=>melGet(bar).split(' ').filter(Boolean);
+// the selected voice of a bar (1, or 2: its own rhythm, stems down)
+const vGet=bar=>splitVoices(melGet(bar))[ED.voice===2?1:0];
+function vSet(bar,str){const [a,b]=splitVoices(melGet(bar));melSet(bar,ED.voice===2?joinVoices(isSlashBar(a)?'':a,str):joinVoices(str,b));}
+const toksOf=bar=>vGet(bar).split(' ').filter(t=>t&&t!=='/');
 const showPitch=p=>p.replace('#','♯').replace(/^([A-G])b/,'$1♭');
 function renderMelEditor(){
   const toks=toksOf(ED.bar);
@@ -467,8 +477,10 @@ function renderMelEditor(){
   const tt=tieTarget();$('edTie').setAttribute('aria-pressed',String(!!(tt&&tt.toks[tt.i].endsWith('~'))));$('edTie').disabled=!tt;
   if(ED.note!=null)$('edRest').setAttribute('aria-label',ED.insert?'Insert a rest':'Make this note a rest');else $('edRest').removeAttribute('aria-label');
   $('edChord').setAttribute('aria-pressed',String(ED.chord));
+  if(ED.bar<0)ED.voice=1;
+  $('edV1').setAttribute('aria-pressed',String(ED.voice===1));$('edV2').setAttribute('aria-pressed',String(ED.voice===2));$('edV2').disabled=ED.bar<0;
   $('edSlash').setAttribute('aria-pressed',String(isSlashBar(melGet(ED.bar))));$('edSlash').disabled=ED.bar<0;
-  const used=melBeats(melGet(ED.bar)),cap=curBpb();
+  const used=melBeats(vGet(ED.bar)),cap=curBpb();
   $('edFill').textContent=`${fmtBeats(used)} of ${cap} beats`;
   $('edRec').setAttribute('aria-label',S.loop?`Record bars ${S.loop.a+1} to ${S.loop.b+1}`:`Record from bar ${Math.max(0,ED.bar)+1}`);
   $('edRec').title=$('edRec').getAttribute('aria-label');hearUI();
@@ -476,14 +488,26 @@ function renderMelEditor(){
 }
 function markSelNote(){
   for(const e of document.querySelectorAll('.staff .selnote'))e.classList.remove('selnote');
-  if(ED.open&&ED.part==='melody'&&ED.note!=null)NOT.els.get(ED.bar+':'+ED.note)?.classList.add('selnote');
+  if(ED.open&&ED.part==='melody'&&ED.note!=null)NOT.els.get(ED.bar+':'+ED.voice+':'+ED.note)?.classList.add('selnote');
 }
 // the note under a tap (x px from the line's left) in bar i, or null if the tap is past the last note
-function noteAt(i,x){
-  const hs=NOT.hits.get(i)||[];if(!hs.length)return null;
-  let best=null,bd=1e9;for(const h of hs){const d=Math.abs(h.x-x);if(d<bd){bd=d;best=h;}}
-  if(x>hs[hs.length-1].x+22)return null;   // after everything: add at the end
-  return best.ni;                           // a filler rest is null too
+// The note under a tap in bar i (x, y px within the line's staff): {ni, v}. ni null = add at the
+// end of voice v (a filler rest, or past the last note). With two voices, height decides too.
+function noteAt(i,x,y){
+  const hs=NOT.hits.get(i)||[];if(!hs.length)return {ni:null,v:ED.voice};
+  const two=hs.some(h=>h.v===2);
+  let best=null,bd=1e9;
+  for(const h of hs){const d=Math.abs(h.x-x)+(two&&y!=null?0.8*Math.abs(h.y-y):0);if(d<bd){bd=d;best=h;}}
+  const own=hs.filter(h=>h.v===best.v);
+  if(x>own[own.length-1].x+22)return {ni:null,v:best.v};   // after everything: add at the end
+  return {ni:best.ni,v:best.v};                             // a filler rest is null too
+}
+function setVoice(v){
+  if(ED.bar<0)v=1;   // a pickup has one voice
+  if(ED.voice===v)return;
+  ED.voice=v;ED.note=null;ED.insert=false;STACK.ref=null;
+  melMsg(v===2?'Voice 2: its own rhythm, stems down (e.g. a held note under a moving line).':'Voice 1: the melody.');
+  renderGrid();renderEditor();
 }
 // ← → step through the notes, on into the next / previous bar
 function stepNote(d){
@@ -521,7 +545,7 @@ function toggleTie(){
   const tt=tieTarget();if(!tt)return;
   const on=!tt.toks[tt.i].endsWith('~');
   tt.toks[tt.i]=on?tt.toks[tt.i]+'~':tt.toks[tt.i].replace(/~$/,'');
-  melSet(tt.bar,tt.toks.join(' '));
+  vSet(tt.bar,tt.toks.join(' '));
   melMsg(on?'Tied to the next note (it can be in the next bar).':'Tie removed.');
   renderGrid();renderEditor();
 }
@@ -530,7 +554,7 @@ function melAdd(pitch){   // pitch name, or 'r' for a rest; returns {bar,i} of t
   if(ED.note!=null&&ED.insert){   // Insert: a new note before the selected one, using the room at the end of the bar
     const toks=toksOf(ED.bar),free=cap-melBeats(toks.join(' ')),nb=melTok(tok).beats;
     if(nb>free+1e-6){melMsg(free>1e-6?`Only ${fmtBeats(free)} beat${Math.abs(free-1)<1e-6?'':'s'} free in this bar. Pick a shorter length, or shorten or delete a note first.`:'This bar is full. Shorten or delete a note first to make room.');return null;}
-    toks.splice(ED.note,0,tok);melSet(ED.bar,toks.join(' '));
+    toks.splice(ED.note,0,tok);vSet(ED.bar,toks.join(' '));
     const at={bar:ED.bar,i:ED.note};ED.note++;   // stay on the same note, now one further along
     melMsg('Inserted. Keep going, or turn Insert off.');renderGrid();renderEditor();return at;
   }
@@ -543,15 +567,15 @@ function melAdd(pitch){   // pitch name, or 'r' for a rest; returns {bar,i} of t
     const tied=old.tie&&pitch!=='r'?'~':'';
     const next=[...toks];next[ED.note]=tok+tied;
     if(melBeats(next.join(' '))>cap+1e-6){melMsg('That won’t fit in this bar.');return null;}
-    melSet(ED.bar,next.join(' '));
+    vSet(ED.bar,next.join(' '));
     ED.note=ED.note+1<toks.length?ED.note+1:null;   // on to the next note, like a notation program
     if(ED.note!=null){const n=melTok(toks[ED.note]);ED.len=n.d;ED.dot=n.dot;ED.tri=n.tri;}
     melMsg(ED.note!=null?`Changed. Now on note ${ED.note+1}.`:'Changed. Back to adding at the end.');
     renderGrid();renderEditor();return at;
   }
-  const cur=isSlashBar(melGet(ED.bar))?'':melGet(ED.bar),used=melBeats(cur),nb=melTok(tok).beats;
+  const cur=isSlashBar(melGet(ED.bar))?'':vGet(ED.bar),used=melBeats(cur),nb=melTok(tok).beats;
   if(used+nb>cap+1e-6){melMsg(`That won’t fit: ${fmtBeats(cap-used)} beat${Math.abs(cap-used-1)<1e-6?'':'s'} left in this bar.`);return null;}
-  melSet(ED.bar,(cur+' '+tok).trim());
+  vSet(ED.bar,(cur+' '+tok).trim());
   const at={bar:ED.bar,i:toksOf(ED.bar).length-1};
   const full=Math.abs(used+nb-cap)<1e-6,last=rawBars().length-1;
   if(full&&ED.bar<last){ED.bar++;melMsg(`${ED.bar===0?'Pickup':'Bar '+ED.bar} is full. On to bar ${ED.bar+1}.`);}
@@ -564,18 +588,18 @@ function setSelLength(){
   const toks=toksOf(ED.bar),old=melTok(toks[ED.note]);
   const next=[...toks];next[ED.note]=(old.p||'r')+ED.len+(ED.dot?'.':'')+(ED.tri?'t':'')+(old.tie?'~':'');
   if(melBeats(next.join(' '))>curBpb()+1e-6){melMsg('That’s too long for the space left in this bar.');ED.len=old.d;ED.dot=old.dot;ED.tri=old.tri;renderMelEditor();return;}
-  melSet(ED.bar,next.join(' '));melMsg('');renderGrid();renderEditor();
+  vSet(ED.bar,next.join(' '));melMsg('');renderGrid();renderEditor();
 }
 function melDel(){
   STACK.ref=null;
   if(ED.note!=null){
-    const t=toksOf(ED.bar);t.splice(ED.note,1);melSet(ED.bar,t.join(' '));
+    const t=toksOf(ED.bar);t.splice(ED.note,1);vSet(ED.bar,t.join(' '));
     if(ED.note>=t.length)ED.note=null;else{const n=melTok(t[ED.note]);ED.len=n.d;ED.dot=n.dot;ED.tri=n.tri;}
     melMsg('');renderGrid();renderEditor();return;
   }
   let t=toksOf(ED.bar);
   if(!t.length&&ED.bar>-1){ED.bar--;t=toksOf(ED.bar);}
-  if(t.length){t.pop();melSet(ED.bar,t.join(' '));}   // the note before keeps its tie
+  if(t.length){t.pop();vSet(ED.bar,t.join(' '));}   // the note before keeps its tie
   melMsg('');renderGrid();renderEditor();
 }
 // ---------- Hearing the melody (no band) ----------
@@ -648,7 +672,7 @@ function recFinish(){
   recApply();$('recPanel').hidden=false;$('recKeep').focus();
 }
 function recApply(){
-  recTranscribe(!REC.snap).forEach((str,k)=>melSet(REC.from+k,str));
+  recTranscribe(!REC.snap).forEach((str,k)=>melSet(REC.from+k,joinVoices(str,melVoice2(REC.backup[k]||''))));
   $('recTitle').textContent=`Take · bars ${REC.from+1}–${REC.to+1}`;
   $('recCount').textContent=`${REC.notes.length} note${REC.notes.length===1?'':'s'}`;
   $('recNote').textContent=REC.snap?'Lined up to the beat (swung eighths). Odd spots? Fix them in the bar editor. Tap Play to hear it with the band.':'Lined up to 16ths and triplets: closer to exactly what you played.';
@@ -791,7 +815,7 @@ function melStack(name,m){
   else if(!has)ps.push(name);
   STACK.held.add(m);
   toks[i]=melJoin(ps,n.d+(n.dot?'.':'')+(n.tri?'t':''))+(n.tie?'~':'');
-  melSet(bar,toks.join(' '));renderGrid();renderEditor();
+  vSet(bar,toks.join(' '));renderGrid();renderEditor();
 }
 function setMelKeys(on){S.melKeys=!!on;store.set('melKeys',S.melKeys);$('cMelKeys').checked=S.melKeys;$('melKeysBtn').setAttribute('aria-pressed',String(S.melKeys));if(!S.melKeys)for(const k of $('kb').querySelectorAll('.mel,.melnext'))k.classList.remove('mel','melnext');}
 function setKeySig(k){S.keySig=NOTE_KEYS.includes(k)?k:'C';store.set('keySig',S.keySig);$('keySig').value=S.keySig;renderGrid();}
@@ -1050,9 +1074,11 @@ function init(){
     if($('grid').classList.contains('mel')&&!REC.review){
       const row=c.closest('.sys').getBoundingClientRect(),onStaff=e.clientY>row.top+28;
       if(onStaff){
-        const hit=noteAt(i,e.clientX-row.left);
+        const hit=noteAt(i,e.clientX-row.left,e.clientY-row.top-28);
         if(!ED.open||ED.bar!==raw||ED.part!=='melody'){openEditor(raw,'melody');}
-        selectNote(hit);return;
+        if(raw<0)hit.v=1;
+        if(ED.voice!==hit.v){ED.voice=hit.v;renderGrid();}
+        selectNote(hit.ni);return;
       }
       if(ED.open&&raw===ED.bar&&ED.part==='melody'){setPart('chords');return;}
       if(!(ED.open&&raw===ED.bar)){openEditor(raw,'chords');return;}
@@ -1085,6 +1111,7 @@ function init(){
   $('edSecName').addEventListener('sl-change',e=>setBarLabel(e.target.value));
   $('edSecName').addEventListener('keydown',e=>{if(e.key==='Enter'){setBarLabel(e.target.value);e.preventDefault();}});
   $('edAddEnd').onclick=()=>selectNote(null);
+  $('edV1').onclick=()=>setVoice(1);$('edV2').onclick=()=>setVoice(2);
   $('edInsNote').onclick=toggleInsert;
   $('edSlash').onclick=()=>{
     const on=!isSlashBar(melGet(ED.bar));

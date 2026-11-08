@@ -1,7 +1,7 @@
 // ---------- Staff notation (VexFlow, loaded on first use) ----------
 // Each line of the chart gets one SVG staff under its chord buttons. Bar widths come from the
 // notation's minimum width (or the chords', whichever is wider), then lines are justified.
-const NOT={vf:null,loading:null,els:new Map(),hits:new Map(),cur:null};   // hits: bar -> [{ni, x}] note centres (px from the line's left)
+const NOT={vf:null,loading:null,els:new Map(),hits:new Map(),cur:null};   // hits: bar -> [{ni, x, y, v}] note centres (px in the line), voice
 function notationScale(){return document.body.classList.contains('wide')?0.85:document.body.classList.contains('short')?0.6:0.7;}
 const STAFF_UNITS=100,STAFF_TOP=30;   // VexFlow units: staff lines at 30..70, room for ledger lines and stems
 function loadNotation(){
@@ -16,25 +16,20 @@ function loadNotation(){
 }
 const VF_DUR={w:'w',h:'h',q:'q',e:'8',s:'16'};
 const vfKey=p=>p[0].toLowerCase()+p.slice(1,-1)+'/'+p.slice(-1);
-// VexFlow notes for one bar's melody string
-// fill: complete the bar with filler rests (not for a pickup)
-function vfBar(str,fill=true){
-  const VF=NOT.vf,ns=melNotes(str),notes=[],tuplets=[],meta=[];
-  if(isSlashBar(str)){   // rhythm slashes: one slash per beat on the middle line, no stems
-    for(let k=0;k<curBpb();k++){
-      const sn=new VF.StaveNote({keys:['b/4'],duration:'q',type:'s'});
-      if(sn.setStemStyle)sn.setStemStyle({strokeStyle:'transparent',fillStyle:'transparent'});
-      notes.push(sn);meta.push({n:{beats:1,d:'q',p:null},start:k,ni:k,filler:true,slash:true});
-    }
-    const voice=new VF.Voice({num_beats:curBpb(),beat_value:4}).setMode(VF.Voice.Mode.SOFT);voice.addTickables(notes);
-    return {notes,voice,tuplets,meta};
-  }
+// VexFlow notes for one voice. dir: 0 = stems by pitch (one voice), 1 = up (voice 1), -1 = down (voice 2).
+// fill: complete the bar with filler rests (not for a pickup).
+function vfVoice(list,fill,dir){
+  const VF=NOT.vf,ns=[...list],notes=[],tuplets=[],meta=[];
   if(fill){const used=ns.reduce((s,n)=>s+n.beats,0);for(const d of fillRests(used,curBpb())){const r=melTok('r'+d);r.filler=true;ns.push(r);}}
   let tri=[],triBeats=0,at=0;
-  const flush=()=>{if(tri.length>1)tuplets.push(new VF.Tuplet(tri,{num_notes:3,notes_occupied:2,location:VF.Tuplet.LOCATION_BOTTOM}))   /* below: keeps the chord row clear */;tri=[];triBeats=0;};
+  const flush=()=>{if(tri.length>1)tuplets.push(new VF.Tuplet(tri,{num_notes:3,notes_occupied:2,location:dir>0?VF.Tuplet.LOCATION_TOP:VF.Tuplet.LOCATION_BOTTOM}));tri=[];triBeats=0;};
   ns.forEach((n,ni)=>{
     const whole=!n.p&&n.d==='w'&&ns.length===1;   // a whole-bar rest sits in the middle of the bar
-    const sn=new VF.StaveNote({keys:n.p?n.ps.map(vfKey):[whole?'d/5':'b/4'],duration:VF_DUR[n.d]+(n.p?'':'r'),dots:n.dot?1:0,auto_stem:true,align_center:whole});
+    // with two voices, rests move up (voice 1) or down (voice 2) out of each other's way
+    const restKey=dir>0?(whole?'f/5':'d/5'):dir<0?(whole?'d/4':'f/4'):(whole?'d/5':'b/4');
+    const opts={keys:n.p?n.ps.map(vfKey):[restKey],duration:VF_DUR[n.d]+(n.p?'':'r'),dots:n.dot?1:0,align_center:whole};
+    if(dir){opts.stem_direction=dir;opts.auto_stem=false;}else opts.auto_stem=true;
+    const sn=new VF.StaveNote(opts);
     if(n.dot)VF.Dot.buildAndAttach([sn],{all:true});
     notes.push(sn);meta.push({n,start:at,ni,filler:!!n.filler});at+=n.beats;
     if(n.tri){tri.push(sn);triBeats+=n.beats;if(Math.abs(triBeats-Math.round(triBeats))<1e-6&&triBeats>0)flush();}
@@ -42,8 +37,28 @@ function vfBar(str,fill=true){
   });
   flush();
   const voice=new VF.Voice({num_beats:curBpb(),beat_value:4}).setMode(VF.Voice.Mode.SOFT);
-  if(notes.length){voice.addTickables(notes);VF.Accidental.applyAccidentals([voice],S.keySig);}
-  return {notes,voice,tuplets,meta};
+  if(notes.length)voice.addTickables(notes);
+  return {notes,voice,tuplets,meta,dir};
+}
+// VexFlow voices for one bar's melody string: one voice, or two (stems up / down)
+function vfBar(str,fill=true){
+  const VF=NOT.vf;
+  if(isSlashBar(str)){   // rhythm slashes: one slash per beat on the middle line, no stems
+    const notes=[],meta=[];
+    for(let k=0;k<curBpb();k++){
+      const sn=new VF.StaveNote({keys:['b/4'],duration:'q',type:'s'});
+      if(sn.setStemStyle)sn.setStemStyle({strokeStyle:'transparent',fillStyle:'transparent'});
+      notes.push(sn);meta.push({n:{beats:1,d:'q',p:null},start:k,ni:k,filler:true,slash:true});
+    }
+    const voice=new VF.Voice({num_beats:curBpb(),beat_value:4}).setMode(VF.Voice.Mode.SOFT);voice.addTickables(notes);
+    return {voices:[{notes,voice,tuplets:[],meta,dir:0,v:1}]};
+  }
+  const two=melNotesV(str,2).length>0;
+  const voices=[Object.assign(vfVoice(melNotesV(str,1),fill,two?1:0),{v:1})];
+  if(two)voices.push(Object.assign(vfVoice(melNotesV(str,2),fill,-1),{v:2}));
+  const live=voices.filter(x=>x.notes.length).map(x=>x.voice);
+  if(live.length)VF.Accidental.applyAccidentals(live,S.keySig);
+  return {voices};
 }
 // Beaming, lead-sheet style: in 4/4 eighths beam by half bar (beats 1-2, 3-4), never across the
 // middle; any half bar with sixteenths or triplets beams beat by beat; in 3/4 the bar beams as one.
@@ -68,10 +83,10 @@ function beamGroups(ns,starts){
 // width (px) a bar's melody needs
 function notationMinWidth(str,bar){
   const VF=NOT.vf;if(bar<0&&!melNotes(str).length&&!isSlashBar(str))return 44;
-  const b=vfBar(str,bar>=0);
-  const w=new VF.Formatter().joinVoices([b.voice]).preCalculateMinTotalWidth([b.voice]);
+  const b=vfBar(str,bar>=0),live=b.voices.filter(x=>x.notes.length);
+  const w=live.length?new VF.Formatter().joinVoices(live.map(x=>x.voice)).preCalculateMinTotalWidth(live.map(x=>x.voice)):0;
   // comfortable spacing grows with duration (as engravers do), plus room for accidentals
-  const ideal=b.meta.reduce((s,m)=>s+12+12*Math.sqrt(m.n.beats)+(m.n.p&&/[#b]/.test(m.n.p.slice(1))?8:0),0);
+  const ideal=Math.max(0,...b.voices.map(x=>x.meta.reduce((s,m)=>s+12+12*Math.sqrt(m.n.beats)+(m.n.p&&/[#b]/.test(m.n.p.slice(1))?8:0),0)));
   return (Math.max(w,ideal)+22)*notationScale();
 }
 // width (px) of clef + key signature (+ time signature on the first line)
@@ -86,7 +101,8 @@ function drawTie(c,first,last){
   const n=Math.min(first?first.getKeys().length:99,last?last.getKeys().length:99),ix=[...Array(n).keys()];
   new NOT.vf.StaveTie({first_note:first,last_note:last,first_indices:ix,last_indices:ix}).setContext(c).draw();
 }
-let tiePending=null,tieCarry=false;   // tie to the next bar in this line / into the next line
+// per voice: a tie to the next bar in this line / into the next line
+const TIES={1:{pending:null,carry:false},2:{pending:null,carry:false}};
 function drawStaffRow(row,items,first){
   const VF=NOT.vf,K=notationScale();
   const box=document.createElement('div');box.className='staff';box.setAttribute('aria-hidden','true');
@@ -94,8 +110,7 @@ function drawStaffRow(row,items,first){
   box.style.width=W+'px';box.style.height=H+'px';row.appendChild(box);
   const r=new VF.Renderer(box,VF.Renderer.Backends.SVG);r.resize(W,H);
   const c=r.getContext();c.scale(K,K);c.setFillStyle('currentColor');c.setStrokeStyle('currentColor');
-  if(first)tieCarry=false;
-  tiePending=null;
+  for(const v of [1,2]){if(first)TIES[v].carry=false;TIES[v].pending=null;}
   items.forEach((it,j)=>{
     const x=it.el.offsetLeft/K,w=it.el.offsetWidth/K;
     const st=new VF.Stave(x,STAFF_TOP-40,w);
@@ -104,42 +119,50 @@ function drawStaffRow(row,items,first){
     if(it.bar===chartSong.bars.length-1)st.setEndBarType(VF.Barline.type.END);
     else if(chartSong.labels[it.bar+1])st.setEndBarType(VF.Barline.type.DOUBLE);   // end of a section
     st.setContext(c).draw();
-    const str=melGet(it.bar),b=vfBar(str,it.bar>=0);
+    const str=melGet(it.bar),b=vfBar(str,it.bar>=0),live=b.voices.filter(x=>x.notes.length);
     const chords=it.el.querySelectorAll('.chd');
-    if(!b.notes.length){
+    if(!live.length){
       // no melody here: chords spread by beats across the bar
       const x0=st.getNoteStartX()*K-it.el.offsetLeft,x1=(st.getNoteEndX()-8)*K-it.el.offsetLeft;
       chords.forEach(ch=>{ch.style.left=Math.round(x0+(+ch.dataset.beat/curBpb())*(x1-x0))+'px';});
-      if(tiePending){drawTie(c,tiePending,null);tiePending=null;}
-      tieCarry=false;return;
+      for(const v of [1,2]){if(TIES[v].pending){drawTie(c,TIES[v].pending,null);TIES[v].pending=null;}TIES[v].carry=false;}
+      return;
     }
-    const beams=beamGroups(b.meta.map(m=>m.n),b.meta.map(m=>m.start)).map(g=>new VF.Beam(g.map(i=>b.notes[i]),true));
-    new VF.Formatter().joinVoices([b.voice]).formatToStave([b.voice],st);
-    b.voice.draw(c,st);
+    const beams=[];
+    for(const vb of live)for(const g of beamGroups(vb.meta.map(m=>m.n),vb.meta.map(m=>m.start)))beams.push(new VF.Beam(g.map(i=>vb.notes[i]),!vb.dir));
+    new VF.Formatter().joinVoices(live.map(x=>x.voice)).formatToStave(live.map(x=>x.voice),st);
+    for(const vb of live)vb.voice.draw(c,st);
     beams.forEach(x=>x.setContext(c).draw());
-    b.tuplets.forEach(x=>x.setContext(c).draw());
-    // ties, within the line and from the previous bar
-    b.meta.forEach((m,i)=>{
-      const sn=b.notes[i];
-      if(i===0&&tiePending){drawTie(c,tiePending,m.n.p?sn:null);tiePending=null;}
-      if(i===0&&tieCarry){if(m.n.p)drawTie(c,null,sn);tieCarry=false;}
-      if(m.n.tie){   // filler rests don't count: a tie at the end of what you wrote goes on to the next bar
-        const nm=b.meta[i+1],nx=nm&&!nm.filler?b.notes[i+1]:null;
-        if(nx&&nm.n.p)drawTie(c,sn,nx);
-        else if(!nx)tiePending=sn;
-      }
-      // where the note sits, for tapping it; a filler rest (ni null) means "add at the end"
-      const hx=((sn.getNoteHeadBeginX()+sn.getNoteHeadEndX())/2)*K;
-      if(!NOT.hits.has(it.bar))NOT.hits.set(it.bar,[]);
-      NOT.hits.get(it.bar).push({ni:m.filler?null:m.ni,x:hx});
-      if(m.filler)return;
-      const el=sn.getSVGElement&&sn.getSVGElement();
-      if(el)NOT.els.set(it.bar+':'+m.ni,el);
-    });
-    // chord symbols sit over the note on their beat (or between notes)
-    // anchor chords on the notes you wrote (not on filler rests); with none, spread by beats
+    for(const vb of live)vb.tuplets.forEach(x=>x.setContext(c).draw());
+    if(!NOT.hits.has(it.bar))NOT.hits.set(it.bar,[]);
+    for(const vb of b.voices){
+      const T=TIES[vb.v];
+      vb.meta.forEach((m,i)=>{
+        const sn=vb.notes[i];
+        // ties, within the line and from the previous bar
+        if(i===0&&T.pending){drawTie(c,T.pending,m.n.p&&!m.filler?sn:null);T.pending=null;}
+        if(i===0&&T.carry){if(m.n.p&&!m.filler)drawTie(c,null,sn);T.carry=false;}
+        if(m.n.tie){   // filler rests don't count: a tie at the end of what you wrote goes on to the next bar
+          const nm=vb.meta[i+1],nx=nm&&!nm.filler?vb.notes[i+1]:null;
+          if(nx&&nm.n.p)drawTie(c,sn,nx);
+          else if(!nx)T.pending=sn;
+        }
+        // where the note sits, for tapping it; a filler rest (ni null) means "add at the end"
+        const hx=((sn.getNoteHeadBeginX()+sn.getNoteHeadEndX())/2)*K;
+        const ys=sn.getYs?sn.getYs():[STAFF_TOP+20],hy=(ys.reduce((a,y)=>a+y,0)/ys.length)*K;
+        NOT.hits.get(it.bar).push({ni:m.filler?null:m.ni,x:hx,y:hy,v:vb.v});
+        if(m.filler)return;
+        const el=sn.getSVGElement&&sn.getSVGElement();
+        if(el)NOT.els.set(it.bar+':'+vb.v+':'+m.ni,el);
+      });
+      if(!vb.notes.length){if(T.pending){drawTie(c,T.pending,null);T.pending=null;}T.carry=false;}
+    }
+    // chord symbols sit over the note on their beat (or between notes), anchored on the notes
+    // you wrote in either voice (not filler rests); with none, spread by beats
     const x0=st.getNoteStartX()*K-it.el.offsetLeft,end=(st.getNoteEndX()-6)*K-it.el.offsetLeft;
-    const xs=b.meta.filter(m=>!m.filler||m.slash).map(m=>({beat:m.start,x:b.notes[b.meta.indexOf(m)].getAbsoluteX()*K-it.el.offsetLeft}));
+    const xs=[];
+    for(const vb of live)vb.meta.forEach((m,i)=>{if(!m.filler||m.slash)xs.push({beat:m.start,x:vb.notes[i].getAbsoluteX()*K-it.el.offsetLeft});});
+    xs.sort((a,b)=>a.beat-b.beat);
     if(!xs.length)xs.push({beat:0,x:x0});
     const xAt=beat=>{
       let lo=xs[0],hi=null;for(const p of xs){if(p.beat<=beat+1e-6)lo=p;else{hi=p;break;}}
@@ -154,12 +177,12 @@ function drawStaffRow(row,items,first){
     let right=-1e9;
     for(const ch of it.el.querySelectorAll('.chd')){const l=parseFloat(ch.style.left)||0;if(l<right+6){ch.style.left=Math.round(right+6)+'px';}right=parseFloat(ch.style.left)+ch.offsetWidth;}
   });
-  // a tie running off the end of the line
-  if(tiePending){drawTie(c,tiePending,null);tiePending=null;tieCarry=true;}
+  // ties running off the end of the line
+  for(const v of [1,2]){const T=TIES[v];if(T.pending){drawTie(c,T.pending,null);T.pending=null;T.carry=true;}}
 }
 // highlight the note being played
-function markNote(bar,ni){
+function markNote(bar,ni,v=1){
   if(NOT.cur){NOT.cur.classList.remove('cur');NOT.cur=null;}
-  const el=bar==null?null:NOT.els.get(bar+':'+ni);
+  const el=bar==null?null:NOT.els.get(bar+':'+v+':'+ni);
   if(el){el.classList.add('cur');NOT.cur=el;}
 }

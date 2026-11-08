@@ -67,10 +67,10 @@ function scheduleStep(s,t,beatDur){
 function uiLoop(){
   if(P.playing&&ctx){
     const now=ctx.currentTime;
-    let last=null,mel=null;
-    while(P.uiQ.length&&P.uiQ[0].t<=now){const e=P.uiQ.shift();if(e.mel)mel=e;else last=e;}
+    let last=null;const mel=[];
+    while(P.uiQ.length&&P.uiQ[0].t<=now){const e=P.uiQ.shift();if(e.mel)mel.push(e);else last=e;}
     if(last)showBeat(last);
-    if(mel)showMel(mel.mel);
+    for(const e of mel)showMel(e.mel);
   }
   requestAnimationFrame(uiLoop);
 }

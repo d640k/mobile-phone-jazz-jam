@@ -3,6 +3,7 @@
 // A note is a pitch (C4, Eb5, F#4) or r for a rest, then its length: w h q e s (whole .. sixteenth),
 // then optional . (dotted), t (triplet), ~ (tied to the next note). "Bb4q." "re" "C5et" "G4h~"
 // A chord joins pitches with +, low to high: "D4+F4+Bb4q".
+// A second voice (its own rhythm, stems down) follows " & ": "F5e G5e A5e Bb5e C6h & A4h F4h".
 const MEL_LEN={w:4,h:2,q:1,e:0.5,s:0.25};
 const MEL_RE=/^(r|[A-G][#b]?\d(?:\+[A-G][#b]?\d)*)([whqes])(\.?)(t?)(~?)$/;
 const PC={C:0,D:2,E:4,F:5,G:7,A:9,B:11};
@@ -36,7 +37,13 @@ function fillRests(used,bpb){
   }
   return out;
 }
-function melNotes(str){return (str||'').split(/\s+/).filter(Boolean).map(melTok).filter(Boolean);}
+// the two voices of a bar's string, and back
+function splitVoices(str){const i=(str||'').indexOf('&');return i<0?[(str||'').trim(),'']:[str.slice(0,i).trim(),str.slice(i+1).trim()];}
+function joinVoices(v1,v2){v1=(v1||'').trim();v2=(v2||'').trim();return v2?(v1+' & '+v2).trim():v1;}
+const melVoice2=str=>splitVoices(str)[1];
+function melNotesV(str,v){return melNotesRaw(splitVoices(str)[v===2?1:0]);}
+function melNotes(str){return melNotesRaw(splitVoices(str)[0]);}   // voice 1
+function melNotesRaw(str){return (str||'').split(/\s+/).filter(Boolean).map(melTok).filter(Boolean);}
 function melBeats(str){return melNotes(str).reduce((s,n)=>s+n.beats,0);}
 // key signatures offered for notation, and how black keys are spelled in each
 const NOTE_KEYS=['C','F','Bb','Eb','Ab','Db','G','D','A','E','B'];
@@ -61,19 +68,20 @@ const melCap=i=>i<0?curBpb():curBpb();   // a pickup can be up to a full bar lon
 let melTimeline=null;
 function getTimeline(){
   if(melTimeline)return melTimeline;
-  const bpb=curBpb(),out=[];let hold=null;
-  const push=(barIdx,list,base)=>{
+  const bpb=curBpb(),out=[],hold={1:null,2:null};   // ties carry on per voice
+  const push=(barIdx,list,base,v)=>{
     let at=0;
     list.forEach((n,ni)=>{
-      const abs=base+at;
-      if(hold&&n.p&&n.midis.join()===hold.midis.join()){hold.dur+=n.beats;if(!n.tie)hold=null;}   // continues a tied note
-      else{hold=null;const e={abs,dur:n.beats,midi:n.midi,midis:n.midis,bar:barIdx,ni,start:at};out.push(e);if(n.tie)hold=e;}
+      const abs=base+at,h=hold[v];
+      if(h&&n.p&&n.midis.join()===h.midis.join()){h.dur+=n.beats;if(!n.tie)hold[v]=null;}   // continues a tied note
+      else{hold[v]=null;const e={abs,dur:n.beats,midi:n.midi,midis:n.midis,bar:barIdx,ni,start:at,voice:v};out.push(e);if(n.tie)hold[v]=e;}
       at+=n.beats;
     });
   };
   const pk=melNotes(S.melody.pickup),pb=pk.reduce((s,n)=>s+n.beats,0);
-  push(-1,pk,-pb);
-  S.melody.bars.forEach((s,i)=>push(i,melNotes(s),i*bpb));
+  push(-1,pk,-pb,1);
+  S.melody.bars.forEach((s,i)=>{push(i,melNotesV(s,1),i*bpb,1);push(i,melNotesV(s,2),i*bpb,2);});
+  out.sort((a,b)=>a.abs-b.abs||a.voice-b.voice);
   melTimeline={events:out,pickupBeats:pb,byBar:new Map()};
   for(const e of out){if(!melTimeline.byBar.has(e.bar))melTimeline.byBar.set(e.bar,[]);melTimeline.byBar.get(e.bar).push(e);}
   return melTimeline;
@@ -98,7 +106,7 @@ function scheduleMelodyStep(s,beatPos,bar,t,beatDur,sw,audible){
   for(const e of list){
     if(e.start<within-1e-6||e.start>=within+0.5-1e-6)continue;
     const fb=e.start-beat0,tt=beatStart+(Math.abs(fb-0.5)<1e-3?sw:fb)*beatDur;
-    if(audible)for(const m of e.midis)melVoice(m,tt,Math.max(0.08,e.dur*beatDur*0.92),m===e.midi?82:64);
+    if(audible)for(const m of e.midis)melVoice(m,tt,Math.max(0.08,e.dur*beatDur*0.92),e.voice===2?60:m===e.midi?82:64);
     P.uiQ.push({t:tt,mel:e});
   }
 }
