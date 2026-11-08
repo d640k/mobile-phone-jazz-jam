@@ -224,7 +224,38 @@ function setPlayUI(on){
 }
 
 // Replace the chart text and everything that depends on it.
+// ---------- Undo / redo ----------
+// Every change to the song (chart text or melody) takes a snapshot first; changes made in the same
+// moment (one tap) share one snapshot, so a recorded take or a bar insert undoes in one step.
+// Loading a song starts a fresh history.
+const HIST={undo:[],redo:[],marked:false,restoring:false,max:100};
+const snapSong=()=>({chart:S.chart,melody:JSON.stringify(S.melody),bar:ED.bar,note:ED.note,part:ED.part});
+function histMark(){
+  if(HIST.restoring||HIST.marked)return;
+  HIST.marked=true;queueMicrotask(()=>{HIST.marked=false;});
+  HIST.undo.push(snapSong());if(HIST.undo.length>HIST.max)HIST.undo.shift();
+  HIST.redo.length=0;histUI();
+}
+function histReset(){HIST.undo.length=0;HIST.redo.length=0;histUI();}
+function histUI(){if($('edUndo')){$('edUndo').disabled=!HIST.undo.length;$('edRedo').disabled=!HIST.redo.length;}}
+function histGo(from,to){
+  const snap=from.pop();if(!snap)return false;
+  to.push(snapSong());
+  HIST.restoring=true;
+  try{
+    S.melody=JSON.parse(snap.melody);melSave();melTimeline=null;
+    applyChartText(snap.chart);
+  }finally{HIST.restoring=false;}
+  if(ED.open){
+    ED.bar=Math.min(snap.bar,rawBars().length-1);ED.part=snap.part;
+    ED.note=snap.note!=null&&snap.note<toksOf(ED.bar).length?snap.note:null;STACK.ref=null;
+    layout();renderGrid();renderEditor();
+  }
+  histUI();return true;
+}
+const undo=()=>histGo(HIST.undo,HIST.redo),redo=()=>histGo(HIST.redo,HIST.undo);
 function applyChartText(text){
+  histMark();
   const oldLen=chartSong.bars.length;
   S.chart=text;store.set('chart',S.chart);
   chartSong=parseChart(S.chart,curBpb());melFit(chartSong.bars.length);melTimeline=null;
@@ -890,6 +921,7 @@ function loadChart(chart,name,opts={}){
   S.keySig=NOTE_KEYS.includes(opts.keySig)?opts.keySig:'C';store.set('keySig',S.keySig);$('keySig').value=S.keySig;
   if(REC.review){REC.review=false;$('recPanel').hidden=true;}
   applyChartText(chart);setSongName(name);setComposer(opts.composer||'');
+  queueMicrotask(histReset);
   if(opts.bpm)setBpm(opts.bpm);
   if(opts.swing)setSlider('Swing',opts.swing);
 }
@@ -975,6 +1007,15 @@ function wireKeys(){
       else if(ED.open&&!$('textDlg').open){closeEditor();e.preventDefault();}
       return;
     }
+    // Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y (not while typing, where the text box has its own undo)
+    if((e.ctrlKey||e.metaKey)&&!e.altKey&&/^[zy]$/i.test(e.key)){
+      const t=(document.activeElement?.tagName||'').toLowerCase();
+      if(!['sl-input','sl-textarea','input','textarea'].includes(t)){
+        const again=e.key.toLowerCase()==='y'||e.shiftKey;
+        if(again?redo():undo())e.preventDefault();
+        return;
+      }
+    }
     if(!ED.open||e.ctrlKey||e.metaKey||e.altKey)return;
     const tag=(document.activeElement?.tagName||'').toLowerCase();
     if(['sl-input','sl-textarea','input','textarea','sl-radio-group','sl-select'].includes(tag))return;
@@ -1048,6 +1089,7 @@ function init(){
   $('recSnap').addEventListener('sl-change',e=>{REC.snap=e.target.value==='snap';recRestore();recApply();});
   $('recKeep').onclick=()=>recDone(true);$('recDiscard').onclick=()=>recDone(false);
   $('recAgain').onclick=()=>{recRestore();REC.review=false;$('recPanel').hidden=true;if(S.loop)recStart();else{ED.bar=REC.from;recStart();}};
+  $('edUndo').onclick=undo;$('edRedo').onclick=redo;
   $('edInsert').onclick=insertBar;$('edDelete').onclick=deleteBar;
   // song
   refreshSongList();
@@ -1120,6 +1162,7 @@ function init(){
   requestAnimationFrame(uiLoop);
   new ResizeObserver(()=>{if(ED.open)showSel();}).observe($('chartWrap'));
   if(document.fonts)document.fonts.ready.then(layoutLines);
+  queueMicrotask(histReset);   // nothing to undo at startup
 }
 // Shoelace components are ES modules; wait for them before touching their properties.
 const SL_TAGS=['sl-tab-group','sl-tab','sl-tab-panel','sl-range','sl-select','sl-option','sl-switch','sl-radio-group','sl-radio-button','sl-drawer','sl-dialog','sl-input','sl-textarea'];

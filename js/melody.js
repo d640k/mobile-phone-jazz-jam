@@ -50,9 +50,9 @@ function melSave(){store.set('melody',S.melody);}
 // keep one melody entry per chart bar
 function melFit(n){const b=S.melody.bars;while(b.length<n)b.push('');if(b.length>n&&!b.slice(n).some(Boolean))b.length=n;}
 function melGet(i){return i<0?S.melody.pickup:(S.melody.bars[i]||'');}
-function melSet(i,str){if(i<0)S.melody.pickup=str;else{melFit(i+1);S.melody.bars[i]=str;}melSave();melTimeline=null;}
-function melInsertBar(i){melFit(i);S.melody.bars.splice(i,0,'');melSave();melTimeline=null;}
-function melDeleteBar(i){S.melody.bars.splice(i,1);melSave();melTimeline=null;}
+function melSet(i,str){histMark();if(i<0)S.melody.pickup=str;else{melFit(i+1);S.melody.bars[i]=str;}melSave();melTimeline=null;}
+function melInsertBar(i){histMark();melFit(i);S.melody.bars.splice(i,0,'');melSave();melTimeline=null;}
+function melDeleteBar(i){histMark();S.melody.bars.splice(i,1);melSave();melTimeline=null;}
 const melCap=i=>i<0?curBpb():curBpb();   // a pickup can be up to a full bar long
 
 // ---- playback timeline: ties merged, positions in beats from the start of bar 1 ----

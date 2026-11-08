@@ -831,6 +831,47 @@ async def melody_arrow_keys_step_notes(c):
     ok(await ev(pg, '$("edNotes").getBoundingClientRect().width') > 100, 'note buttons show when focused')
 
 @test
+async def undo_redo(c):
+    pg = await c.page(PHONE, storage={'chart': BLUES, 'keySig': 'F', 'melody': {'pickup': '', 'bars': ['F4q G4q']}})
+    await pg.wait_for_function('document.querySelectorAll(".staff svg").length>0', timeout=8000)
+    await pg.locator('#grid .cell:not(.pick)').nth(0).click(); await pg.click('#edPartMel')
+    ok(await pg.locator('#edUndo').is_disabled() and await pg.locator('#edRedo').is_disabled(), 'nothing to undo at first')
+    await pg.click('#edLens [data-len="q"]')
+    await key_down(pg, 69); await key_down(pg, 72)     # A4, then C5 fills the bar -> on to bar 2
+    ok(await ev(pg, 'melGet(0)') == 'F4q G4q A4q C5q' and await ev(pg, 'ED.bar') == 1, 'entered')
+    await pg.click('#edUndo')
+    ok(await ev(pg, 'melGet(0)') == 'F4q G4q A4q' and await ev(pg, 'ED.bar') == 0, 'undo one note, back in bar 1')
+    await pg.click('#edUndo')
+    ok(await ev(pg, 'melGet(0)') == 'F4q G4q', 'undo again')
+    await pg.click('#edRedo'); await pg.click('#edRedo')
+    ok(await ev(pg, 'melGet(0)') == 'F4q G4q A4q C5q' and await pg.locator('#edRedo').is_disabled(), 'redo both')
+    # chords and bar inserts too, one step each
+    ok(await ev(pg, 'ED.bar') == 1, 'redo puts you back where entry had moved on to')
+    await pg.click('#edPartCh'); await pg.click('#edPrev')
+    await chip(pg, 'edQuals', 'maj7').click()
+    ok(await ev(pg, 'splitChart(S.chart)[0].toks.join()') == 'Fmaj7', await ev(pg, 'splitChart(S.chart)[0].toks.join()'))
+    await pg.click('#edInsert')
+    ok(await ev(pg, 'chartSong.bars.length') == 13 and await ev(pg, 'S.melody.bars[1]') == '', 'inserted')
+    await pg.click('#edUndo')
+    ok(await ev(pg, 'chartSong.bars.length') == 12 and await ev(pg, 'S.melody.bars[0]') == 'F4q G4q A4q C5q', 'insert undone in one step')
+    await pg.click('#edUndo')
+    ok(await ev(pg, 'splitChart(S.chart)[0].toks.join()') == 'F7', 'chord change undone')
+    # a new change clears redo
+    await chip(pg, 'edQuals', 'm7').click()
+    ok(await pg.locator('#edRedo').is_disabled(), 'new change clears redo')
+    # keyboard shortcuts (not while typing)
+    await pg.keyboard.press('Control+z')
+    ok(await ev(pg, 'splitChart(S.chart)[0].toks.join()') == 'F7', 'Ctrl+Z')
+    await pg.keyboard.press('Control+Shift+z')
+    ok(await ev(pg, 'splitChart(S.chart)[0].toks.join()') == 'Fm7', 'Ctrl+Shift+Z')
+    await pg.keyboard.press('Control+z'); await pg.keyboard.press('Control+y')
+    ok(await ev(pg, 'splitChart(S.chart)[0].toks.join()') == 'Fm7', 'Ctrl+Y')
+    # loading a song starts fresh
+    await ev(pg, 'loadPreset("Blues in Bb")'); await pg.wait_for_timeout(50)
+    ok(await ev(pg, 'HIST.undo.length') == 0, 'fresh history after loading')
+    ok(not pg.errors, pg.errors)
+
+@test
 async def melody_pickup_and_bar_ops(c):
     pg = await c.page(PHONE, storage={'chart': BLUES, 'melody': {'pickup': '', 'bars': ['F5w', 'Bb4w', 'A4w']}})
     await pg.wait_for_function('document.querySelectorAll(".staff svg").length>0', timeout=8000)
