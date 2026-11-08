@@ -385,7 +385,7 @@ function renderEditor(){
   // text mode
   if(document.activeElement!==$('edInput')){$('edInput').value=isMel?melGet(ED.bar):(raw[ED.bar]?resolveToks(raw,ED.bar):[]).join(' ');$('edErr').textContent='';}
   $('edInput').label=isMel?(ED.bar<0?'Pickup melody':`Melody in bar ${n||ED.bar+1}`):`Chords in bar ${n||ED.bar+1}`;
-  $('edInput').helpText=isMel?'Notes like F5q D5e C5e A4h: pitch, then w h q e s; add . for dotted, t for triplet, ~ to tie. r is a rest; D4+F4+Bb4q is a chord. Enter applies.':'Up to 4 chords, separated by spaces. “/” holds a beat, e.g. C7 / / F7. Enter applies.';
+  $('edInput').helpText=isMel?'Notes like F5q D5e C5e A4h: pitch, then w h q e s; add . for dotted, t for triplet, ~ to tie. r is a rest; D4+F4+Bb4q is a chord; / alone gives rhythm slashes. Enter applies.':'Up to 4 chords, separated by spaces. “/” holds a beat, e.g. C7 / / F7. Enter applies.';
   $('edPrev').disabled=ED.bar<=(isMel?-1:0);$('edNext').disabled=ED.bar>=raw.length-1;
   $('edDelete').disabled=raw.length<2;
 }
@@ -400,6 +400,7 @@ function setBarLabel(v){
 function applyBarText(){
   const v=$('edInput').value.trim(),toks=v.split(/\s+/).filter(Boolean);
   if(ED.part==='melody'){
+    if(v==='/'){$('edErr').textContent='';melSet(ED.bar,'/');renderGrid();renderEditor();return;}   // rhythm slashes
     const bad=toks.filter(t=>!melTok(t));
     if(bad.length){$('edErr').textContent=`Don’t know ${bad.map(b=>'“'+b+'”').join(', ')}. Use e.g. F5q, Bb4e., re.`;return;}
     const used=melBeats(v);
@@ -466,6 +467,7 @@ function renderMelEditor(){
   const tt=tieTarget();$('edTie').setAttribute('aria-pressed',String(!!(tt&&tt.toks[tt.i].endsWith('~'))));$('edTie').disabled=!tt;
   if(ED.note!=null)$('edRest').setAttribute('aria-label',ED.insert?'Insert a rest':'Make this note a rest');else $('edRest').removeAttribute('aria-label');
   $('edChord').setAttribute('aria-pressed',String(ED.chord));
+  $('edSlash').setAttribute('aria-pressed',String(isSlashBar(melGet(ED.bar))));$('edSlash').disabled=ED.bar<0;
   const used=melBeats(melGet(ED.bar)),cap=curBpb();
   $('edFill').textContent=`${fmtBeats(used)} of ${cap} beats`;
   $('edRec').setAttribute('aria-label',S.loop?`Record bars ${S.loop.a+1} to ${S.loop.b+1}`:`Record from bar ${Math.max(0,ED.bar)+1}`);
@@ -547,7 +549,7 @@ function melAdd(pitch){   // pitch name, or 'r' for a rest; returns {bar,i} of t
     melMsg(ED.note!=null?`Changed. Now on note ${ED.note+1}.`:'Changed. Back to adding at the end.');
     renderGrid();renderEditor();return at;
   }
-  const cur=melGet(ED.bar),used=melBeats(cur),nb=melTok(tok).beats;
+  const cur=isSlashBar(melGet(ED.bar))?'':melGet(ED.bar),used=melBeats(cur),nb=melTok(tok).beats;
   if(used+nb>cap+1e-6){melMsg(`That won’t fit: ${fmtBeats(cap-used)} beat${Math.abs(cap-used-1)<1e-6?'':'s'} left in this bar.`);return null;}
   melSet(ED.bar,(cur+' '+tok).trim());
   const at={bar:ED.bar,i:toksOf(ED.bar).length-1};
@@ -1084,6 +1086,12 @@ function init(){
   $('edSecName').addEventListener('keydown',e=>{if(e.key==='Enter'){setBarLabel(e.target.value);e.preventDefault();}});
   $('edAddEnd').onclick=()=>selectNote(null);
   $('edInsNote').onclick=toggleInsert;
+  $('edSlash').onclick=()=>{
+    const on=!isSlashBar(melGet(ED.bar));
+    melSet(ED.bar,on?'/':'');ED.note=null;STACK.ref=null;
+    if(on&&ED.bar<rawBars().length-1)ED.bar++;   // like a full bar: on to the next one
+    melMsg(on?'Slashes: keep time on the chords. Tap a key there to write a melody instead.':'Slashes removed.');
+    renderGrid();renderEditor();};
   $('edChord').onclick=()=>{ED.chord=!ED.chord;if(!ED.chord)STACK.ref=null;
     melMsg(ED.chord?'Chord: keys you tap stack onto the last note (or the selected one). Tap a key again to take it out. Turn Chord off to go on.':'');renderMelEditor();};$('edMelDel').onclick=melDel;$('edHear').onclick=hearBar;$('edHearAll').onclick=hearFromHere;$('edRec').onclick=recStart;
   $('recSnap').addEventListener('sl-change',e=>{REC.snap=e.target.value==='snap';recRestore();recApply();});

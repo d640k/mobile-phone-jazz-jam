@@ -50,7 +50,9 @@ function melSave(){store.set('melody',S.melody);}
 // keep one melody entry per chart bar
 function melFit(n){const b=S.melody.bars;while(b.length<n)b.push('');if(b.length>n&&!b.slice(n).some(Boolean))b.length=n;}
 function melGet(i){return i<0?S.melody.pickup:(S.melody.bars[i]||'');}
-function melSet(i,str){histMark();if(i<0)S.melody.pickup=str;else{melFit(i+1);S.melody.bars[i]=str;}melSave();melTimeline=null;}
+// A bar written as just "/" shows rhythm slashes (one per beat): no melody, keep time.
+const isSlashBar=str=>(str||'').trim()==='/';
+function melSet(i,str){histMark();if(!isSlashBar(str))str=(str||'').split(' ').filter(t=>t&&t!=='/').join(' ');if(i<0)S.melody.pickup=str;else{melFit(i+1);S.melody.bars[i]=str;}melSave();melTimeline=null;}
 function melInsertBar(i){histMark();melFit(i);S.melody.bars.splice(i,0,'');melSave();melTimeline=null;}
 function melDeleteBar(i){histMark();S.melody.bars.splice(i,1);melSave();melTimeline=null;}
 const melCap=i=>i<0?curBpb():curBpb();   // a pickup can be up to a full bar long

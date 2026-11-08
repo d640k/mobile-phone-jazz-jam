@@ -19,10 +19,10 @@
  const dark=t==='dark'||(t==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);
  document.documentElement.dataset.theme=dark?'dark':'light';document.documentElement.classList.toggle('sl-theme-dark',dark);})();
 </script>
-<link rel="stylesheet" href="vendor/shoelace/light.css?v=26">
-<link rel="stylesheet" href="vendor/shoelace/dark.css?v=26">
-<link rel="stylesheet" href="css/app.css?v=26">
-<script type="module" src="vendor/shoelace/shoelace.js?v=26"></script>
+<link rel="stylesheet" href="vendor/shoelace/light.css?v=27">
+<link rel="stylesheet" href="vendor/shoelace/dark.css?v=27">
+<link rel="stylesheet" href="css/app.css?v=27">
+<script type="module" src="vendor/shoelace/shoelace.js?v=27"></script>
 </head>
 <body>
 <div id="app">
@@ -118,10 +118,11 @@
           <div id="edNotes" class="row wrap noteSlots" role="group" aria-label="Notes in this bar (or tap them on the staff)"></div>
           <div class="row between"><h3 class="sech" id="edLenHead">Note length</h3><span class="row"><button id="edInsNote" class="btn small" aria-pressed="false" hidden>Insert</button><button id="edAddEnd" class="btn small" hidden>Add at end</button><span id="edFill" class="fill" role="status"></span></span></div>
           <div id="edLens" class="chips c7" role="group" aria-labelledby="edLenHead"><button class="chip len" data-len="w" aria-label="Whole note" aria-pressed="false"><svg width="22" height="26" viewBox="0 0 22 26" aria-hidden="true"><ellipse cx="8" cy="20" rx="4.6" ry="3.2" transform="rotate(-20 8 20)" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></button><button class="chip len" data-len="h" aria-label="Half note" aria-pressed="false"><svg width="22" height="26" viewBox="0 0 22 26" aria-hidden="true"><ellipse cx="8" cy="20" rx="4.6" ry="3.2" transform="rotate(-20 8 20)" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12.3 19V3" stroke="currentColor" stroke-width="1.6"/></svg></button><button class="chip len" data-len="q" aria-label="Quarter note" aria-pressed="false"><svg width="22" height="26" viewBox="0 0 22 26" aria-hidden="true"><ellipse cx="8" cy="20" rx="5" ry="3.6" transform="rotate(-20 8 20)" fill="currentColor"/><path d="M12.3 19V3" stroke="currentColor" stroke-width="1.6"/></svg></button><button class="chip len" data-len="e" aria-label="Eighth note" aria-pressed="false"><svg width="22" height="26" viewBox="0 0 22 26" aria-hidden="true"><ellipse cx="8" cy="20" rx="5" ry="3.6" transform="rotate(-20 8 20)" fill="currentColor"/><path d="M12.3 19V3" stroke="currentColor" stroke-width="1.6"/><path d="M12.3 3c1 4 6 5 5 11" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></button><button class="chip len" data-len="s" aria-label="Sixteenth note" aria-pressed="false"><svg width="22" height="26" viewBox="0 0 22 26" aria-hidden="true"><ellipse cx="8" cy="20" rx="5" ry="3.6" transform="rotate(-20 8 20)" fill="currentColor"/><path d="M12.3 19V3" stroke="currentColor" stroke-width="1.6"/><path d="M12.3 3c1 4 6 5 5 11" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M12.3 8c1 4 6 5 5 10" fill="none" stroke="currentColor" stroke-width="1.8"/></svg></button><button id="edDot" class="chip" aria-label="Dotted" aria-pressed="false"><span class="big">•</span></button><button id="edTri" class="chip" aria-label="Triplet" aria-pressed="false"><i class="tri">3</i></button></div>
-          <div class="chips c4">
+          <div class="chips c5">
             <button id="edRest" class="btn">Rest</button>
             <button id="edTie" class="btn" aria-pressed="false">Tie</button>
             <button id="edChord" class="btn" aria-pressed="false">Chord</button>
+            <button id="edSlash" class="btn" aria-pressed="false" aria-label="Rhythm slashes for this bar"><svg width="22" height="16" viewBox="0 0 22 16" aria-hidden="true"><path d="M2 14L7 2M9 14l5-12M16 14l5-12" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>
             <button id="edMelDel" class="btn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M21 5H9l-6 7 6 7h12z"/><path d="M12 9l6 6M18 9l-6 6"/></svg>Delete</button>
           </div>
           <p id="edMelMsg" class="hint" role="status">Pick a length and tap keys to add notes. Tap a note on the staff to change it.</p>
@@ -248,21 +249,21 @@
   <button id="textApply" slot="footer" class="btn primary">Apply</button>
 </sl-dialog>
 
-<script src="js/theory.js?v=26"></script>
-<script src="js/chartedit.js?v=26"></script>
-<script src="js/presets.js?v=26"></script>
-<script src="js/state.js?v=26"></script>
-<script src="js/sections.js?v=26"></script>
-<script src="js/samples.js?v=26"></script>
-<script src="js/audio.js?v=26"></script>
-<script src="js/melody.js?v=26"></script>
-<script src="js/notation.js?v=26"></script>
-<script src="js/scheduler.js?v=26"></script>
-<script src="js/styles/swing.js?v=26"></script>
-<script src="js/styles/bossa.js?v=26"></script>
-<script src="js/styles/waltz.js?v=26"></script>
-<script src="js/styles/samba.js?v=26"></script>
-<script src="js/drive.js?v=26"></script>
-<script src="js/ui.js?v=26"></script>
+<script src="js/theory.js?v=27"></script>
+<script src="js/chartedit.js?v=27"></script>
+<script src="js/presets.js?v=27"></script>
+<script src="js/state.js?v=27"></script>
+<script src="js/sections.js?v=27"></script>
+<script src="js/samples.js?v=27"></script>
+<script src="js/audio.js?v=27"></script>
+<script src="js/melody.js?v=27"></script>
+<script src="js/notation.js?v=27"></script>
+<script src="js/scheduler.js?v=27"></script>
+<script src="js/styles/swing.js?v=27"></script>
+<script src="js/styles/bossa.js?v=27"></script>
+<script src="js/styles/waltz.js?v=27"></script>
+<script src="js/styles/samba.js?v=27"></script>
+<script src="js/drive.js?v=27"></script>
+<script src="js/ui.js?v=27"></script>
 </body>
 </html>

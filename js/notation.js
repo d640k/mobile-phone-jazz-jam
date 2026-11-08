@@ -20,6 +20,15 @@ const vfKey=p=>p[0].toLowerCase()+p.slice(1,-1)+'/'+p.slice(-1);
 // fill: complete the bar with filler rests (not for a pickup)
 function vfBar(str,fill=true){
   const VF=NOT.vf,ns=melNotes(str),notes=[],tuplets=[],meta=[];
+  if(isSlashBar(str)){   // rhythm slashes: one slash per beat on the middle line, no stems
+    for(let k=0;k<curBpb();k++){
+      const sn=new VF.StaveNote({keys:['b/4'],duration:'q',type:'s'});
+      if(sn.setStemStyle)sn.setStemStyle({strokeStyle:'transparent',fillStyle:'transparent'});
+      notes.push(sn);meta.push({n:{beats:1,d:'q',p:null},start:k,ni:k,filler:true,slash:true});
+    }
+    const voice=new VF.Voice({num_beats:curBpb(),beat_value:4}).setMode(VF.Voice.Mode.SOFT);voice.addTickables(notes);
+    return {notes,voice,tuplets,meta};
+  }
   if(fill){const used=ns.reduce((s,n)=>s+n.beats,0);for(const d of fillRests(used,curBpb())){const r=melTok('r'+d);r.filler=true;ns.push(r);}}
   let tri=[],triBeats=0,at=0;
   const flush=()=>{if(tri.length>1)tuplets.push(new VF.Tuplet(tri,{num_notes:3,notes_occupied:2,location:VF.Tuplet.LOCATION_BOTTOM}))   /* below: keeps the chord row clear */;tri=[];triBeats=0;};
@@ -58,7 +67,7 @@ function beamGroups(ns,starts){
 }
 // width (px) a bar's melody needs
 function notationMinWidth(str,bar){
-  const VF=NOT.vf;if(bar<0&&!melNotes(str).length)return 44;
+  const VF=NOT.vf;if(bar<0&&!melNotes(str).length&&!isSlashBar(str))return 44;
   const b=vfBar(str,bar>=0);
   const w=new VF.Formatter().joinVoices([b.voice]).preCalculateMinTotalWidth([b.voice]);
   // comfortable spacing grows with duration (as engravers do), plus room for accidentals
@@ -130,7 +139,7 @@ function drawStaffRow(row,items,first){
     // chord symbols sit over the note on their beat (or between notes)
     // anchor chords on the notes you wrote (not on filler rests); with none, spread by beats
     const x0=st.getNoteStartX()*K-it.el.offsetLeft,end=(st.getNoteEndX()-6)*K-it.el.offsetLeft;
-    const xs=b.meta.filter(m=>!m.filler).map(m=>({beat:m.start,x:b.notes[b.meta.indexOf(m)].getAbsoluteX()*K-it.el.offsetLeft}));
+    const xs=b.meta.filter(m=>!m.filler||m.slash).map(m=>({beat:m.start,x:b.notes[b.meta.indexOf(m)].getAbsoluteX()*K-it.el.offsetLeft}));
     if(!xs.length)xs.push({beat:0,x:x0});
     const xAt=beat=>{
       let lo=xs[0],hi=null;for(const p of xs){if(p.beat<=beat+1e-6)lo=p;else{hi=p;break;}}

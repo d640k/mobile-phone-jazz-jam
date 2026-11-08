@@ -872,6 +872,37 @@ async def undo_redo(c):
     ok(not pg.errors, pg.errors)
 
 @test
+async def melody_rhythm_slashes(c):
+    pg = await c.page(PHONE, storage={'chart': BLUES, 'melody': {'pickup': '', 'bars': ['F4w']}})
+    await pg.wait_for_function('document.querySelectorAll(".staff svg").length>0', timeout=8000)
+    await pg.locator('#grid .cell:not(.pick)').nth(1).click(); await pg.click('#edPartMel')
+    await pg.click('#edSlash')
+    ok(await ev(pg, 'melGet(1)') == '/' and await ev(pg, 'ED.bar') == 2, 'bar 2 slashes, on to bar 3')
+    await pg.click('#edPrev')
+    ok(await pg.get_attribute('#edSlash', 'aria-pressed') == 'true', 'button shows on')
+    ok(await ev(pg, 'NOT.hits.get(1).length') == 4 and await ev(pg, 'NOT.hits.get(1).every(h=>h.ni==null)'), 'four slashes, not selectable')
+    ok(await ev(pg, 'getTimeline().events.filter(e=>e.bar===1).length') == 0 and await ev(pg, 'melBeats(melGet(1))') == 0, 'slashes play nothing')
+    # chords sit over their beat's slash
+    await ev(pg, 'ED.open&&closeEditor()')
+    await ev(pg, 'applyChartText("| F7 | Bb7 C7 | F7 |")'); await pg.wait_for_timeout(200)
+    xs = await ev(pg, '''(()=>{const c=CELLS[1],ch=[...c.querySelectorAll(".chd")].map(x=>x.getBoundingClientRect().left),
+      row=c.closest(".sys").getBoundingClientRect(),h=NOT.hits.get(1).map(h=>row.left+h.x);return [ch,h]})()''')
+    ok(abs(xs[0][1] - xs[1][2]) < 14, f'second chord over beat 3: {xs}')
+    # a key in a slash bar starts its melody
+    await pg.locator('#grid .cell:not(.pick)').nth(1).click(); await pg.click('#edPartMel')
+    await pg.click('#edLens [data-len="h"]'); await key_down(pg, 70)
+    ok(await ev(pg, 'melGet(1)') == 'A#4h' or await ev(pg, 'melGet(1)') == 'Bb4h', await ev(pg, 'melGet(1)'))
+    ok(await pg.get_attribute('#edSlash', 'aria-pressed') == 'false', 'no longer slashes')
+    await pg.click('#edUndo')
+    ok(await ev(pg, 'melGet(1)') == '/', 'undo brings the slashes back')
+    # typed
+    await pg.click('#edSlash'); ok(await ev(pg, 'melGet(1)') == '', 'toggled off')
+    await pg.click('#edText'); inp = pg.locator('#edInput input'); await inp.fill('/'); await inp.press('Enter')
+    ok(await ev(pg, 'melGet(1)') == '/' and await pg.text_content('#edErr') == '', 'typed /: ' + await ev(pg, 'melGet(1)'))
+    await c.shot(pg, 'melody-slashes')
+    ok(not pg.errors, pg.errors)
+
+@test
 async def melody_pickup_and_bar_ops(c):
     pg = await c.page(PHONE, storage={'chart': BLUES, 'melody': {'pickup': '', 'bars': ['F5w', 'Bb4w', 'A4w']}})
     await pg.wait_for_function('document.querySelectorAll(".staff svg").length>0', timeout=8000)
