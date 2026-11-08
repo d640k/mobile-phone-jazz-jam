@@ -19,10 +19,10 @@
  const dark=t==='dark'||(t==='system'&&matchMedia('(prefers-color-scheme: dark)').matches);
  document.documentElement.dataset.theme=dark?'dark':'light';document.documentElement.classList.toggle('sl-theme-dark',dark);})();
 </script>
-<link rel="stylesheet" href="vendor/shoelace/light.css?v=24">
-<link rel="stylesheet" href="vendor/shoelace/dark.css?v=24">
-<link rel="stylesheet" href="css/app.css?v=24">
-<script type="module" src="vendor/shoelace/shoelace.js?v=24"></script>
+<link rel="stylesheet" href="vendor/shoelace/light.css?v=25">
+<link rel="stylesheet" href="vendor/shoelace/dark.css?v=25">
+<link rel="stylesheet" href="css/app.css?v=25">
+<script type="module" src="vendor/shoelace/shoelace.js?v=25"></script>
 </head>
 <body>
 <div id="app">
@@ -162,6 +162,7 @@
         <sl-tab-panel name="song">
           <div class="form">
             <sl-input id="songName" label="Song" maxlength="60" autocomplete="off"></sl-input>
+            <sl-input id="composer" label="Composer" maxlength="60" autocomplete="off"></sl-input>
             <sl-select id="openSong" placeholder="Open…" label="Open a song or preset" hoist></sl-select>
             <div class="row">
               <button id="saveSong" class="btn grow">Save</button>
@@ -245,21 +246,21 @@
   <button id="textApply" slot="footer" class="btn primary">Apply</button>
 </sl-dialog>
 
-<script src="js/theory.js?v=24"></script>
-<script src="js/chartedit.js?v=24"></script>
-<script src="js/presets.js?v=24"></script>
-<script src="js/state.js?v=24"></script>
-<script src="js/sections.js?v=24"></script>
-<script src="js/samples.js?v=24"></script>
-<script src="js/audio.js?v=24"></script>
-<script src="js/melody.js?v=24"></script>
-<script src="js/notation.js?v=24"></script>
-<script src="js/scheduler.js?v=24"></script>
-<script src="js/styles/swing.js?v=24"></script>
-<script src="js/styles/bossa.js?v=24"></script>
-<script src="js/styles/waltz.js?v=24"></script>
-<script src="js/styles/samba.js?v=24"></script>
-<script src="js/drive.js?v=24"></script>
-<script src="js/ui.js?v=24"></script>
+<script src="js/theory.js?v=25"></script>
+<script src="js/chartedit.js?v=25"></script>
+<script src="js/presets.js?v=25"></script>
+<script src="js/state.js?v=25"></script>
+<script src="js/sections.js?v=25"></script>
+<script src="js/samples.js?v=25"></script>
+<script src="js/audio.js?v=25"></script>
+<script src="js/melody.js?v=25"></script>
+<script src="js/notation.js?v=25"></script>
+<script src="js/scheduler.js?v=25"></script>
+<script src="js/styles/swing.js?v=25"></script>
+<script src="js/styles/bossa.js?v=25"></script>
+<script src="js/styles/waltz.js?v=25"></script>
+<script src="js/styles/samba.js?v=25"></script>
+<script src="js/drive.js?v=25"></script>
+<script src="js/ui.js?v=25"></script>
 </body>
 </html>

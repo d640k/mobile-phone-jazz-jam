@@ -1,5 +1,5 @@
 // ---------- State & storage ----------
-const APP_V='24';   // keep in step with ?v= in index.html and the cache name in sw.js
+const APP_V='25';   // keep in step with ?v= in index.html and the cache name in sw.js
 // Mix defaults (slider positions) and per-output voicing: bus trims and bass EQ.
 // "phone" was tuned by ear on a phone speaker; "head" (headphones/speakers) is calibrated
 // to the same perceived balance using K-weighted loudness.
@@ -19,7 +19,7 @@ const S={
   mute:store.get('mute',{dr:false,bs:false,cp:false}),
   countIn:store.get('countIn',true),tones:store.get('tones',true),
   oct:store.get('oct',null),
-  songName:store.get('songName',''),keyInst:store.get('keyInst','piano'),compInst:store.get('compInst','rhodes'),trio:store.get('trio',false),midiSound:store.get('midiSound',false),leslieFast:false,style:store.get('style','swing'),loop:null,bassFeel:store.get('bassFeel','24'),section:store.get('section','std'),secMutedComp:store.get('secMutedComp',false),dynamics:store.get('dynamics',true),
+  songName:store.get('songName',''),composer:store.get('composer',''),keyInst:store.get('keyInst','piano'),compInst:store.get('compInst','rhodes'),trio:store.get('trio',false),midiSound:store.get('midiSound',false),leslieFast:false,style:store.get('style','swing'),loop:null,bassFeel:store.get('bassFeel','24'),section:store.get('section','std'),secMutedComp:store.get('secMutedComp',false),dynamics:store.get('dynamics',true),
   songs:store.get('songs',{}), // name -> {chart,bpm,swing,saved}
   songsDeleted:store.get('songsDeleted',{}), // name -> deleted-at (for Drive sync)
   theme:store.get('theme','system'),panelOpen:store.get('panelOpen',true),

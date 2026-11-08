@@ -460,6 +460,21 @@ async def drive_new_client_forgets_old_file(c):
     ok(r == [None, None, True, None, None, True], r)
 
 @test
+async def composer_field(c):
+    pg = await c.page(LAPTOP, storage={'chart': BLUES})
+    await pg.locator('#songName input').fill('Blues for Dave'); await pg.locator('#songName input').press('Enter')
+    await pg.locator('#composer input').fill('D. Krstin'); await pg.locator('#composer input').press('Enter')
+    ok(await pg.text_content('#title') == 'Blues for Dave · D. Krstin · Swing', await pg.text_content('#title'))
+    await pg.click('#saveSong')
+    ok(await ev(pg, 'S.songs["Blues for Dave"].composer') == 'D. Krstin', 'saved with the song')
+    await ev(pg, 'loadPreset("Blues in Bb")')
+    ok(await ev(pg, 'S.composer') == '' and await pg.input_value('#composer input') == '', 'a preset has none')
+    await ev(pg, 'loadSong("Blues for Dave")')
+    ok(await pg.input_value('#composer input') == 'D. Krstin' and 'D. Krstin' in await pg.text_content('#title'), 'loaded back')
+    await pg.reload(); await pg.wait_for_timeout(500)
+    ok(await ev(pg, 'S.composer') == 'D. Krstin', 'remembered after reload')
+
+@test
 async def theme_switch(c):
     pg = await c.page(LAPTOP, scheme='light')
     ok(await ev(pg, 'document.documentElement.dataset.theme') == 'light', 'system light')

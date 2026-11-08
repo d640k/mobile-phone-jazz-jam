@@ -843,9 +843,10 @@ function songMsg(t,sticky=false){
 }
 const STYLE_NAMES={swing:'Swing',ballad:'Ballad',waltz:'Jazz waltz (3/4)',bossa:'Bossa nova',samba:'Samba'};
 function updateTitle(){
-  $('title').textContent=[S.songName||'Untitled',STYLE_NAMES[S.style],S.style==='swing'&&S.section!=='std'?curSection().name:''].filter(Boolean).join(' · ');
+  $('title').textContent=[S.songName||'Untitled',S.composer,STYLE_NAMES[S.style],S.style==='swing'&&S.section!=='std'?curSection().name:''].filter(Boolean).join(' · ');
 }
 function setSongName(n){S.songName=n;store.set('songName',n);$('songName').value=n;updateTitle();}
+function setComposer(n){S.composer=(n||'').trim();store.set('composer',S.composer);$('composer').value=S.composer;updateTitle();}
 function setFeel(f){S.bassFeel=['4','2','24'].includes(f)?f:'24';store.set('bassFeel',S.bassFeel);$('bassFeel').value=S.bassFeel;}
 function setDynamics(on){S.dynamics=!!on;store.set('dynamics',S.dynamics);$('cDyn').checked=S.dynamics;}
 function setStyle(v){
@@ -875,6 +876,7 @@ function saveSong(){
   if(!chartSong.segs.length){songMsg('Nothing to save: the chart is empty.',true);return;}
   if(S.songs[name]&&name!==S.songName&&!confirm(`Replace the saved “${name}”?`))return;
   S.songs[name]={chart:S.chart,bpm:S.bpm,swing:S.swing,style:S.style,feel:S.bassFeel,dynamics:S.dynamics,section:S.section,saved:Date.now()};
+  if(S.composer)S.songs[name].composer=S.composer;
   if(melHas())Object.assign(S.songs[name],{melody:JSON.parse(JSON.stringify(S.melody)),keySig:S.keySig});
   if(!store.set('songs',S.songs)){delete S.songs[name];songMsg('Couldn’t save: this browser is blocking storage.',true);return;}
   delete S.songsDeleted[name];store.set('songsDeleted',S.songsDeleted);songsChanged();
@@ -887,14 +889,14 @@ function loadChart(chart,name,opts={}){
   S.melody=opts.melody?JSON.parse(JSON.stringify(opts.melody)):{pickup:'',bars:[]};melSave();melTimeline=null;
   S.keySig=NOTE_KEYS.includes(opts.keySig)?opts.keySig:'C';store.set('keySig',S.keySig);$('keySig').value=S.keySig;
   if(REC.review){REC.review=false;$('recPanel').hidden=true;}
-  applyChartText(chart);setSongName(name);
+  applyChartText(chart);setSongName(name);setComposer(opts.composer||'');
   if(opts.bpm)setBpm(opts.bpm);
   if(opts.swing)setSlider('Swing',opts.swing);
 }
 function loadSong(name){
   const s=S.songs[name];if(!s)return;
   setStyle(s.style||'swing');
-  loadChart(s.chart,name,{bpm:s.bpm,swing:s.swing,melody:s.melody,keySig:s.keySig});
+  loadChart(s.chart,name,{bpm:s.bpm,swing:s.swing,melody:s.melody,keySig:s.keySig,composer:s.composer});
   setSection(s.section||'std',false);if(s.feel)setFeel(s.feel);if(s.dynamics!=null)setDynamics(s.dynamics);
   songMsg(`Loaded “${name}”.`);
 }
@@ -1055,6 +1057,7 @@ function init(){
   });
   $('songName').value=S.songName;
   $('songName').addEventListener('sl-change',e=>setSongName(e.target.value.trim()));
+  $('composer').value=S.composer;$('composer').addEventListener('sl-change',e=>setComposer(e.target.value));
   $('saveSong').onclick=saveSong;$('newSong').onclick=newSong;$('delSong').onclick=deleteSong;
   $('style').addEventListener('sl-change',e=>setStyle(e.target.value));setStyle(S.style);
   $('section').addEventListener('sl-change',e=>setSection(e.target.value,true));setSection(S.section,false);
