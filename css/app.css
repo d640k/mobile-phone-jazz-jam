@@ -279,14 +279,14 @@ body.melEdit #editor{max-height:none;overflow:visible}
 body.melEdit .edFoot{position:static;margin-bottom:0}
 /* staff lines under each line of chords */
 #grid.mel .sys{position:relative;border-left:0}
-#grid.mel .cell{height:calc(24px + var(--staffH));border-right:0;padding-top:2px}
+#grid.mel .cell{height:calc(24px + var(--staffH) + var(--lift,0px) + var(--drop,0px));border-right:0;padding-top:2px}
 #grid.mel .cell.end,#grid.mel .cell.secend{border-right:0}
 #grid.mel .cell.end::after{display:none}
 #grid.mel .cell .n{position:absolute;top:2px;left:4px}
 #grid.mel .cell .ch{position:absolute;top:13px;left:0;right:0;height:22px}
 #grid.mel .cell .chd{position:absolute;top:0;padding-right:0}
 #grid.mel .cell .gap{display:none}
-.staff{position:absolute;left:0;top:28px;pointer-events:none;color:var(--text)}
+.staff{position:absolute;left:0;top:calc(28px + var(--lift,0px));pointer-events:none;color:var(--text)}
 .staff svg{display:block;overflow:visible}
 .staff *{pointer-events:none!important}   /* VexFlow marks notes clickable; taps must reach the bar */
 .staff .vf-stavenote.cur path,.staff .vf-stavenote.cur rect{fill:var(--accent);stroke:var(--accent)}

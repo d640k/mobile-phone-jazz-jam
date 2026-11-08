@@ -926,10 +926,10 @@ async def melody_second_voice(c):
     # tapping a low note picks voice 2, a high one voice 1
     await tap_note(pg, 0, 0)
     sel = await ev(pg, '[ED.voice,ED.note]')
-    x, y = await ev(pg, '''(()=>{const h=NOT.hits.get(0).find(h=>h.v===2&&h.ni===1),row=CELLS[0].closest('.sys').getBoundingClientRect();return [row.left+h.x,row.top+28+h.y]})()''')
+    x, y = await ev(pg, '''(()=>{const h=NOT.hits.get(0).find(h=>h.v===2&&h.ni===1),row=CELLS[0].closest('.sys').getBoundingClientRect(),lift=+(CELLS[0].closest('.sys').dataset.lift||0);return [row.left+h.x,row.top+28+lift+h.y]})()''')
     await pg.mouse.click(x, y)
     ok(await ev(pg, '[ED.voice,ED.note]') == [2, 1], 'tap the low F4: voice 2, note 2')
-    x, y = await ev(pg, '''(()=>{const h=NOT.hits.get(0).find(h=>h.v===1&&h.ni===4),row=CELLS[0].closest('.sys').getBoundingClientRect();return [row.left+h.x,row.top+28+h.y]})()''')
+    x, y = await ev(pg, '''(()=>{const h=NOT.hits.get(0).find(h=>h.v===1&&h.ni===4),row=CELLS[0].closest('.sys').getBoundingClientRect(),lift=+(CELLS[0].closest('.sys').dataset.lift||0);return [row.left+h.x,row.top+28+lift+h.y]})()''')
     await pg.mouse.click(x, y)
     ok(await ev(pg, '[ED.voice,ED.note]') == [1, 4], 'tap the high G5: voice 1, note 5')
     # editing a selected voice-2 note; undo; text mode shows the voice
@@ -947,6 +947,30 @@ async def melody_second_voice(c):
     ok(' & ' in await ev(pg, 'JSON.stringify(S.melody)'), 'stored')
     await c.shot(pg, 'melody-two-voices')
     ok(not pg.errors, pg.errors)
+
+@test
+async def melody_clears_chord_symbols(c):
+    # two voices force voice-1 stems up; high notes would hit the chord symbols
+    for dev in (PHONE, LAPTOP):
+        pg = await c.page(dev, storage={'chart': '| Fmaj7 | Gm7 C7 | Am7 D7 | Gm7 C7 |', 'keySig': 'F',
+            'melody': {'pickup': '', 'bars': ['F5e G5e A5e Bb5e C6h & A4h F4h', 'D5q E5q F5h & Bb3w', 'C6w', 'G4q A4q Bb4h']}})
+        await pg.wait_for_function('document.querySelectorAll(".staff svg").length>0', timeout=8000)
+        bad = await ev(pg, '''(()=>{const out=[];for(const row of document.querySelectorAll("#grid .sys")){
+            const st=row.querySelector(".staff");if(!st)continue;
+            const marks=[...st.querySelectorAll("svg path,svg rect,svg text")].map(e=>e.getBoundingClientRect()).filter(r=>r.width||r.height);
+            for(const ch of row.querySelectorAll(".chd")){const c=ch.getBoundingClientRect();
+              if(marks.some(m=>m.top<c.bottom-2&&m.bottom>c.top&&m.left<c.right&&m.right>c.left))out.push(ch.textContent);}
+            const next=row.nextElementSibling;
+            if(next&&next.classList.contains("sys")){const nb=next.getBoundingClientRect().top;if(marks.some(m=>m.bottom>nb+1))out.push("into next line");}}
+          return out})()''')
+        ok(not bad, f'notation overlaps: {bad}')
+        lifts = await ev(pg, '[...document.querySelectorAll("#grid .sys")].map(r=>+(r.dataset.lift||0))')
+        ok(any(lifts), 'a line moved down to make room')
+        await c.shot(pg, 'melody-clear-chords-' + ('phone' if dev is PHONE else 'laptop'))
+        ok(not pg.errors, pg.errors)
+    # an ordinary melody stays compact
+    pg = await mel_page(c, PHONE)
+    ok(await ev(pg, '[...document.querySelectorAll("#grid .sys")].filter(r=>+(r.dataset.lift||0)>12).length') == 0, 'ordinary lines barely move')
 
 @test
 async def melody_pickup_and_bar_ops(c):

@@ -179,6 +179,24 @@ function drawStaffRow(row,items,first){
   });
   // ties running off the end of the line
   for(const v of [1,2]){const T=TIES[v];if(T.pending){drawTie(c,T.pending,null);T.pending=null;T.carry=true;}}
+  fitStaffRow(row,box,H);
+}
+// Make room for what the notation actually reaches: high notes and up-stems (forced up in a two-
+// voice bar) would run into the chord symbols, low down-stems into the next line. The line moves
+// down (--lift) and/or grows (--drop) just enough; lines that fit stay compact.
+const CHORD_BOTTOM=37,STAFF_Y=28;   // px from the line's top: chord text ends; the staff box starts
+function fitStaffRow(row,box,H){
+  row.style.removeProperty('--lift');row.style.removeProperty('--drop');
+  const bt=box.getBoundingClientRect();let top=1e9,bot=-1e9;
+  for(const el of box.querySelectorAll('svg path,svg rect,svg text,svg line')){
+    const r=el.getBoundingClientRect();if(!r.width&&!r.height)continue;
+    top=Math.min(top,r.top-bt.top);bot=Math.max(bot,r.bottom-bt.top);
+  }
+  if(top>1e8)return;
+  const lift=Math.max(0,Math.ceil(CHORD_BOTTOM-STAFF_Y-top)),drop=Math.max(0,Math.ceil(bot-H+2));
+  if(lift)row.style.setProperty('--lift',lift+'px');
+  if(drop)row.style.setProperty('--drop',drop+'px');
+  row.dataset.lift=lift;
 }
 // highlight the note being played
 function markNote(bar,ni,v=1){

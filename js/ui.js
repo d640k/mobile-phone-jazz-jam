@@ -1072,9 +1072,9 @@ function init(){
     // With the staff showing: a tap on a note selects it; on the staff elsewhere, Melody;
     // on the chord symbols, Chords.
     if($('grid').classList.contains('mel')&&!REC.review){
-      const row=c.closest('.sys').getBoundingClientRect(),onStaff=e.clientY>row.top+28;
+      const rowEl=c.closest('.sys'),row=rowEl.getBoundingClientRect(),lift=+(rowEl.dataset.lift||0),onStaff=e.clientY>row.top+28;
       if(onStaff){
-        const hit=noteAt(i,e.clientX-row.left,e.clientY-row.top-28);
+        const hit=noteAt(i,e.clientX-row.left,e.clientY-row.top-28-lift);
         if(!ED.open||ED.bar!==raw||ED.part!=='melody'){openEditor(raw,'melody');}
         if(raw<0)hit.v=1;
         if(ED.voice!==hit.v){ED.voice=hit.v;renderGrid();}
