@@ -93,6 +93,7 @@ function drawStaffRow(row,items,first){
     if(j===0){st.addClef('treble').addKeySignature(S.keySig);if(first)st.addTimeSignature(curBpb()+'/4');}
     else st.setBegBarType(VF.Barline.type.NONE);
     if(it.bar===chartSong.bars.length-1)st.setEndBarType(VF.Barline.type.END);
+    else if(chartSong.labels[it.bar+1])st.setEndBarType(VF.Barline.type.DOUBLE);   // end of a section
     st.setContext(c).draw();
     const str=melGet(it.bar),b=vfBar(str,it.bar>=0);
     const chords=it.el.querySelectorAll('.chd');

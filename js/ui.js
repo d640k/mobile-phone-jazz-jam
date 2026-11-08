@@ -68,9 +68,10 @@ function renderGrid(){
     if(LOOP.sel&&i===LOOP.first)c.classList.add('loopfirst');
     if(ED.open&&chartSong.src[i]===ED.bar)c.classList.add('sel');
     if(i===chartSong.bars.length-1)c.classList.add('end');
+    else if(chartSong.labels[i+1])c.classList.add('secend');   // double bar line before a new section
     const n=document.createElement('span');n.className='n';
     const lab=chartSong.labels[i];
-    if(lab){const l=document.createElement('span');l.className='lbl';l.textContent=lab;n.appendChild(l);c.classList.add('sec');}
+    if(lab){const l=document.createElement('span');l.className='lbl';l.textContent=lab;n.appendChild(l);c.classList.add('secstart');}
     const num=document.createElement('span');num.className='num';num.textContent=String(i+1);n.appendChild(num);
     const ch=document.createElement('span');ch.className='ch';ch.setAttribute('aria-hidden','true');
     // chords spread across the bar by beats once there's room

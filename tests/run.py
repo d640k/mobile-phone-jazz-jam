@@ -77,6 +77,27 @@ async def engine_parse_and_labels(c):
     ok(r2 == ['Dm7', 'G7'], 'a %% bar with chord changes spells them out: %r' % r2)
 
 @test
+async def engine_section_start_names_held_chord(c):
+    pg = await c.page()
+    r = await ev(pg, '''(()=>{const p=parseChart("[A] Cmaj7 | % | Dm7 | G7 |\\n[B] G7 | % | Cmaj7 / Dm7 / | Dm7 |",4);
+      return p.bars.map(b=>b.map(x=>(x.dim?"~":"")+x.t).join(" "))})()''')
+    ok(r == ['Cmaj7', '', 'Dm7', 'G7', 'G7', '', 'Cmaj7 Dm7', ''], r)
+
+@test
+async def section_double_bar_lines(c):
+    chart = '[A] C | F | C | G |\n[B] F | % | C | G |\n[A] C | F | G | C |'
+    pg = await c.page(storage={'chart': chart})
+    r = await ev(pg, 'CELLS.map((c,i)=>c.classList.contains("secend")?i:c.classList.contains("end")?"end"+i:null).filter(x=>x!==null)')
+    ok(r == [3, 7, 'end11'], r)
+    st = await ev(pg, '[getComputedStyle(CELLS[3]).borderRightStyle,getComputedStyle(CELLS[11]).borderRightStyle]')
+    ok(st == ['double', 'solid'], st)
+    await c.shot(pg, 'section-bars-chords')
+    pg = await c.page(LAPTOP, storage={'chart': chart, 'melody': {'pickup': '', 'bars': ['C5w'] * 12}}, scheme='light')
+    await pg.wait_for_function('document.querySelectorAll(".staff svg").length>0', timeout=8000)
+    await c.shot(pg, 'section-bars-staff')
+    ok(not pg.errors, pg.errors)
+
+@test
 async def engine_chord_codec_roundtrip(c):
     pg = await c.page()
     bad = await ev(pg, '''(()=>{const L=["C","Cm","C7","Cmaj7","C6","C69","Cm7","Cm6","Cm69","Cm(maj7)","Cm7b5","Cm9b5","C7b5","C7#5","C7#5#9","C9#5","C7b5b9","Bbm7b5","Cdim7",

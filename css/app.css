@@ -105,7 +105,10 @@ button,select,input{font:inherit;color:inherit}
 .sys.measure .chd,.sys.measure .gap{flex:0 0 auto}
 .cell{--k:1;position:relative;height:52px;min-width:52px;padding:2px 10px 4px 8px;border:0;border-right:1.5px solid var(--bar);background:none;color:var(--text);
   text-align:left;display:flex;flex-direction:column;justify-content:space-between;cursor:pointer;touch-action:manipulation;border-radius:0;font:inherit}
-.cell.end{border-right:4px double var(--bar)}
+/* bar lines: double before a new section, thin-thick at the end */
+.cell.secend{border-right:4px double var(--bar)}
+.cell.end{border-right:4px solid var(--bar)}
+.cell.end::after{content:'';position:absolute;top:0;bottom:0;right:3px;width:1.5px;background:var(--bar)}
 .cell .n{font-size:11px;color:var(--dim);display:flex;gap:6px;align-items:center;height:15px}
 .cell .num{visibility:hidden}
 .sys>.cell:first-child .num{visibility:visible}
@@ -277,7 +280,8 @@ body.melEdit .edFoot{position:static;margin-bottom:0}
 /* staff lines under each line of chords */
 #grid.mel .sys{position:relative;border-left:0}
 #grid.mel .cell{height:calc(24px + var(--staffH));border-right:0;padding-top:2px}
-#grid.mel .cell.end{border-right:0}
+#grid.mel .cell.end,#grid.mel .cell.secend{border-right:0}
+#grid.mel .cell.end::after{display:none}
 #grid.mel .cell .n{position:absolute;top:2px;left:4px}
 #grid.mel .cell .ch{position:absolute;top:13px;left:0;right:0;height:22px}
 #grid.mel .cell .chd{position:absolute;top:0;padding-right:0}
