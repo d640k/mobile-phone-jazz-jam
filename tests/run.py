@@ -318,6 +318,20 @@ async def editor_added_13_without_9(c):
     ok(not pg.errors, pg.errors)
 
 @test
+async def engine_voicings_include_written_extensions(c):
+    pg = await c.page()
+    r = await ev(pg, '''Object.fromEntries(["Cmaj7","Cmaj13","Cmaj7(13)","Cm7","Cm11","Cm7(11)","Cm13","C11","C13"].map(t=>{
+      const ch=parseChord(t),s=new Set();
+      for(let k=0;k<30;k++){const v=voicingFor(ch,null,"rootless",{});v.forEach(m=>s.add(((m-ch.root)%12+12)%12));}
+      return [t,[...s].sort((a,b)=>a-b)]}))''')
+    ok(r['Cmaj7'] == [2, 4, 7, 11] and r['Cm7'] == [2, 3, 7, 10], 'plain chords unchanged: %s' % r)
+    ok(9 in r['Cmaj13'] and 9 in r['Cmaj7(13)'] and 9 in r['Cm13'], '13 is played: %s' % r)
+    ok(5 in r['Cm11'] and 5 in r['Cm7(11)'], 'minor 11 is played: %s' % r)
+    ok(2 not in r['Cmaj7(13)'], 'added 13 still has no 9: %s' % r)
+    ok(4 not in r['C11'] and 5 in r['C11'], 'C11 is a 9sus sound: %s' % r)
+    ok(not pg.errors, pg.errors)
+
+@test
 async def editor_two_chords_and_text_toggle(c):
     pg = await c.page(storage={'chart': BLUES})
     await pg.locator('#grid .cell').nth(1).click()          # Bb7

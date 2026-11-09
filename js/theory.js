@@ -67,6 +67,15 @@ function classify(raw){
   if(nat('13'))ext.push(9);
   if(has(/b13/))ext.push(8);
   c.ext=[...new Set(ext)].filter(i=>!c.arp.includes(i));
+  // A careful pianist plays the extension that's written: a written 13 (or a minor 11)
+  // takes the place of the 5th in the comping voicing; a natural 11 on a dominant is a 9sus sound.
+  if(kind==='maj7'||kind==='m7'){
+    const i5=c.comp.indexOf(7);
+    if(nat('13')&&i5>=0)c.comp[i5]=9;
+    else if(kind==='m7'&&nat('11')&&i5>=0)c.comp[i5]=5;
+    else if(kind==='maj7'&&nat('13'))c.comp=[...c.comp.filter(i=>i!==2),9];
+  }
+  if(kind==='dom'&&nat('11')&&!has(/#11|[b#]9|alt|b13|#5|b5/))c.comp=[5,10,2,9];
   return c;
 }
 function parseChord(sym){
