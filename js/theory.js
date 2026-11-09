@@ -57,7 +57,11 @@ function classify(raw){
   if(has(/alt/))ext.push(1,3,6,8);
   if(has(/b9/))ext.push(1);
   if(has(/#9/))ext.push(3);
-  if(nat('9')||has(/add[29]|^2$/)||((nat('11')||nat('13'))&&!has(/[b#]9|alt/)))ext.push(2);
+  // A 13 (or 11) implies the 9, unless it's written as an added note: 7(13), 7add13, m7(11).
+  // Then the chord has no 9 at all, and the comping leaves it out too.
+  const added=/\((?:add)?1[13]\)|add1[13]/.test(raw)&&!nat('9');
+  if(added)c.noNine=true;
+  if(nat('9')||has(/add[29]|^2$/)||((nat('11')||nat('13'))&&!has(/[b#]9|alt/)&&!added))ext.push(2);
   if(nat('11'))ext.push(5);
   if(has(/#11/))ext.push(6);
   if(nat('13'))ext.push(9);
@@ -252,6 +256,8 @@ function voicingFor(ch,prev,type='rootless',opts={}){
       if(s<bs){bs=s;best=v;}
     }
   }
+  // a chord written without its 9 (7(13)): the 9 in the voicing becomes the root
+  if(best&&ch.noNine){const r=((ch.root%12)+12)%12;best=[...new Set(best.map(m=>((m-r)%12+12)%12===2?m-2:m))].sort((a,b)=>a-b);}
   return best;
 }
 // Comping rhythm patterns: [eighth-note slot 0-7, length in eighths]

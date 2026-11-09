@@ -100,7 +100,7 @@ async def section_double_bar_lines(c):
 @test
 async def engine_chord_codec_roundtrip(c):
     pg = await c.page()
-    bad = await ev(pg, '''(()=>{const L=["C","Cm","C7","Cmaj7","C6","C69","Cm7","Cm6","Cm69","Cm(maj7)","Cm7b5","Cm9b5","C7b5","C7#5","C7#5#9","C9#5","C7b5b9","Bbm7b5","Cdim7",
+    bad = await ev(pg, '''(()=>{const L=["C","Cm","C7","Cmaj7","C6","C69","Cm7","Cm6","Cm69","Cm(maj7)","Cm7b5","Cm9b5","C7(13)","Cmaj7(13)","Cm7(13)","Cm7(11)","C7(11)","C7b5","C7#5","C7#5#9","C9#5","C7b5b9","Bbm7b5","Cdim7",
       "C7sus4","C9sus4","C7alt","C9","C13","C7b9","C7#9","C7#11","C13b9","C7b9b13","Cmaj9","Cmaj7#11","Cm9","Cm11","C7/E","Bb7/Ab","F#m7b5","Ebmaj7"];
       return L.filter(t=>{const p=chordParts(t);return !p||chordFromParts(p)!==t;})})()''')
     ok(bad == [], 'codec mangles: %r' % bad)
@@ -295,6 +295,26 @@ async def editor_section_labels(c):
     # the rhythm-section setting still works (a name clash once broke it)
     await ev(pg, 'setSection("blakey",false)')
     ok(await ev(pg, 'S.section') == 'blakey', 'rhythm section setting intact')
+    ok(not pg.errors, pg.errors)
+
+@test
+async def editor_added_13_without_9(c):
+    pg = await c.page(storage={'chart': '| Gb7 | Gb7 |'})
+    await pg.locator('#grid .cell').nth(0).click()
+    tok = lambda: ev(pg, 'splitChart(S.chart)[0].toks.join(" ")')
+    await pg.locator('#edExts [aria-label="13"]').click()
+    ok(await tok() == 'Gb7(13)', '7 + 13 = 7(13): ' + await tok())
+    await pg.locator('#edExts [aria-label="9"]').click()
+    ok(await tok() == 'Gb13', '+ 9 = 13: ' + await tok())
+    await pg.locator('#edExts [aria-label="9"]').click()
+    ok(await tok() == 'Gb7(13)', 'take the 9 out again: ' + await tok())
+    # sound: no 9 in 7(13); 13 keeps it; altered chords unchanged
+    r = await ev(pg, '''["Gb7(13)","Gb7add13","Gb13","Gb7"].map(t=>{const c=parseChord(t);let has9=false;
+      for(let k=0;k<20;k++){const v=voicingFor(c,null,"rootless",{});if(v.some(m=>((m-c.root)%12+12)%12===2))has9=true;}
+      return [!!c.noNine,c.ext.includes(2),has9]})''')
+    ok(r == [[True, False, False], [True, False, False], [False, True, True], [False, False, True]], r)
+    ok(await ev(pg, 'chordFromParts(chordParts("Gb7add13"))') == 'Gb7(13)', 'typed add13')
+    ok('(13)' in await ev(pg, 'CELLS[0].querySelector(".ch").textContent'), 'chart shows (13)')
     ok(not pg.errors, pg.errors)
 
 @test

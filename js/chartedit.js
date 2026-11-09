@@ -47,7 +47,7 @@ function chordParts(tok){
   rest=rest.replace(/[()]/g,'');
   for(const [form,q,ext] of Q_FORMS){
     if(!rest.startsWith(form.replace(/[()]/g,'')))continue;
-    const tail=rest.slice(form.replace(/[()]/g,'').length);
+    const tail=rest.slice(form.replace(/[()]/g,'').length).replace(/^add(?=1[13]$)/,'');
     const found=tail.match(/b5|#5|b9|#9|#11|b13|9|11|13/g)||[];
     if(found.join('')!==tail)continue;                        // something we can't show as buttons
     return {root:m[1],q,ext:[...new Set([...ext,...found])],bass};
@@ -61,9 +61,13 @@ function chordFromParts(p){
   // m7 + b5 is m7b5 (half-diminished); with a 9 it's written m9b5
   if(q==='m7'&&has('b5')){q='m7b5';drop('b5');}
   if(q==='m7b5'&&has('9')){q='m9b5';drop('9');}
-  // fold natural extensions into the usual spelling: C7+9 -> C9, Cm7+9+11 -> Cm11, C7+13 -> C13
-  if(['7','maj7','m7'].includes(q)&&has('13')){q=q.replace('7','13');drop('13','9','11');}
-  else if(['7','m7'].includes(q)&&has('11')&&!has('#11')){q=q.replace('7','11');drop('11','9');}
+  // fold natural extensions into the usual spelling: C7+9 -> C9, Cm7+9+11 -> Cm11, C7+9+13 -> C13.
+  // A 13 (or 11) without a 9 is written as an added note, so the chord keeps saying "no 9": C7(13).
+  const nine=has('9')||has('b9')||has('#9');
+  if(['7','maj7','m7'].includes(q)&&has('13')&&nine){q=q.replace('7','13');drop('13','9','11');}
+  else if(['7','maj7','m7'].includes(q)&&has('13')){drop('13');return p.root+q+ext.join('')+'(13)'+(p.bass&&p.bass!==p.root?'/'+p.bass:'');}
+  else if(['7','m7'].includes(q)&&has('11')&&!has('#11')&&nine){q=q.replace('7','11');drop('11','9');}
+  else if(['7','m7'].includes(q)&&has('11')&&!has('#11')){drop('11');return p.root+q+ext.join('')+'(11)'+(p.bass&&p.bass!==p.root?'/'+p.bass:'');}
   else if(['7','maj7','m7'].includes(q)&&has('9')){q=q.replace('7','9');drop('9');}
   else if(q==='7sus4'&&has('9')){q='9sus4';drop('9');}
   else if(q==='6'&&has('9')){q='69';drop('9');}
