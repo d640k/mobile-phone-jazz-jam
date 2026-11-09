@@ -1180,6 +1180,12 @@ async def chart_scroll_reads_ahead(c):
           return [a.top>=w.top-1&&a.bottom<=w.bottom+1,fits]}})()''')
         ok(r[0], f'bar {bar+1}: playing line not fully visible')
         ok(r[1], f'bar {bar+1}: next line not visible')
+    # starting a loop selection, picking bars and cancelling keep the chart where it is
+    await ev(pg, '$("chartWrap").scrollTop=400'); await pg.wait_for_timeout(100)
+    top = await ev(pg, '$("chartWrap").scrollTop')
+    for js in ('startLoopSelect()', 'loopTap(16)', 'loopTap(18)', 'clearLoop()'):
+        await ev(pg, js); await pg.wait_for_timeout(100)
+        ok(abs(await ev(pg, '$("chartWrap").scrollTop') - top) < 2, f'{js} jumped the chart')
     # back to bar 1 scrolls up again
     await ev(pg, 'followLine(CELLS[0])'); await pg.wait_for_timeout(1500)
     st = await ev(pg, '$("chartWrap").scrollTop')

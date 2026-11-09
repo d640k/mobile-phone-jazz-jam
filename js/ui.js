@@ -58,8 +58,9 @@ function tonesEl(sym){
   for(const t of chordToneNames(sym)){const s=document.createElement('span');s.className=t.tone;s.textContent=t.name;tn.appendChild(s);}
   return tn;
 }
+let KEEP_TOP=null;   // where the chart was scrolled to, kept through a redraw
 function renderGrid(){
-  const g=$('grid');g.innerHTML='';CELLS=[];PICK=null;document.body.classList.toggle('ctones',!!S.chartTones);
+  const g=$('grid');KEEP_TOP=$('chartWrap').scrollTop;g.innerHTML='';CELLS=[];PICK=null;document.body.classList.toggle('ctones',!!S.chartTones);
   if(melOn()&&(S.melody.pickup||(ED.open&&ED.bar===-1))){
     const c=document.createElement('button');c.type='button';c.className='cell pick';c.dataset.bar=-1;
     if(ED.open&&ED.bar===-1)c.classList.add('sel');
@@ -103,7 +104,7 @@ function layoutLines(){
   const mel=melOn()&&!!NOT.vf;
   if(melOn()&&!NOT.vf)loadNotation().then(()=>renderGrid()).catch(e=>{console.error(e);songMsg(e.message,true);});
   g.classList.remove('mel');NOT.els.clear();NOT.hits.clear();NOT.cur=null;   // measure chords in normal flow first
-  const focused=document.activeElement,top=$('chartWrap').scrollTop;
+  const focused=document.activeElement,top=KEEP_TOP??$('chartWrap').scrollTop;KEEP_TOP=null;
   const items=(mel&&PICK?[{el:PICK,bar:-1}]:[]).concat(CELLS.map((el,i)=>({el,bar:i})));
   // 1) measure each bar at its natural width (chords, or the melody if that needs more room)
   const meas=document.createElement('div');meas.className='sys measure';g.innerHTML='';g.appendChild(meas);
@@ -150,7 +151,7 @@ function layoutLines(){
   g.appendChild(addBarBtn());
   if(mel)rows.forEach(([row,its],li)=>{try{drawStaffRow(row,its,li===0);}catch(e){console.error(e);}});
   $('chartWrap').scrollTop=top;
-  if(focused&&g.contains(focused))focused.focus();
+  if(focused&&g.contains(focused))focused.focus({preventScroll:true});
   showSel();
   markSelNote();
 }
@@ -330,7 +331,7 @@ function startLoopSelect(){
   LOOP.sel=true;LOOP.first=null;loopHint('Tap the first bar of the loop.');refreshLoopBtn();renderGrid();
 }
 function loopTap(i){
-  if(LOOP.first===null){LOOP.first=i;loopHint(`Bar ${i+1}. Now tap the last bar of the loop (or the same bar again).`);renderGrid();CELLS[i].focus();}
+  if(LOOP.first===null){LOOP.first=i;loopHint(`Bar ${i+1}. Now tap the last bar of the loop (or the same bar again).`);renderGrid();CELLS[i].focus({preventScroll:true});}
   else setLoop(LOOP.first,i);
 }
 
@@ -1054,6 +1055,7 @@ function loadChart(chart,name,opts={}){
   S.keySig=NOTE_KEYS.includes(opts.keySig)?opts.keySig:'C';store.set('keySig',S.keySig);$('keySig').value=S.keySig;
   if(REC.review){REC.review=false;$('recPanel').hidden=true;}
   applyChartText(chart);setSongName(name);setComposer(opts.composer||'');
+  $('chartWrap').scrollTop=0;   // a different song starts at the top
   queueMicrotask(histReset);
   if(opts.bpm)setBpm(opts.bpm);
   if(opts.swing)setSlider('Swing',opts.swing);
