@@ -342,6 +342,17 @@ async def chart_tones_in_bar_being_played(c):
         await pg.wait_for_timeout(300)
         ok(await ev(pg, '!document.querySelector("#grid .tn")'), 'switch off')
         ok(not pg.errors, pg.errors)
+    # a chord held over several bars keeps its tones in each bar
+    for mel in (False, True):
+        pg = await c.page(PHONE, storage={'chart': '| Cm7 | % | / | F7 |', 'showMel': mel, 'melody': {'pickup': '', 'bars': ['', '', 'Eb5h D5h', '']}}, scheme='light')
+        if mel: await pg.wait_for_function('document.querySelector("#grid .staff")')
+        ok(await ev(pg, 'CELLS.map(c=>c.querySelector(".tn")?.textContent||"")') == ['CE\u266dGB\u266d'] * 3 + ['FACE\u266d'], 'held chord tones')
+        await ev(pg, 'setCur(CELLS[2])')
+        ok(await ev(pg, 'getComputedStyle(CELLS[2].querySelector(".tn")).visibility') == 'visible', 'shown in a held bar')
+        if mel:
+            ok(await ev(pg, 'NOT.els.get("2:1:0").querySelector(".vf-notehead").dataset.tone') == 'gt', 'Eb over held Cm7')
+        await c.shot(pg, 'chart_tones_held_' + ('mel' if mel else 'plain'))
+        ok(not pg.errors, pg.errors)
     # a crowded bar (4 chords) on a phone: tones never overlap and stay on screen
     for scheme in ('light', 'dark'):
         pg = await c.page(PHONE, storage={'chart': TEO, 'showMel': False}, scheme=scheme)

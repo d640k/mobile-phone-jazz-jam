@@ -53,6 +53,11 @@ function togglePanel(){
 let CELLS=[],PICK=null;
 // melody view: the staff is shown when the song has a melody (or you're entering one)
 const melOn=()=>S.showMel&&(melHas()||(ED.open&&ED.part==='melody'));
+function tonesEl(sym){
+  const tn=document.createElement('span');tn.className='tn';
+  for(const t of chordToneNames(sym)){const s=document.createElement('span');s.className=t.tone;s.textContent=t.name;tn.appendChild(s);}
+  return tn;
+}
 function renderGrid(){
   const g=$('grid');g.innerHTML='';CELLS=[];PICK=null;document.body.classList.toggle('ctones',!!S.chartTones);
   if(melOn()&&(S.melody.pickup||(ED.open&&ED.bar===-1))){
@@ -81,10 +86,11 @@ function renderGrid(){
       if(x.beat>at){const gp=document.createElement('span');gp.className='gap';gp.style.flexGrow=x.beat-at;ch.appendChild(gp);}
       const sp=document.createElement('span');sp.className='chd'+(x.dim?' rep':'');sp.style.flexGrow=x.len;sp.dataset.beat=x.beat;
       chordInto(sp,x.t);ch.appendChild(sp);at=x.beat+x.len;
-      if(S.chartTones){const tn=document.createElement('span');tn.className='tn';
-        for(const t of chordToneNames(x.t)){const s=document.createElement('span');s.className=t.tone;s.textContent=t.name;tn.appendChild(s);}
-        sp.appendChild(tn);}
+      if(S.chartTones)sp.appendChild(tonesEl(x.t));
     });
+    // a chord held over from an earlier bar: no symbol, but its tones still show here
+    if(!b.length&&S.chartTones){const held=chordAt(i,0);
+      if(held){const sp=document.createElement('span');sp.className='chd held';sp.dataset.beat=0;sp.textContent='\u200b';sp.appendChild(tonesEl(held));ch.appendChild(sp);}}
     c.append(n,ch);
     const words=b.length?b.map(x=>x.t).join(', '):'same chord';
     c.setAttribute('aria-label',`Bar ${i+1}${lab?', section '+lab:''}: ${words}. ${LOOP.sel?'Choose for the loop':'Edit'}`);
