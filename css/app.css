@@ -4,7 +4,7 @@
   --text:#ece9e2;--text2:#c9ccd1;--dim:#a3a8b0;
   --accent:#e3a94b;--accent-text:#e3a94b;--on-accent:#1d1508;--cur:#2b2517;
   --teal:#5fb7a6;--teal-text:#8fdccc;--teal-bg:#173a34;--danger:#f0a090;
-  --dot-gt:#4fb3a1;--dot-ct:#e3a94b;--dot-ex:#b48ef0;
+  --dot-gt:#4fb3a1;--dot-ct:#e3a94b;--dot-ex:#b48ef0;--tn-gt:#6fd0bd;--tn-ct:#f0bd66;--tn-ex:#c9a8ff;
   --r-s:8px;--r-m:10px;--r-l:16px;
   --sp-1:4px;--sp-2:8px;--sp-3:12px;--sp-4:16px;--sp-5:24px;
   --font:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
@@ -15,7 +15,7 @@
   --text:#1f1c17;--text2:#3b3730;--dim:#5c574d;
   --accent:#e3a94b;--accent-text:#8a5200;--on-accent:#1d1508;--cur:#fbe6bd;
   --teal:#2f8576;--teal-text:#1d6356;--teal-bg:#d3eee8;--danger:#a83a24;
-  --dot-gt:#2f8576;--dot-ct:#c27c12;--dot-ex:#7b4fc9;
+  --dot-gt:#2f8576;--dot-ct:#c27c12;--dot-ex:#7b4fc9;--tn-gt:#1d6356;--tn-ct:#8a5200;--tn-ex:#6439b0;
   color-scheme:light;
 }
 /* Shoelace themed to match: amber primary, our surfaces and lines */
@@ -103,7 +103,7 @@ button,select,input{font:inherit;color:inherit}
 .sys.measure{flex-wrap:nowrap;width:max-content;visibility:hidden;position:absolute}
 .sys.measure .cell{flex:0 0 auto}
 .sys.measure .chd,.sys.measure .gap{flex:0 0 auto}
-.cell{--k:1;position:relative;height:52px;min-width:52px;padding:2px 10px 4px 8px;border:0;border-right:1.5px solid var(--bar);background:none;color:var(--text);
+.cell{--k:1;position:relative;height:calc(52px + var(--tnH,0px));min-width:52px;padding:2px 10px 4px 8px;border:0;border-right:1.5px solid var(--bar);background:none;color:var(--text);
   text-align:left;display:flex;flex-direction:column;justify-content:space-between;cursor:pointer;touch-action:manipulation;border-radius:0;font:inherit}
 /* bar lines: double before a new section, thin-thick at the end */
 .cell.secend{border-right:4px double var(--bar)}
@@ -211,7 +211,7 @@ body.wide #title{order:3;width:100%}
 body.wide #cur{font-size:52px}
 body.wide #chordRow{height:62px}
 body.wide #chartWrap{padding:0 20px var(--sp-3)}
-body.wide .cell{height:64px}
+body.wide .cell{height:calc(64px + var(--tnH,0px))}
 body.wide .cell .ch{font-size:calc(25px * var(--k))}
 body.wide #topbar{padding:14px 20px 8px}
 
@@ -223,7 +223,7 @@ body.short #topbar .inlineNow{display:flex}
 #topbar .inlineNow .n,#topbar .inlineNow .p{font-size:14px;color:var(--dim)}
 body.short #topbar .sp{display:none}
 body.short #topbar .inlineNow{flex:1}
-body.short .cell{height:44px}
+body.short .cell{height:calc(44px + var(--tnH,0px))}
 body.short .cell .ch{font-size:calc(18px * var(--k))}
 body.short .sys{margin-bottom:8px}
 body.short #kbBar{min-height:44px;padding:0 var(--sp-3) 4px}
@@ -232,7 +232,7 @@ body.short #kbHandle{height:16px}
 /* Trio mode: no keyboard */
 body.trio #kbArea{display:none}
 body.trio .cell .ch{font-size:calc(clamp(20px,2.8vw,28px) * var(--k))}
-body.trio .cell{height:clamp(52px,9vh,80px)}
+body.trio .cell{height:calc(clamp(52px,9vh,80px) + var(--tnH,0px))}
 
 /* Bottom-sheet header (phone) */
 .sheetHead{display:flex;align-items:center;justify-content:space-between;padding:var(--sp-3) var(--sp-4) 0}
@@ -327,3 +327,19 @@ body.wide #melKeysBtn,body.short #melKeysBtn{display:inline-flex}
 #songMsg.problem{color:var(--danger)}
 #edAddEnd[hidden],#edInsNote[hidden]{display:none}
 .barMsg:empty{display:none}
+
+/* chord tones under the chord symbols: room is kept in every bar so nothing moves; they show in the
+   bar being played, coloured like the dots on the keys */
+body.ctones{--tnH:19px}
+.cell .chd{position:relative}
+.cell .tn{position:absolute;left:0;top:calc(100% + 2px);width:max-content;z-index:1;padding:0 5px;border-radius:4px;background:var(--panel);
+  font-size:13px;font-weight:600;line-height:17px;height:17px;white-space:nowrap;visibility:hidden;letter-spacing:0}
+body.wide .cell .tn{font-size:14px}
+.cell .tn span+span{margin-left:.45em}
+.cell .tn.tight{font-size:11px;padding:0 3px}
+.cell .tn.tight span+span{margin-left:.3em}
+.cell.cur .tn{visibility:visible}
+.tn .gt{color:var(--tn-gt)}.tn .ct{color:var(--tn-ct)}.tn .ex{color:var(--tn-ex)}
+.staff .vf-stavenote.tcur:not(.cur):not(.selnote) .vf-notehead[data-tone="gt"] path{fill:var(--dot-gt);stroke:var(--dot-gt)}
+.staff .vf-stavenote.tcur:not(.cur):not(.selnote) .vf-notehead[data-tone="ct"] path{fill:var(--dot-ct);stroke:var(--dot-ct)}
+.staff .vf-stavenote.tcur:not(.cur):not(.selnote) .vf-notehead[data-tone="ex"] path{fill:var(--dot-ex);stroke:var(--dot-ex)}

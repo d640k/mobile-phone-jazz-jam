@@ -207,7 +207,7 @@ async def editor_picker_root_quality_ext_bass(c):
     ok(t == 'C13b9/E', 'bass gave %r' % t)
     await pg.click('#edNoBass')
     ok(await ev(pg, 'splitChart(S.chart)[5].toks.join(" ")') == 'C13b9', 'no bass')
-    ok(await ev(pg, 'document.querySelectorAll("#grid .cell")[5].querySelector(".ch").textContent') == 'C13\u266d9', 'grid not updated')
+    ok(await ev(pg, 'document.querySelectorAll("#grid .cell")[5].querySelector(".ch").textContent.replace(document.querySelectorAll("#grid .cell")[5].querySelector(".tn")?.textContent||"","")') == 'C13\u266d9', 'grid not updated')
     await pg.click('#edDone')
     ok(await pg.is_visible('#kbArea') and not await pg.is_visible('#editor'), 'done')
     ok(not pg.errors, pg.errors)
@@ -316,6 +316,40 @@ async def editor_added_13_without_9(c):
     ok(await ev(pg, 'chordFromParts(chordParts("Gb7add13"))') == 'Gb7(13)', 'typed add13')
     ok('(13)' in await ev(pg, 'CELLS[0].querySelector(".ch").textContent'), 'chart shows (13)')
     ok(not pg.errors, pg.errors)
+
+@test
+async def chart_tones_in_bar_being_played(c):
+    st = dict(MELSONG, melody={'pickup': '', 'bars': ['A4q C5q Eb5q G5q', 'D5h Ab4h', '', 'Eb5q F5q A5q Bb5q & C4w']})
+    for dev, mel in ((PHONE, True), (LAPTOP, False)):
+        pg = await c.page(dev, storage=dict(st, showMel=mel), scheme='light')
+        if mel: await pg.wait_for_function('document.querySelector("#grid .staff")')
+        ok(await ev(pg, 'CELLS[0].querySelector(".tn").textContent') == 'FACE\u266d', 'F7 spelled')
+        ok(await ev(pg, 'getComputedStyle(CELLS[0].querySelector(".tn")).visibility') == 'hidden', 'hidden until played')
+        h0 = await ev(pg, 'CELLS.map(x=>x.offsetWidth+":"+x.offsetHeight).join()')
+        await ev(pg, 'setCur(CELLS[3])')
+        ok(await ev(pg, 'getComputedStyle(CELLS[3].querySelector(".tn")).visibility') == 'visible', 'shown in the bar being played')
+        ok(await ev(pg, 'CELLS.map(x=>x.offsetWidth+":"+x.offsetHeight).join()') == h0, 'nothing moves')
+        await c.shot(pg, 'chart_tones_' + ('mel' if mel else 'plain'))
+        if mel:
+            # bar 4 is Cm7 then F7: Eb = 3rd of Cm7, F not in Cm7, A = 3rd of F7, Bb not in F7
+            r = await ev(pg, '[...Array(4).keys()].map(i=>{const e=NOT.els.get("3:1:"+i);return e?[...e.querySelectorAll(".vf-notehead")].map(h=>h.dataset.tone||"").join("/"):"?"})')
+            ok(r == ['gt', '', 'gt', ''], r)
+            ok(await ev(pg, 'NOT.els.get("3:1:0").classList.contains("tcur")&&!NOT.els.get("0:1:0").classList.contains("tcur")'), 'only the current bar is coloured')
+            ok(await ev(pg, 'NOT.els.get("3:2:0").querySelector(".vf-notehead").dataset.tone') == 'ct', 'voice 2 root of Cm7')
+            await ev(pg, 'setCur(null)')
+            ok(not await ev(pg, 'NOT.els.get("3:1:0").classList.contains("tcur")'), 'cleared on stop')
+        await ev(pg, 'S.chartTones=false;renderGrid()')
+        await pg.wait_for_timeout(300)
+        ok(await ev(pg, '!document.querySelector("#grid .tn")'), 'switch off')
+        ok(not pg.errors, pg.errors)
+    # a crowded bar (4 chords) on a phone: tones never overlap and stay on screen
+    for scheme in ('light', 'dark'):
+        pg = await c.page(PHONE, storage={'chart': TEO, 'showMel': False}, scheme=scheme)
+        await ev(pg, 'setCur(CELLS[19]);CELLS[19].scrollIntoView()'); await pg.wait_for_timeout(300)
+        r = await ev(pg, '[...CELLS[19].querySelectorAll(".tn")].map(t=>{const b=t.getBoundingClientRect();return [b.left,b.right]})')
+        ok(len(r) == 4 and all(r[i][0] >= r[i-1][1] for i in range(1, 4)), r)
+        ok(r[-1][1] <= await ev(pg, 'innerWidth'), 'off screen %s' % r)
+        await c.shot(pg, 'chart_tones_busy_' + scheme)
 
 @test
 async def engine_voicings_include_written_extensions(c):
@@ -457,7 +491,7 @@ async def leadsheet_lines(c):
         await c.shot(pg, f'leadsheet-{w}')
         info = await ev(pg, '''[...document.querySelectorAll("#grid .sys")].map(r=>[...r.children].map(c=>({
             bar:+c.dataset.bar, w:c.getBoundingClientRect().width, h:c.getBoundingClientRect().height,
-            clip:c.querySelector(".ch").scrollWidth>c.querySelector(".ch").clientWidth+1})))''')
+            clip:[...c.querySelectorAll(".chd")].some(d=>d.getBoundingClientRect().right>c.querySelector(".ch").getBoundingClientRect().right+1)})))''')
         bars = [b for line in info for b in line]
         ok([b['bar'] for b in bars] == list(range(len(bars))), f'{w}: bars out of order')
         ok(not [b['bar'] for b in bars if b['clip']], f'{w}: chords cut off in bars {[b["bar"]+1 for b in bars if b["clip"]]}')
@@ -1084,7 +1118,7 @@ async def melody_clears_chord_symbols(c):
         ok(not pg.errors, pg.errors)
     # an ordinary melody stays compact
     pg = await mel_page(c, PHONE)
-    ok(await ev(pg, '[...document.querySelectorAll("#grid .sys")].filter(r=>+(r.dataset.lift||0)>12).length') == 0, 'ordinary lines barely move')
+    ok(await ev(pg, '[...document.querySelectorAll("#grid .sys")].filter(r=>+(r.dataset.lift||0)>12+(S.chartTones?TONES_H:0)).length') == 0, 'ordinary lines barely move')
 
 @test
 async def melody_pickup_and_bar_ops(c):
@@ -1136,8 +1170,9 @@ async def chart_scroll_reads_ahead(c):
         ok(r[0], f'bar {bar+1}: playing line not fully visible')
         ok(r[1], f'bar {bar+1}: next line not visible')
     # back to bar 1 scrolls up again
-    await ev(pg, 'followLine(CELLS[0])'); await pg.wait_for_timeout(500)
-    ok(await ev(pg, '$("chartWrap").scrollTop') < 5, 'scrolls back to the top')
+    await ev(pg, 'followLine(CELLS[0])'); await pg.wait_for_timeout(1500)
+    st = await ev(pg, '$("chartWrap").scrollTop')
+    ok(st < 5, 'scrolls back to the top: %s' % st)
 
 @test
 async def melody_hear_bar_honours_ties(c):

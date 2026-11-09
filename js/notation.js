@@ -153,7 +153,8 @@ function drawStaffRow(row,items,first){
         NOT.hits.get(it.bar).push({ni:m.filler?null:m.ni,x:hx,y:hy,v:vb.v});
         if(m.filler)return;
         const el=sn.getSVGElement&&sn.getSVGElement();
-        if(el)NOT.els.set(it.bar+':'+vb.v+':'+m.ni,el);
+        if(el){NOT.els.set(it.bar+':'+vb.v+':'+m.ni,el);toneHeads(el,m.n.midis,it.bar,m.start);
+          if(NOT.tbar===it.bar){el.classList.add('tcur');(NOT.tmarked||(NOT.tmarked=[])).push(el);}}
       });
       if(!vb.notes.length){if(T.pending){drawTie(c,T.pending,null);T.pending=null;}T.carry=false;}
     }
@@ -184,7 +185,8 @@ function drawStaffRow(row,items,first){
 // Make room for what the notation actually reaches: high notes and up-stems (forced up in a two-
 // voice bar) would run into the chord symbols, low down-stems into the next line. The line moves
 // down (--lift) and/or grows (--drop) just enough; lines that fit stay compact.
-const CHORD_BOTTOM=37,STAFF_Y=28;   // px from the line's top: chord text ends; the staff box starts
+const STAFF_Y=28,TONES_H=19;
+const chordBottom=()=>37+(S.chartTones?TONES_H:0);   // px from the line's top: chord text ends; the staff box starts
 function fitStaffRow(row,box,H){
   row.style.removeProperty('--lift');row.style.removeProperty('--drop');
   const bt=box.getBoundingClientRect();let top=1e9,bot=-1e9;
@@ -193,10 +195,34 @@ function fitStaffRow(row,box,H){
     top=Math.min(top,r.top-bt.top);bot=Math.max(bot,r.bottom-bt.top);
   }
   if(top>1e8)return;
-  const lift=Math.max(0,Math.ceil(CHORD_BOTTOM-STAFF_Y-top)),drop=Math.max(0,Math.ceil(bot-H+2));
+  const lift=Math.max(0,Math.ceil(chordBottom()-STAFF_Y-top)),drop=Math.max(0,Math.ceil(bot-H+2));
   if(lift)row.style.setProperty('--lift',lift+'px');
   if(drop)row.style.setProperty('--drop',drop+'px');
   row.dataset.lift=lift;
+}
+// The chord sounding at a beat of a bar (a bar with no chord of its own carries the last one on).
+function chordAt(bar,beat){
+  for(let b=bar;b>=0;b--){
+    const cs=chartSong.bars[b]||[];let hit=null;
+    for(const x of cs)if(b<bar||x.beat<=beat+1e-6)hit=x;
+    if(hit)return hit.t;
+  }
+  return null;
+}
+// Mark each notehead with what it is in the chord at that moment (3rd/7th, chord tone, extension);
+// the colours only show in the bar being played (.tcur).
+function toneHeads(el,midis,bar,beat){
+  if(!S.chartTones||!midis||!midis.length||bar<0)return;
+  const sym=chordAt(bar,beat),ch=sym&&parseChord(sym);if(!ch)return;
+  const tones=new Map(chordToneNames(sym).map(t=>[t.i,t.tone]));
+  const heads=el.querySelectorAll('.vf-notehead');
+  [...midis].sort((a,b)=>a-b).forEach((m,k)=>{const t=tones.get(((m-ch.root)%12+12)%12);if(t&&heads[k])heads[k].dataset.tone=t;});
+}
+function markToneBar(bar){
+  for(const el of NOT.tmarked||[])el.classList.remove('tcur');
+  NOT.tmarked=[];NOT.tbar=bar;
+  if(bar==null)return;
+  for(const [k,el] of NOT.els)if(k.startsWith(bar+':')){el.classList.add('tcur');NOT.tmarked.push(el);}
 }
 // highlight the note being played
 function markNote(bar,ni,v=1){

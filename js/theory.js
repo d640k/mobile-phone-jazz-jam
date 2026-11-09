@@ -78,6 +78,35 @@ function classify(raw){
   if(kind==='dom'&&nat('11')&&!has(/#11|[b#]9|alt|b13|#5|b5/))c.comp=[5,10,2,9];
   return c;
 }
+// The chord's notes spelled from its root, the way they'd be written: chord tones low to high, then
+// the extensions in the symbol. Gb7 → Gb Bb Db Fb. A double flat/sharp reads as its plain note.
+// Each is {name, i (semitones above the root), tone: 'gt' guide | 'ct' chord tone | 'ex' extension}.
+function chordToneNames(sym){
+  const ch=parseChord(sym),r=/^([A-G])([#b♯♭]?)/.exec(sym||'');
+  if(!ch||!r)return [];
+  const L='CDEFGAB';
+  const degArp={0:1,2:2,3:3,4:3,5:4,6:5,7:5,8:5,9:ch.kind==='dim'?7:6,10:7,11:7};
+  const degExt={1:2,2:2,3:2,5:4,6:4,8:6,9:6};
+  const spell=(letter,flat)=>{
+    const li=L.indexOf(letter);let clean=true;
+    const name=(i,deg)=>{
+      const pc=(ch.root+i)%12,l=L[(li+deg-1)%7];
+      let d=((pc-NOTE[l])%12+12)%12;if(d>6)d-=12;
+      if(Math.abs(d)>1){clean=false;return (flat?ROOT_FLAT:ROOT_SHARP)[pc];}
+      return l+(d<0?'\u266d':d>0?'\u266f':'');
+    };
+    const out=[...ch.arp].sort((a,b)=>a-b).map(i=>({name:name(i,degArp[i]),i,tone:ch.guide.includes(i)?'gt':'ct'}));
+    for(const i of [...(ch.ext||[])].sort((a,b)=>a-b))out.push({name:name(i,degExt[i]),i,tone:'ex'});
+    return {out,clean};
+  };
+  const flat=/[b♭]/.test(r[2])||(r[1]==='F'&&!r[2]);
+  const a=spell(r[1],flat);if(a.clean||!r[2])return a.out;
+  // Gbm7 would need a B double-flat: spell it as F#m7 instead, if that comes out clean
+  const alt=(r[2].match(/[b♭]/)?ROOT_SHARP:ROOT_FLAT)[ch.root][0];
+  const b=spell(alt,!flat);return b.clean?b.out:a.out;
+}
+const ROOT_FLAT=['C','D♭','D','E♭','E','F','G♭','G','A♭','A','B♭','B'];
+const ROOT_SHARP=['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
 function parseChord(sym){
   const r=/^([A-G])([#b♯♭]?)(.*)$/.exec(sym);
   if(!r) return null;

@@ -54,7 +54,7 @@ let CELLS=[],PICK=null;
 // melody view: the staff is shown when the song has a melody (or you're entering one)
 const melOn=()=>S.showMel&&(melHas()||(ED.open&&ED.part==='melody'));
 function renderGrid(){
-  const g=$('grid');g.innerHTML='';CELLS=[];PICK=null;
+  const g=$('grid');g.innerHTML='';CELLS=[];PICK=null;document.body.classList.toggle('ctones',!!S.chartTones);
   if(melOn()&&(S.melody.pickup||(ED.open&&ED.bar===-1))){
     const c=document.createElement('button');c.type='button';c.className='cell pick';c.dataset.bar=-1;
     if(ED.open&&ED.bar===-1)c.classList.add('sel');
@@ -81,6 +81,9 @@ function renderGrid(){
       if(x.beat>at){const gp=document.createElement('span');gp.className='gap';gp.style.flexGrow=x.beat-at;ch.appendChild(gp);}
       const sp=document.createElement('span');sp.className='chd'+(x.dim?' rep':'');sp.style.flexGrow=x.len;sp.dataset.beat=x.beat;
       chordInto(sp,x.t);ch.appendChild(sp);at=x.beat+x.len;
+      if(S.chartTones){const tn=document.createElement('span');tn.className='tn';
+        for(const t of chordToneNames(x.t)){const s=document.createElement('span');s.className=t.tone;s.textContent=t.name;tn.appendChild(s);}
+        sp.appendChild(tn);}
     });
     c.append(n,ch);
     const words=b.length?b.map(x=>x.t).join(', '):'same chord';
@@ -160,6 +163,25 @@ function chordInto(el,sym){
   if(m[2]){const q=document.createElement('span');q.className='cq';q.textContent=accTxt(m[2]);el.appendChild(q);}
   if(m[3]){const bs=document.createElement('span');bs.className='cb';bs.textContent='/'+m[3].replace('#','\u266f').replace('b','\u266d');el.appendChild(bs);}
 }
+// the bar being played: lit on the chart, with its chord tones showing and its melody's
+// chord tones coloured (when that's switched on)
+function setCur(cell){
+  if(curCell)curCell.classList.remove('cur');curCell=cell||null;
+  if(cell){cell.classList.add('cur');spreadTones(cell);}
+  markToneBar(cell&&S.chartTones?+cell.dataset.bar:null);
+}
+// Tones hang under their chord without taking room in the bar; in a busy bar they can be wider
+// than the chord, so push each clear of the one before, and keep the last on the screen.
+function spreadTones(cell){
+  const tns=[...cell.querySelectorAll('.tn')];if(!tns.length)return;
+  tns.forEach(t=>{t.style.left='';t.classList.remove('tight');});
+  // more tones than the bar has room for: a smaller size
+  if(tns.length>1&&tns.reduce((w,t)=>w+t.offsetWidth+4,0)>cell.clientWidth-8)tns.forEach(t=>t.classList.add('tight'));
+  let right=-1e9;
+  for(const t of tns){const r=t.getBoundingClientRect();if(r.left<right+4)t.style.left=(right+4-r.left)+'px';right=t.getBoundingClientRect().right;}
+  const lim=$('grid').getBoundingClientRect().right-2,over=right-lim;
+  if(over>0)for(const t of tns)t.style.left=((parseFloat(t.style.left)||0)-over)+'px';
+}
 function setNow(cur,next,pos){
   const put=(id,t)=>{const e=$(id);if(e.dataset.v===t)return;e.dataset.v=t;if(/^[A-G]/.test(t))chordInto(e,t);else e.textContent=t;};
   put('cur',cur);put('curS',cur);
@@ -174,7 +196,7 @@ function showBeat(ev){
   if(!ev){
     const s0=S.loop?chartSong.segs[chartSong.segOfBeat[S.loop.a*chartSong.bpb]]:chartSong.segs[0];
     setNow(s0?s0.chord.sym:'—','','');$('feelChip').hidden=true;
-    if(curCell)curCell.classList.remove('cur');curCell=null;setTones(null);return;
+    setCur(null);setTones(null);return;
   }
   if(ev.count){setNow(String(ev.count),song.segs[0]?'→ '+song.segs[0].chord.sym:'','Count-in');return;}
   const sg=ev.song||song,off=sg.offset||0,lb=sg.loopLen?ev.bar%sg.loopLen:ev.bar;
@@ -185,7 +207,7 @@ function showBeat(ev){
   const feel=ev.stroll?'comp out':(ev.feel||'');
   $('feelChip').textContent=feel;$('feelChip').hidden=!feel;
   const cell=CELLS[lb+off];
-  if(cell!==curCell){if(curCell)curCell.classList.remove('cur');if(cell){cell.classList.add('cur');if(ev.beat%sg.bpb===0)followLine(cell);}curCell=cell;}
+  if(cell!==curCell){setCur(cell);if(cell&&ev.beat%sg.bpb===0)followLine(cell);}
   setTones(seg.chord);
 }
 // the melody note being played: amber on the staff; violet on the keys, the next one outlined
@@ -219,7 +241,7 @@ function followLine(cell){
   const next=row.nextElementSibling&&row.nextElementSibling.classList.contains('sys')?row.nextElementSibling:null;
   const box=wrap.getBoundingClientRect(),r=row.getBoundingClientRect(),pad=6;
   let target=wrap.scrollTop;
-  if(r.top<box.top)target+=r.top-box.top-pad;                       // playing line above the view (e.g. back to bar 1)
+  if(r.top<box.top)target=row===wrap.querySelector('#grid .sys')?0:target+r.top-box.top-pad;   // playing line above the view (back to bar 1: the very top)
   else{
     const bottom=(next||row).getBoundingClientRect().bottom;
     if(bottom>box.bottom)target+=Math.min(bottom-box.bottom+pad,r.top-box.top-pad);
@@ -706,7 +728,7 @@ function hearTick(){
   while(PREV.i<PREV.q.length&&PREV.q[PREV.i].t<=now){
     const {e}=PREV.q[PREV.i++];showMel(e);
     const cell=e.bar<0?PICK:CELLS[e.bar];
-    if(cell&&cell!==curCell){if(curCell)curCell.classList.remove('cur');cell.classList.add('cur');followLine(cell);curCell=cell;}
+    if(cell&&cell!==curCell){setCur(cell);followLine(cell);}
   }
   if(now>=PREV.end+0.1){hearStop();return;}
   PREV.raf=requestAnimationFrame(hearTick);
@@ -715,7 +737,7 @@ function hearStop(){
   if(!PREV.on)return;
   PREV.on=false;cancelAnimationFrame(PREV.raf);
   try{PREV.bus.gain.setTargetAtTime(0,ctx.currentTime,0.02);const b=PREV.bus;setTimeout(()=>b.disconnect(),300);}catch(e){}
-  if(!P.playing){showMel(null);if(curCell){curCell.classList.remove('cur');curCell=null;}}
+  if(!P.playing){showMel(null);setCur(null);}
   hearUI();
 }
 function hearUI(){
@@ -1241,6 +1263,7 @@ function init(){
   $('bassFeel').addEventListener('sl-change',e=>setFeel(e.target.value));setFeel(S.bassFeel);
   $('cDyn').addEventListener('sl-change',e=>setDynamics(e.target.checked));setDynamics(S.dynamics);
   $('keySig').value=S.keySig;$('keySig').addEventListener('sl-change',e=>setKeySig(e.target.value));
+  $('cChartTones').checked=S.chartTones;$('cChartTones').addEventListener('sl-change',e=>{S.chartTones=e.target.checked;store.set('chartTones',S.chartTones);renderGrid();});
   $('cShowMel').checked=S.showMel;$('cShowMel').addEventListener('sl-change',e=>{S.showMel=e.target.checked;store.set('showMel',S.showMel);renderGrid();});
   $('cCount').checked=S.countIn;$('cCount').addEventListener('sl-change',e=>{S.countIn=e.target.checked;store.set('countIn',S.countIn);});
   bindSlider('Tempo',()=>S.bpm,v=>setBpm(v),v=>v+' bpm');
