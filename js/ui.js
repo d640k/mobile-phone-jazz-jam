@@ -717,7 +717,7 @@ function melDel(){
 const PREV={on:false,bus:null,q:[],i:0,end:0,raf:0};
 function hearRange(a,b){
   hearStop();initAudio();
-  const bd=60/S.bpm,t0=ctx.currentTime+0.08,sw=(STYLES[S.style]||{}).straight?0.5:S.swing/100;
+  const bd=60/S.bpm,t0=ctx.currentTime+0.08,sw=swingNow();
   const when=x=>{const f=x-Math.floor(x+1e-6);return (Math.floor(x+1e-6)+(Math.abs(f-0.5)<1e-3?sw:f))*bd;};
   const bus=ctx.createGain();bus.connect(busKy);
   Object.assign(PREV,{on:true,bus,q:[],i:0,end:t0+(b-a)*bd});
@@ -953,7 +953,7 @@ function setMute(key,on){S.mute[key]=on;store.set('mute',S.mute);applyVolumes();
 function setSection(id,applyDefaults){
   S.section=SECTIONS[id]?id:'std';store.set('section',S.section);$('section').value=S.section;
   if(applyDefaults){
-    const X=curSection();setSlider('Swing',X.swing);setFeel(X.feel);
+    const X=curSection();setSlider('Swing',X.swingAdj);setFeel(X.feel);
     if(X.compOff&&!S.mute.cp){setMute('cp',true);S.secMutedComp=true;store.set('secMutedComp',true);songMsg('Comping muted: you’re Monk. Turn Comp back on in Sound.','note');}
     else if(!X.compOff&&S.secMutedComp){S.secMutedComp=false;store.set('secMutedComp',false);setMute('cp',false);}
   }
@@ -1034,19 +1034,24 @@ function refreshSongList(){
   names.forEach(n=>add(n,{song:n}));
   head('Presets');Object.keys(PRESETS).forEach(n=>add(n,{preset:n}));
 }
+// "typical · 67%": the setting, and where the "and" lands at the current tempo
+function swingLabel(adj=S.swingAdj){
+  if(adj<=SWING_MIN)return 'straight';
+  return (adj===0?'typical':(adj>0?'+':'')+adj)+' \u00b7 '+Math.round(swingPct(S.bpm,adj))+'%';
+}
 function setSlider(id,val){const s=$('s'+id);s.value=val;s.dispatchEvent(new CustomEvent('sl-input'));}
 function saveSong(){
   const name=$('songName').value.trim();
   if(!name){songMsg('Give the song a name first.',true);$('songName').focus();return;}
   if(!chartSong.segs.length){songMsg('Nothing to save: the chart is empty.',true);return;}
   if(S.songs[name]&&name!==S.songName&&!confirm(`Replace the saved “${name}”?`))return;
-  S.songs[name]={chart:S.chart,bpm:S.bpm,swing:S.swing,style:S.style,feel:S.bassFeel,dynamics:S.dynamics,section:S.section,saved:Date.now()};
+  S.songs[name]={chart:S.chart,bpm:S.bpm,swingAdj:S.swingAdj,style:S.style,feel:S.bassFeel,dynamics:S.dynamics,section:S.section,saved:Date.now()};
   if(S.composer)S.songs[name].composer=S.composer;
   if(melHas())Object.assign(S.songs[name],{melody:JSON.parse(JSON.stringify(S.melody)),keySig:S.keySig});
   if(!store.set('songs',S.songs)){delete S.songs[name];songMsg('Couldn’t save: this browser is blocking storage.',true);return;}
   delete S.songsDeleted[name];store.set('songsDeleted',S.songsDeleted);songsChanged();
   setSongName(name);refreshSongList();
-  songMsg(S.style!=='swing'?`Saved “${name}” (${STYLE_NAMES[S.style].toLowerCase()}, tempo ${S.bpm}).`:`Saved “${name}” (tempo ${S.bpm}, swing ${S.swing}%).`);
+  songMsg(S.style!=='swing'?`Saved “${name}” (${STYLE_NAMES[S.style].toLowerCase()}, tempo ${S.bpm}).`:`Saved “${name}” (tempo ${S.bpm}, swing ${swingLabel()}).`);
 }
 function loadChart(chart,name,opts={}){
   if(ED.open)closeEditor();clearLoop(true);
@@ -1058,12 +1063,12 @@ function loadChart(chart,name,opts={}){
   $('chartWrap').scrollTop=0;   // a different song starts at the top
   queueMicrotask(histReset);
   if(opts.bpm)setBpm(opts.bpm);
-  if(opts.swing)setSlider('Swing',opts.swing);
+  if(opts.swingAdj!=null)setSlider('Swing',opts.swingAdj);else if(opts.swing)setSlider('Swing',swingAdjFrom(opts.swing));
 }
 function loadSong(name){
   const s=S.songs[name];if(!s)return;
   setStyle(s.style||'swing');
-  loadChart(s.chart,name,{bpm:s.bpm,swing:s.swing,melody:s.melody,keySig:s.keySig,composer:s.composer});
+  loadChart(s.chart,name,{bpm:s.bpm,swing:s.swing,swingAdj:s.swingAdj,melody:s.melody,keySig:s.keySig,composer:s.composer});
   setSection(s.section||'std',false);if(s.feel)setFeel(s.feel);if(s.dynamics!=null)setDynamics(s.dynamics);
   songMsg(`Loaded “${name}”.`);
 }
@@ -1110,6 +1115,7 @@ function setOutput(o){
 function setBpm(b){
   S.bpm=Math.max(40,Math.min(320,Math.round(b)));$('bpm').textContent=S.bpm;$('bpm').setAttribute('aria-label',`${S.bpm} beats per minute`);
   $('sTempo').value=S.bpm;$('vTempo').textContent=S.bpm+' bpm';store.set('bpm',S.bpm);
+  if($('vSwing'))$('vSwing').textContent=swingLabel();   // the swing follows the tempo
 }
 
 // ---------- Space bar, editor keys ----------
@@ -1275,7 +1281,7 @@ function init(){
   $('cShowMel').checked=S.showMel;$('cShowMel').addEventListener('sl-change',e=>{S.showMel=e.target.checked;store.set('showMel',S.showMel);renderGrid();});
   $('cCount').checked=S.countIn;$('cCount').addEventListener('sl-change',e=>{S.countIn=e.target.checked;store.set('countIn',S.countIn);});
   bindSlider('Tempo',()=>S.bpm,v=>setBpm(v),v=>v+' bpm');
-  bindSlider('Swing',()=>S.swing,v=>{S.swing=v;store.set('swing',v);},v=>v===50?'straight':v+'%');
+  bindSlider('Swing',()=>S.swingAdj,v=>{S.swingAdj=v;store.set('swingAdj',v);},v=>swingLabel(v));
   $('textBtn').onclick=openTextDialog;
   $('chartText').addEventListener('sl-input',()=>{$('errs').textContent=parseChart($('chartText').value,curBpb()).errors.join(' · ');});
   $('textCancel').onclick=()=>$('textDlg').hide();

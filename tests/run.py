@@ -363,6 +363,42 @@ async def chart_tones_in_bar_being_played(c):
         await c.shot(pg, 'chart_tones_busy_' + scheme)
 
 @test
+async def engine_swing_follows_tempo(c):
+    pg = await c.page(storage={'chart': BLUES})
+    r = await ev(pg, '[100,120,200,300,320].map(b=>Math.round(swingPct(b,0)*10)/10)')
+    ok(r[0] == r[1] == 72.3 and 66 < r[2] < 68 and r[3] == r[4] == 57.1, 'curve %s' % r)
+    ok(await ev(pg, '[swingPct(200,-12),swingPct(300,-10),swingPct(120,8)]') == [50, 50, 78], 'straight / clamped')
+    # the label follows the tempo
+    await ev(pg, 'setBpm(120)')
+    l120 = await pg.text_content('#vSwing')
+    await ev(pg, 'setBpm(280)')
+    ok(l120 == 'typical \u00b7 72%' and await pg.text_content('#vSwing') == 'typical \u00b7 58%', (l120, await pg.text_content('#vSwing')))
+    await ev(pg, 'setSlider("Swing",3)')
+    ok(await pg.text_content('#vSwing') == '+3 \u00b7 61%' and await ev(pg, 'S.swingAdj') == 3, await pg.text_content('#vSwing'))
+    # the scheduler uses it: at 120 bpm the "and" lands 72% through the beat
+    await ev(pg, 'setBpm(120);setSlider("Swing",0)')
+    sn = await ev(pg, "[swingNow(),S.style,S.bpm,S.swingAdj]")
+    ok(abs(sn[0] - 0.7227) < 1e-3, sn)
+    await ev(pg, 'setStyle("bossa")')
+    ok(await ev(pg, 'swingNow()') == 0.5, 'bossa stays straight')
+    # rhythm sections set an offset from typical
+    await ev(pg, 'setStyle("swing");setSection("blakey",true)')
+    ok(await ev(pg, 'S.swingAdj') == -2, 'Blakey')
+    # songs saved before: a fixed 66% becomes +4, 50% stays straight
+    ok(await ev(pg, '[swingAdjFrom(62),swingAdjFrom(66),swingAdjFrom(50),swingAdjFrom(72)]') == [0, 4, -12, 8], 'old songs')
+    await ev(pg, 'S.songs.old={chart:"| C7 |",bpm:160,swing:66};loadSong("old")')
+    ok(await ev(pg, 'S.swingAdj') == 4, 'old song loads as +4')
+    ok(not pg.errors, pg.errors)
+    pg2 = await c.page(PHONE, storage={'chart': BLUES, 'bpm': 120})
+    await pg2.click('#panelBtn'); await pg2.wait_for_timeout(500)
+    await pg2.locator('#sSwing').scroll_into_view_if_needed()
+    ok(await ev(pg2, '$("vSwing").getBoundingClientRect().right<=innerWidth&&$("vSwing").getBoundingClientRect().height<30'), 'label fits')
+    await c.shot(pg2, 'swing_slider')
+    # an old stored swing setting carries over
+    pg = await c.page(storage={'chart': BLUES, 'swing': 58})
+    ok(await ev(pg, 'S.swingAdj') == -4, 'stored swing migrated')
+
+@test
 async def engine_voicings_include_written_extensions(c):
     pg = await c.page()
     r = await ev(pg, '''Object.fromEntries(["Cmaj7","Cmaj13","Cmaj7(13)","Cm7","Cm11","Cm7(11)","Cm13","C11","C13"].map(t=>{

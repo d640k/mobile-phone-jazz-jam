@@ -188,7 +188,7 @@ sl-tab-panel{--padding:14px 16px 24px}
 .form .sech{margin-top:var(--sp-2)}
 .rangeRow{display:flex;align-items:flex-end;gap:var(--sp-2)}
 .rangeRow sl-range{flex:1}
-.val{font-size:13px;color:var(--dim);min-width:58px;text-align:right;font-variant-numeric:tabular-nums;padding-bottom:10px}
+.val{white-space:nowrap;font-size:13px;color:var(--dim);min-width:58px;text-align:right;font-variant-numeric:tabular-nums;padding-bottom:10px}
 .mixRow{display:flex;align-items:center;gap:var(--sp-2)}
 .mixRow sl-range{flex:1}
 .mixRow .val{padding-bottom:0}

@@ -29,15 +29,16 @@ function tick(){
   const beatDur=60/S.bpm;
   while(P.nextTime<ctx.currentTime+0.12){
     scheduleStep(P.step,P.nextTime,beatDur);
-    const sw=(STYLES[S.style]||{}).straight?0.5:S.swing/100;
+    const sw=swingNow();
     P.nextTime+=(P.step%2===1?(1-sw):sw)*beatDur;
     P.step++;
   }
 }
+function swingNow(){return (STYLES[S.style]||{}).straight?0.5:swingPct(S.bpm,S.swingAdj)/100;}
 // Grooves register themselves in STYLES (see js/styles/). straight:true = even eighths.
 const STYLES={};
 function scheduleStep(s,t,beatDur){
-  const sw=(STYLES[S.style]||{}).straight?0.5:S.swing/100,audible=S.melPlay||REC.review;
+  const sw=swingNow(),audible=S.melPlay||REC.review;
   if(s<P.countSteps){
     if(P.counting&&s%2===0){click(t,s===0);P.uiQ.push({t,count:s/2+1});}
     if(P.pickup)scheduleMelodyStep(s,(s-P.countSteps)/2,-1,t,beatDur,sw,audible);
