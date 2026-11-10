@@ -1217,7 +1217,8 @@ function wireKeys(){
     }
     if(!ED.open||e.ctrlKey||e.metaKey||e.altKey)return;
     const tag=(document.activeElement?.tagName||'').toLowerCase();
-    if(['sl-input','sl-textarea','input','textarea','sl-radio-group','sl-select'].includes(tag))return;
+    if(['sl-input','sl-textarea','input','textarea','sl-radio-group','sl-select','sl-range'].includes(tag)||$('keysDlg').open||$('textDlg').open)return;
+    if(edKey(e)){e.preventDefault();return;}
     if((e.key==='Delete'||e.key==='Backspace')&&ED.part==='melody'&&!ED.text){melDel();e.preventDefault();return;}   // remove a wrong note
     if(e.key==='Insert'&&ED.part==='melody'&&!ED.text&&ED.note!=null){toggleInsert();e.preventDefault();return;}
     if(ED.part==='melody'&&!ED.text&&(e.key==='ArrowLeft'||e.key==='ArrowRight')){stepNote(e.key==='ArrowLeft'?-1:1);e.preventDefault();}
@@ -1225,6 +1226,24 @@ function wireKeys(){
     else if(e.key==='ArrowRight'){moveBar(1);e.preventDefault();}
   });
 }
+
+// Single keys in the bar editor (the ? button / key lists them all). Each presses the matching
+// button, so a key does exactly what a tap would, and nothing when that button is off.
+const LEN_KEYS={'1':'w','2':'h','4':'q','8':'e','6':'s'};
+function edKey(e){
+  const k=e.key,mel=ED.part==='melody'&&!ED.text,press=id=>{const b=$(id);if(b&&!b.disabled)b.click();return true;};
+  if(k==='?')return showKeys();
+  if(k==='b'||k==='B')return press('edInsert');
+  if(k==='m'||k==='M')return press(ED.part==='melody'?'edPartCh':'edPartMel');
+  if(e.shiftKey&&(k==='ArrowLeft'||k==='ArrowRight')){moveBar(k==='ArrowLeft'?-1:1);return true;}
+  if(!mel)return false;
+  if(LEN_KEYS[k]){const b=document.querySelector(`#edLens .len[data-len="${LEN_KEYS[k]}"]`);if(b&&!b.disabled)b.click();return true;}
+  const id={'.':'edDot','3':'edTri',r:'edRest',t:'edTie',c:'edChord',h:'edHear',H:'edHearAll'}[k.length===1&&k!=='H'?k.toLowerCase():k];
+  if(id)return press(id);
+  if(k==='v'||k==='V')return press(ED.voice===1?'edV2':'edV1');
+  return false;
+}
+function showKeys(){$('keysDlg').show();return true;}
 
 // ---------- Init ----------
 function init(){
@@ -1279,6 +1298,7 @@ function init(){
   $('edPrev').onclick=()=>moveBar(-1);$('edNext').onclick=()=>moveBar(1);
   $('edPartCh').onclick=()=>setPart('chords');$('edPartMel').onclick=()=>setPart('melody');
   for(const b of document.querySelectorAll('#edLens .len'))b.onclick=()=>{
+    if(b.dataset.len!==ED.len)ED.dot=false;   // a new length starts without its dot
     ED.len=b.dataset.len;if(!['q','e'].includes(ED.len))ED.tri=false;
     // building chords: a length starts the next chord
     if(ED.chord&&ED.note==null&&STACK.ref){STACK.ref=null;melMsg('Next chord: tap its notes.');}
@@ -1304,7 +1324,10 @@ function init(){
   $('recKeep').onclick=()=>recDone(true);$('recDiscard').onclick=()=>recDone(false);
   $('recAgain').onclick=()=>{recRestore();REC.review=false;$('recPanel').hidden=true;if(S.loop)recStart();else{ED.bar=REC.from;recStart();}};
   $('edUndo').onclick=undo;$('edRedo').onclick=redo;
-  $('edInsert').onclick=insertBar;$('edDelete').onclick=deleteBars;
+  $('edInsert').onclick=insertBar;$('edKeys').onclick=showKeys;$('keysClose').onclick=()=>$('keysDlg').hide();
+  // the keys in the tooltips
+  for(const [k,l] of Object.entries(LEN_KEYS)){const b=document.querySelector(`#edLens .len[data-len="${l}"]`);if(b)b.title=b.getAttribute('aria-label')+` (${k})`;}
+  for(const [id,t] of [['edDot','Dotted (.)'],['edTri','Triplet (3)'],['edRest','Rest (R)'],['edTie','Tie (T)'],['edChord','Chord (C)'],['edHear','Hear this bar (H)'],['edHearAll','Hear from here (Shift+H)']])$(id).title=t;$('edDelete').onclick=deleteBars;
   $('edBars').onclick=e=>{e.stopPropagation();barsMenu();};
   $('mnSelect').onclick=()=>{barsMenu(false);if(SEL.a!=null){clearSelection();return;}SEL.picking=true;barMsg('Tap the last bar of the selection (this bar is the first).');renderEditor();};
   $('mnCopy').onclick=copyBars;$('mnCut').onclick=cutBars;$('mnPaste').onclick=pasteBars;

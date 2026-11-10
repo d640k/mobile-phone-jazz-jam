@@ -852,6 +852,49 @@ async def melody_notation_renders(c):
     ok(await ev(pg, 'document.querySelectorAll(".staff svg").length') == 0, 'Show melody off hides the staff')
 
 @test
+async def editor_hot_keys(c):
+    pg = await c.page(LAPTOP, storage={'chart': '| C | F | G | C |'})
+    await pg.locator('#grid .cell').nth(0).click()
+    ok(await pg.is_visible('#edKeys'), 'the ? button shows on a laptop')
+    await pg.keyboard.press('m')
+    ok(await ev(pg, 'ED.part') == 'melody', 'M: melody')
+    await pg.wait_for_function('document.querySelectorAll(".staff svg").length>0', timeout=8000)
+    # 4 . = dotted quarter, then 8 = eighth, R = rest, 2 = half
+    await pg.keyboard.press('4'); await pg.keyboard.press('.')
+    await key_down(pg, 72)
+    await pg.keyboard.press('8'); await key_down(pg, 74)
+    await pg.keyboard.press('r')
+    await pg.keyboard.press('4'); await key_down(pg, 76)
+    ok(await ev(pg, 'melGet(0)') == 'C5q. D5e re E5q', await ev(pg, 'melGet(0)'))
+    # 3 = triplet eighths in bar 2
+    await pg.keyboard.press('Shift+ArrowRight')
+    ok(await ev(pg, 'ED.bar') == 1, 'Shift+Right: next bar %s' % await ev(pg, 'ED.bar'))
+    await pg.keyboard.press('8'); await pg.keyboard.press('3')
+    for m in (65, 67, 69): await key_down(pg, m)
+    ok(await ev(pg, 'melGet(1)') == 'F4et G4et A4et', await ev(pg, 'melGet(1)'))
+    # T ties the selected note to the next one
+    await ev(pg, 'selectNote(2)'); await pg.keyboard.press('t')
+    ok(await ev(pg, 'melGet(1)') == 'F4et G4et A4et~', await ev(pg, 'melGet(1)'))
+    # V: voice 2; B: a new bar after this one
+    await pg.keyboard.press('v')
+    ok(await ev(pg, 'ED.voice') == 2, 'V: voice 2')
+    await pg.keyboard.press('b')
+    ok(await ev(pg, 'chartSong.bars.length') == 5 and await ev(pg, 'ED.bar') == 2, 'B: new bar')
+    await pg.keyboard.press('m')
+    ok(await ev(pg, 'ED.part') == 'chords', 'M: back to chords')
+    # ? lists them
+    await c.shot(pg, 'hot_keys_editor')
+    await pg.keyboard.press('?'); await pg.wait_for_timeout(300)
+    ok(await ev(pg, '$("keysDlg").open'), '? opens the list')
+    await c.shot(pg, 'hot_keys')
+    await pg.keyboard.press('Escape'); await pg.wait_for_timeout(300)
+    ok(not pg.errors, pg.errors)
+    # no ? button on a phone
+    pg = await c.page(PHONE, storage={'chart': BLUES})
+    await pg.locator('#grid .cell').nth(0).click()
+    ok(not await pg.is_visible('#edKeys'), 'no ? button on a phone')
+
+@test
 async def melody_step_entry_phone(c):
     pg = await c.page(PHONE, storage={'chart': BLUES, 'keySig': 'F'})
     await pg.locator('#grid .cell').nth(0).click()
@@ -870,7 +913,7 @@ async def melody_step_entry_phone(c):
     ok(await ev(pg, 'ED.bar') == 1 and 'full' in await pg.text_content('#edMelMsg'), 'auto-advance')
     await pg.click('#edLens [data-len="q"]'); await pg.click('#edDot')
     await key_down(pg, 70)               # Bb4 dotted quarter (spelled for F major)
-    await pg.click('#edLens [data-len="e"]'); await pg.click('#edDot')
+    await pg.click('#edLens [data-len="e"]')    # a new length starts without the dot
     await pg.click('#edRest')
     await pg.click('#edTri')
     for m in (67, 68, 69):

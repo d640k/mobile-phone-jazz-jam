@@ -178,7 +178,7 @@ button,select,input{font:inherit;color:inherit}
 /* Bar editor */
 #editor{padding:10px var(--sp-3) var(--sp-3);display:flex;flex-direction:column;gap:var(--sp-2);max-height:62vh;overflow-y:auto}
 .edHead{display:flex;align-items:center;gap:var(--sp-2)}
-.edHead h2{font-size:16px}
+.edHead h2{font-size:16px;white-space:nowrap}
 #edSlots{padding-bottom:var(--sp-2)}
 .slot{min-height:44px;border-radius:var(--r-s);border:1px solid var(--line);background:var(--bg);padding:0 14px;font-size:18px;font-weight:700;cursor:pointer}
 .slot[aria-pressed="true"]{border:2px solid var(--accent)}
@@ -366,3 +366,13 @@ body.wide .cell .tn{font-size:14px}
 .staff .vf-stavenote.tcur:not(.cur):not(.selnote) .vf-notehead[data-tone="gt"] path{fill:var(--dot-gt);stroke:var(--dot-gt)}
 .staff .vf-stavenote.tcur:not(.cur):not(.selnote) .vf-notehead[data-tone="ct"] path{fill:var(--dot-ct);stroke:var(--dot-ct)}
 .staff .vf-stavenote.tcur:not(.cur):not(.selnote) .vf-notehead[data-tone="ex"] path{fill:var(--dot-ex);stroke:var(--dot-ex)}
+
+/* keyboard shortcuts: the ? button only where there's a keyboard (a mouse/trackpad) */
+.keysBtn{display:none}
+@media (hover:hover) and (pointer:fine){.keysBtn{display:inline-flex;padding-inline:10px;min-width:0}}
+table.keys{border-collapse:collapse;width:100%;font-size:14px}
+table.keys th{text-align:left;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:12px 0 4px}
+table.keys td{padding:4px 0;vertical-align:top}
+table.keys td:first-child{white-space:nowrap;padding-right:14px}
+kbd{display:inline-block;min-width:1.6em;padding:1px 5px;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;
+  background:var(--panel);font-family:inherit;font-weight:600;font-size:12px;line-height:1.4;text-align:center}
