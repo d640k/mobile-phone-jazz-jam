@@ -109,6 +109,25 @@ button,select,input{font:inherit;color:inherit}
 .cell.secend{border-right:4px double var(--bar)}
 .cell.end{border-right:4px solid var(--bar)}
 .cell.end::after{content:'';position:absolute;top:0;bottom:0;right:3px;width:1.5px;background:var(--bar)}
+.cell.rs{padding-left:20px}
+.cell.re{padding-right:20px;border-right:4px solid var(--bar)}
+/* |:  thick, thin, two dots   and   :|  two dots, thin, thick (the thick one is the border) */
+.cell.rs::before,.cell.re::after{content:'';position:absolute;top:0;bottom:0;width:12px;pointer-events:none;
+  background:radial-gradient(circle,var(--text) 2.2px,transparent 2.7px) 0 calc(50% - 7px)/6px 6px no-repeat,
+    radial-gradient(circle,var(--text) 2.2px,transparent 2.7px) 0 calc(50% + 7px)/6px 6px no-repeat}
+.cell.rs::before{left:0;border-left:4px solid var(--bar);
+  background:linear-gradient(var(--bar),var(--bar)) 3px 0/1.5px 100% no-repeat,
+    radial-gradient(circle,var(--text) 2.2px,transparent 2.7px) 7px calc(50% - 7px)/6px 6px no-repeat,
+    radial-gradient(circle,var(--text) 2.2px,transparent 2.7px) 7px calc(50% + 7px)/6px 6px no-repeat}
+.cell.re::after{right:0;
+  background:linear-gradient(var(--bar),var(--bar)) 9px 0/1.5px 100% no-repeat,
+    radial-gradient(circle,var(--text) 2.2px,transparent 2.7px) 1px calc(50% - 7px)/6px 6px no-repeat,
+    radial-gradient(circle,var(--text) 2.2px,transparent 2.7px) 1px calc(50% + 7px)/6px 6px no-repeat}
+/* 1st / 2nd ending: a bracket over the bars, numbered at its start, closed at the end of the 1st */
+.cell .endg{position:absolute;top:0;left:0;right:0;height:10px;border-top:1.5px solid var(--text);pointer-events:none}
+.cell .endg.first{border-left:1.5px solid var(--text);left:2px}
+.cell .endg.closed{border-right:1.5px solid var(--text);right:6px}
+.cell .endn{font-size:11px;font-weight:700;color:var(--text);padding-left:2px}
 .cell .n{font-size:11px;color:var(--dim);display:flex;gap:6px;align-items:center;height:15px}
 .cell .num{visibility:hidden}
 .sys>.cell:first-child .num{visibility:visible}
@@ -282,6 +301,8 @@ body.melEdit .edFoot{position:static;margin-bottom:0}
 #grid.mel .cell{height:calc(24px + var(--staffH) + var(--lift,0px) + var(--drop,0px));border-right:0;padding-top:2px}
 #grid.mel .cell.end,#grid.mel .cell.secend{border-right:0}
 #grid.mel .cell.end::after{display:none}
+#grid.mel .cell.rs::before,#grid.mel .cell.re::after{display:none}
+#grid.mel .cell.re{border-right:0}
 #grid.mel .cell .n{position:absolute;top:2px;left:4px}
 #grid.mel .cell .ch{position:absolute;top:13px;left:0;right:0;height:22px}
 #grid.mel .cell .chd{position:absolute;top:0;padding-right:0}
@@ -314,12 +335,14 @@ body.wide #melKeysBtn,body.short #melKeysBtn{display:inline-flex}
 /* bar selection and the Bars menu */
 .cell.insel{background:color-mix(in srgb,var(--accent) 20%,transparent)}
 .barsWrap{position:relative;display:inline-flex}
-.barsMenu{position:absolute;bottom:calc(100% + 6px);right:0;z-index:20;display:flex;flex-direction:column;gap:4px;min-width:190px;padding:8px;
+.barsMenu{position:absolute;bottom:calc(100% + 6px);right:0;z-index:20;display:flex;flex-direction:column;gap:4px;min-width:236px;padding:8px;
   background:var(--surface);border:1px solid var(--line);border-radius:var(--r-m,10px);box-shadow:0 8px 24px rgba(0,0,0,.35)}
 .barsMenu[hidden]{display:none}
 .barsMenu .btn{justify-content:flex-start;width:100%}
 .barsMenu .hint{margin:0 0 4px;min-height:0}
 .barsMenu .btn:disabled{opacity:.45}
+.barsMenu .mnRow{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.barsMenu .mnRow .btn{white-space:nowrap}
 
 /* song messages: confirmations fade out, problems stay */
 #songMsg{transition:opacity .4s}

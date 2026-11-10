@@ -12,7 +12,8 @@ function start(fromBar=0,count=false){
   P.pickup=!S.loop&&fromBar===0&&pb>0;
   P.counting=S.countIn||count;
   P.countSteps=P.counting?Math.max(song.bpb*2,Math.ceil(pb*2)):P.pickup?Math.ceil(pb*2):0;
-  P.startStep=S.loop?0:fromBar*song.bpb*2;P.walker=makeWalker();P.compPrev=null;P.compPlan=null;P.two=null;P.stroll=false;P.lastStroll=-9;P.drop=false;P.lastDrop=-9;P.pedal=null;P.xr=null;P.roll=null;P.lastBass=null;P.bossaComp=null;P.bRoot=null;P.uiQ=[];
+  // fromBar is a written bar: start from the first time it's played
+  P.startStep=S.loop?0:Math.max(0,song.map.indexOf(fromBar))*song.bpb*2;P.walker=makeWalker();P.compPrev=null;P.compPlan=null;P.two=null;P.stroll=false;P.lastStroll=-9;P.drop=false;P.lastDrop=-9;P.pedal=null;P.xr=null;P.roll=null;P.lastBass=null;P.bossaComp=null;P.bRoot=null;P.uiQ=[];
   P.timer=setInterval(tick,25);tick();
   setPlayUI(true);
   try{navigator.wakeLock&&navigator.wakeLock.request('screen').then(l=>P.lock=l).catch(()=>{});}catch(e){}
@@ -55,7 +56,7 @@ function scheduleStep(s,t,beatDur){
   (STYLES[S.style]||STYLES.swing).schedule(gs,t,beatDur);
   for(let i=q;i<P.uiQ.length;i++)P.uiQ[i].song=song;   // the display needs to know which song (chart or loop)
   // melody: where this step is in the chart
-  const sb=(gs/2)%song.beats,sBar=Math.floor(sb/song.bpb),bar=song.loopLen?(sBar%song.loopLen)+song.offset:sBar,within=sb-sBar*song.bpb;
+  const sb=(gs/2)%song.beats,sBar=Math.floor(sb/song.bpb),bar=song.map[sBar%song.map.length],within=sb-sBar*song.bpb;
   scheduleMelodyStep(s,bar*song.bpb+within,bar,t,beatDur,sw,audible);
   if(s%2===0&&REC.on){
     if(bar!==REC.lastBar){

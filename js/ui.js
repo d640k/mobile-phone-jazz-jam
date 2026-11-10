@@ -79,6 +79,13 @@ function renderGrid(){
     const n=document.createElement('span');n.className='n';
     const lab=chartSong.labels[i];
     if(lab){const l=document.createElement('span');l.className='lbl';l.textContent=lab;n.appendChild(l);c.classList.add('secstart');}
+    // repeat signs and ending brackets
+    const rp=chartSong.reps[i]||{},em=chartSong.endings[i];
+    if(rp.rs)c.classList.add('rs');if(rp.re)c.classList.add('re');
+    if(em){
+      const g=document.createElement('span');g.className='endg'+(em.first?' first':'')+(em.closed?' closed':'');c.appendChild(g);
+      if(em.first){const e=document.createElement('span');e.className='endn';e.textContent=em.num+'.';n.appendChild(e);}
+    }
     const num=document.createElement('span');num.className='num';num.textContent=String(i+1);n.appendChild(num);
     const ch=document.createElement('span');ch.className='ch';ch.setAttribute('aria-hidden','true');
     // chords spread across the bar by beats once there's room
@@ -94,7 +101,8 @@ function renderGrid(){
       if(held){const sp=document.createElement('span');sp.className='chd held';sp.dataset.beat=0;sp.textContent='\u200b';sp.appendChild(tonesEl(held));ch.appendChild(sp);}}
     c.append(n,ch);
     const words=b.length?b.map(x=>x.t).join(', '):'same chord';
-    c.setAttribute('aria-label',`Bar ${i+1}${lab?', section '+lab:''}: ${words}. ${LOOP.sel?'Choose for the loop':'Edit'}`);
+    const repTxt=(rp.rs?', start of repeat':'')+(em&&em.first?`, ${em.num===1?'1st':em.num===2?'2nd':em.num+'th'} ending`:'')+(rp.re?', end of repeat':'');
+    c.setAttribute('aria-label',`Bar ${i+1}${lab?', section '+lab:''}${repTxt}: ${words}. ${LOOP.sel?'Choose for the loop':'Edit'}`);
     CELLS.push(c);
   });
   curCell=null;layoutLines();
@@ -206,14 +214,14 @@ function showBeat(ev){
     setCur(null);setTones(null);return;
   }
   if(ev.count){setNow(String(ev.count),song.segs[0]?'→ '+song.segs[0].chord.sym:'','Count-in');return;}
-  const sg=ev.song||song,off=sg.offset||0,lb=sg.loopLen?ev.bar%sg.loopLen:ev.bar;
+  const sg=ev.song||song,wb=sg.map?sg.map[ev.bar%sg.map.length]:ev.bar;   // the written bar being played
   const si=sg.segOfBeat[ev.beat],seg=sg.segs[si];
   const nseg=sg.segs[(si+1)%sg.segs.length];
   setNow(seg.chord.sym,nseg!==seg?'→ '+nseg.chord.sym:'',
-    `Bar ${lb+off+1}/${chartSong.bars.length} · Beat ${ev.beat%sg.bpb+1}`+(ev.chorus!=null?` · Chorus ${ev.chorus+1}`:''));
+    `Bar ${wb+1}/${chartSong.bars.length} · Beat ${ev.beat%sg.bpb+1}`+(ev.chorus!=null?` · Chorus ${ev.chorus+1}`:''));
   const feel=ev.stroll?'comp out':(ev.feel||'');
   $('feelChip').textContent=feel;$('feelChip').hidden=!feel;
-  const cell=CELLS[lb+off];
+  const cell=CELLS[wb];
   if(cell!==curCell){setCur(cell);if(cell&&ev.beat%sg.bpb===0)followLine(cell);}
   setTones(seg.chord);
 }
@@ -304,7 +312,14 @@ function applyChartText(text){
 // ---------- Looping bars ----------
 // Loop button -> tap the first bar -> tap the last bar. Loop button again (or Escape) turns it off.
 const LOOP={sel:false,first:null};
-function loopSong(){return S.loop?sliceSong(chartSong,S.loop.a,S.loop.b):chartSong;}
+// The loop is chosen on written bars; it plays from the first time bar a is played to the next
+// time bar b is (so a loop over a repeat's 2nd ending takes in the whole repeat).
+function loopSong(){
+  if(!S.loop)return chartSong.played||chartSong;
+  const map=(chartSong.played||chartSong).map;let pa=map.indexOf(S.loop.a);if(pa<0)pa=0;
+  let pb=map.indexOf(S.loop.b,pa);if(pb<0)pb=Math.max(pa,map.lastIndexOf(S.loop.b));
+  return sliceSong(chartSong,pa,pb);
+}
 function loopHint(t){$('loopHint').textContent=t||'';$('loopHint').hidden=!t;}
 function refreshLoopBtn(){
   const b=$('loopBtn');b.setAttribute('aria-pressed',String(!!S.loop||LOOP.sel));
@@ -320,7 +335,10 @@ function clearLoop(silent){
   const was=S.loop;S.loop=null;LOOP.sel=false;LOOP.first=null;loopHint('');
   if(!silent){
     let bar=0;
-    if(was&&P.playing&&song.offset!=null){const cur=Math.floor(((P.step-P.countSteps)/2)%song.beats/song.bpb)%(song.loopLen||song.bars.length);bar=(song.offset+cur+1)%chartSong.bars.length;}
+    if(was&&P.playing&&song.loopLen){   // carry on from the bar after the one playing now
+      const cur=Math.floor(((P.step-P.countSteps)/2)%song.beats/song.bpb),wb=song.map[cur%song.map.length];
+      bar=Math.max(0,(chartSong.played||chartSong).map.indexOf((wb+1)%chartSong.bars.length));
+    }
     if(was)applyLoopLive(bar);
     renderGrid();if(!P.playing)showBeat(null);
   }
@@ -468,6 +486,10 @@ function deleteBar(){
   const keep=resolveToks(raw,ED.bar);
   if(raw[ED.bar+1]&&raw[ED.bar+1].toks.join(' ')==='%')raw[ED.bar+1].toks=keep;   // don't break a following "%"
   if(raw[ED.bar].label&&raw[ED.bar+1]&&!raw[ED.bar+1].label)raw[ED.bar+1].label=raw[ED.bar].label;
+  const gone=raw[ED.bar];   // its repeat signs move to the neighbouring bars
+  if(gone.rs&&raw[ED.bar+1])raw[ED.bar+1].rs=true;
+  if(gone.re&&raw[ED.bar-1])raw[ED.bar-1].re=true;
+  if(gone.end&&raw[ED.bar+1]&&!raw[ED.bar+1].end&&!gone.re)raw[ED.bar+1].end=gone.end;
   raw.splice(ED.bar,1);melDeleteBar(ED.bar);ED.bar=Math.min(ED.bar,raw.length-1);ED.slot=0;
   applyChartText(barsToText(raw));renderEditor();
 }
@@ -482,6 +504,21 @@ function addBarAtEnd(){
 // Each is one undo step. Copy also puts the chords on the device clipboard as chart text.
 const SEL={a:null,b:null,picking:false},CLIP={bars:null,mel:null};
 function barMsg(t){$('edMsg').textContent=t||'';}
+// Repeat signs and endings on the selected bars (or this bar):
+// repeat = |: on the first, :| on the last; 1st ending ends with :| (that's where it turns back);
+// 2nd ending is where the music carries on the second time.
+function setRepeat(kind){
+  const [a,b]=selRange(),raw=rawBars(),r=rangeText(a,b),R=r[0].toUpperCase()+r.slice(1);if(a<0)return;
+  if(kind==='repeat'){raw[a].rs=true;raw[b].re=true;barMsg(`${R} repeat (played twice).`);}
+  else if(kind==='clear'){for(let k=a;k<=b;k++){raw[k].rs=raw[k].re=false;raw[k].end=null;}barMsg(`No repeat signs in ${r}.`);}
+  else{
+    const num=kind==='end1'?1:2;
+    for(let k=a;k<=b;k++)raw[k].end=null;
+    raw[a].end=num;if(num===1)raw[b].re=true;
+    barMsg(`${R}: ${num===1?'1st':'2nd'} ending.`);
+  }
+  applyChartText(barsToText(raw));barsMenu(false);SEL.a=SEL.b=null;renderGrid();renderEditor();
+}
 const selRange=()=>SEL.a!=null?[SEL.a,SEL.b]:[ED.bar,ED.bar];
 function setSelection(a,b){SEL.a=Math.min(a,b);SEL.b=Math.max(a,b);SEL.picking=false;renderGrid();renderEditor();}
 function clearSelection(){if(SEL.a==null&&!SEL.picking)return;SEL.a=SEL.b=null;SEL.picking=false;renderGrid();if(ED.open)renderEditor();}
@@ -545,6 +582,13 @@ function barsMenu(open){
   $('mnPaste').disabled=pick||!CLIP.bars;
   $('mnPaste').textContent=!CLIP.bars?'Paste (nothing copied)':sel?`Paste over ${rangeText(a,b)}`:`Paste after bar ${a+1}`;
   $('edDelete').textContent=`Delete ${rangeText(a,b)}`;
+  for(const id of ['mnRepeat','mnEnd1','mnEnd2','mnNoRep'])$(id).disabled=pick;
+  const raw=rawBars(),hasRep=!pick&&raw.slice(a,b+1).some(r=>r.rs||r.re||r.end);
+  $('mnNoRep').disabled=!hasRep;
+  $('mnRepeat').setAttribute('aria-label',`Repeat ${rangeText(a,b)}`);
+  $('mnEnd1').setAttribute('aria-label',`Make ${rangeText(a,b)} the 1st ending`);
+  $('mnEnd2').setAttribute('aria-label',`Make ${rangeText(a,b)} the 2nd ending`);
+  $('mnNoRep').setAttribute('aria-label',`Remove repeat signs and endings from ${rangeText(a,b)}`);
   $('edDelete').disabled=pick||b-a+1>=rawBars().length;
   $('mnSelect').focus();
 }
@@ -1264,6 +1308,8 @@ function init(){
   $('edBars').onclick=e=>{e.stopPropagation();barsMenu();};
   $('mnSelect').onclick=()=>{barsMenu(false);if(SEL.a!=null){clearSelection();return;}SEL.picking=true;barMsg('Tap the last bar of the selection (this bar is the first).');renderEditor();};
   $('mnCopy').onclick=copyBars;$('mnCut').onclick=cutBars;$('mnPaste').onclick=pasteBars;
+  $('mnRepeat').onclick=()=>setRepeat('repeat');$('mnEnd1').onclick=()=>setRepeat('end1');
+  $('mnEnd2').onclick=()=>setRepeat('end2');$('mnNoRep').onclick=()=>setRepeat('clear');
   $('mnLoop').onclick=()=>{const [a,b]=selRange();barsMenu(false);SEL.a=SEL.b=null;closeEditor();setLoop(a,b);};
   document.addEventListener('pointerdown',e=>{if(!$('barsMenu').hidden&&!e.target.closest('.barsWrap'))barsMenu(false);});
   // song

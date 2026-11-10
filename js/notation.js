@@ -116,7 +116,10 @@ function drawStaffRow(row,items,first){
     const st=new VF.Stave(x,STAFF_TOP-40,w);
     if(j===0){st.addClef('treble').addKeySignature(S.keySig);if(first)st.addTimeSignature(curBpb()+'/4');}
     else st.setBegBarType(VF.Barline.type.NONE);
-    if(it.bar===chartSong.bars.length-1)st.setEndBarType(VF.Barline.type.END);
+    const rp=(chartSong.reps||[])[it.bar]||{};
+    if(rp.rs)st.setBegBarType(VF.Barline.type.REPEAT_BEGIN);
+    if(rp.re)st.setEndBarType(VF.Barline.type.REPEAT_END);
+    else if(it.bar===chartSong.bars.length-1)st.setEndBarType(VF.Barline.type.END);
     else if(chartSong.labels[it.bar+1])st.setEndBarType(VF.Barline.type.DOUBLE);   // end of a section
     st.setContext(c).draw();
     const str=melGet(it.bar),b=vfBar(str,it.bar>=0),live=b.voices.filter(x=>x.notes.length);

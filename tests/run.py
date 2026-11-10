@@ -108,8 +108,8 @@ async def engine_chord_codec_roundtrip(c):
 @test
 async def engine_loop_pads_to_16(c):
     pg = await c.page()
-    r = await ev(pg, '(()=>{const s=sliceSong(chartSong,4,5);return [s.bars.length,s.loopLen,s.offset]})()')
-    ok(r == [16, 2, 4], r)
+    r = await ev(pg, '(()=>{const s=sliceSong(chartSong,4,5);return [s.bars.length,s.loopLen,s.map.slice(0,4)]})()')
+    ok(r == [16, 2, [4, 5, 4, 5]], r)
 
 @test
 async def engine_all_styles_schedule(c):
@@ -150,7 +150,7 @@ async def layout_three_sizes(c):
 async def play_stop_label_and_now_playing(c):
     pg = await c.page(storage={'chart': BLUES, 'countIn': False})
     await pg.click('#play'); await pg.wait_for_timeout(1200)
-    ok(await pg.text_content('#playLabel') == 'Stop', 'label not Stop')
+    ok(await pg.text_content('#playLabel') == 'Stop', 'label not Stop %s' % pg.errors)
     ok(await pg.text_content('#cur') in ('F7', 'B\u266d7'), await pg.text_content('#cur'))
     ok('Bar ' in await pg.text_content('#pos'), 'no position')
     ok(await pg.locator('#grid .cell.cur').count() == 1, 'no current bar highlight')
@@ -479,6 +479,61 @@ async def editor_percent_bar_and_labels_survive(c):
     await pg.click('#edBars'); await pg.click('#edDelete')
     raw = await ev(pg, 'splitChart(S.chart).map(b=>b.toks.join(" "))')
     ok(raw[2] == 'Dm7 G7', raw)
+
+@test
+async def repeats_and_endings(c):
+    chart = '[A] |: Cmaj7 | Am7 | 1. Dm7 | G7 :| 2. Dm7 G7 | C6 |\n[B] | F | E7 |'
+    for dev, mel in ((PHONE, False), (PHONE, True), (LAPTOP, True)):
+        pg = await c.page(dev, storage={'chart': chart, 'showMel': mel, 'melody': {'pickup': '', 'bars': ['E5w', 'C5w', 'F5w', 'D5w', 'D5h B4h', 'C5w', '', '']}})
+        if mel: await pg.wait_for_function('document.querySelector("#grid .staff")')
+        # played: 1 2 3 4 | 1 2 | 5 6 7 8
+        ok(await ev(pg, 'chartSong.played.map') == [0, 1, 2, 3, 0, 1, 4, 5, 6, 7], await ev(pg, 'chartSong.played.map'))
+        ok(await ev(pg, 'chartSong.bars.length') == 8, 'written bars stay 8')
+        ok(await ev(pg, '[...document.querySelectorAll("#grid .cell")].map(c=>["rs","re"].filter(k=>c.classList.contains(k)).join("")+(c.querySelector(".endn")?.textContent||""))') == ['rs', '', '1.', 're', '2.', '', '', ''], 'drawn')
+        ok('start of repeat' in await pg.get_attribute('#grid .cell >> nth=0', 'aria-label'), 'aria')
+        ok('2nd ending' in await pg.get_attribute('#grid .cell >> nth=4', 'aria-label'), 'aria ending')
+        await c.shot(pg, 'repeats_' + ('mel' if mel else 'plain') + ('_laptop' if dev is LAPTOP else ''))
+        ok(not pg.errors, pg.errors)
+    # the 2nd ending names its chord even though the bar before ends on the same one
+    ok(await ev(pg, 'chartSong.bars[4].map(x=>x.t).join()') == 'Dm7,G7', 'ending names chord')
+    # the band follows the played order: what the display shows at played bar 4 is written bar 1
+    await ev(pg, 'song=loopSong();showBeat({t:0,beat:4*4,bar:4,song})')
+    ok(await ev(pg, 'curCell===CELLS[0]') and 'Bar 1/8' in await pg.text_content('#pos'), await pg.text_content('#pos'))
+    await ev(pg, 'showBeat({t:0,beat:6*4,bar:6,song})')
+    ok(await ev(pg, 'curCell===CELLS[4]'), 'played bar 7 is the 2nd ending')
+    # a loop over the 2nd ending takes in the whole repeat; a loop inside it is just those bars
+    await ev(pg, 'S.loop={a:0,b:4}')
+    ok(await ev(pg, 'loopSong().map.slice(0,7)') == [0, 1, 2, 3, 0, 1, 4], await ev(pg, 'loopSong().map.slice(0,7)'))
+    await ev(pg, 'S.loop={a:1,b:2}')
+    ok(await ev(pg, 'loopSong().map.slice(0,4)') == [1, 2, 1, 2], 'loop inside the repeat')
+    await ev(pg, 'S.loop=null')
+    # starting from a bar plays from its first time through
+    ok(await ev(pg, '(chartSong.played).map.indexOf(4)') == 6, 'from bar 5')
+    # real playback: the highlight goes 1, 2, back to 1, then the 2nd ending and on
+    pg = await c.page(storage={'chart': '|: C | 1. D :| 2. E | F |', 'bpm': 320, 'countIn': False})
+    await ev(pg, 'window.SEEN=[];setInterval(()=>{const i=CELLS.indexOf(curCell);if(i>=0&&SEEN[SEEN.length-1]!==i)SEEN.push(i)},30)')
+    await pg.click('#play'); await pg.wait_for_timeout(4300); await pg.click('#play')
+    ok((await ev(pg, 'SEEN'))[:5] == [0, 1, 0, 2, 3], await ev(pg, 'SEEN'))
+    ok(not pg.errors, pg.errors)
+    # editing: build the same thing from plain bars with the Bars menu
+    pg = await c.page(PHONE, storage={'chart': '| Cmaj7 | Am7 | Dm7 | G7 | Dm7 G7 | C6 |'})
+    await pg.locator('#grid .cell').nth(0).click()
+    await ev(pg, 'setSelection(0,3)'); await pg.click('#edBars'); await pg.click('#mnRepeat')
+    ok('Bars 1–4 repeat' in await pg.text_content('#edMsg'), await pg.text_content('#edMsg'))
+    await ev(pg, 'setSelection(2,3)'); await pg.click('#edBars'); await pg.click('#mnEnd1')
+    await ev(pg, 'ED.bar=4;renderEditor()'); await pg.click('#edBars'); await pg.click('#mnEnd2')
+    ok(await ev(pg, 'S.chart') == '|: Cmaj7 | Am7 | 1. Dm7 | G7 :|\n| 2. Dm7 G7 | C6 |', await ev(pg, 'S.chart'))
+    ok(await ev(pg, 'chartSong.played.map') == [0, 1, 2, 3, 0, 1, 4, 5], 'plays as written')
+    # undo, then remove them all
+    await pg.click('#edUndo')
+    ok(await ev(pg, 'chartSong.endings[4]') is None, 'undo the 2nd ending')
+    await ev(pg, 'setSelection(0,5)'); await pg.click('#edBars'); await pg.click('#mnNoRep')
+    ok(await ev(pg, 'S.chart') == '| Cmaj7 | Am7 | Dm7 | G7 |\n| Dm7 G7 | C6 |', await ev(pg, 'S.chart'))
+    # deleting the bar that ends a repeat moves the sign to the bar before
+    await ev(pg, 'applyChartText("|: C | D | E :| F |");ED.bar=2;renderEditor()')
+    await pg.click('#edBars'); await pg.click('#edDelete')
+    ok(await ev(pg, 'S.chart') == '|: C | D :| F |', await ev(pg, 'S.chart'))
+    ok(not pg.errors, pg.errors)
 
 @test
 async def editor_copy_cut_paste(c):

@@ -125,21 +125,64 @@ function parseChord(sym){
 // Returns {bars:[[display tokens]], segs:[{chord,start,len}], segOfBeat:[], beats, errors}
 // bpb = beats per bar (4, or 3 for a waltz)
 const BAR_SPLITS={4:[[4],[2,2],[2,1,1],[1,1,1,1]],3:[[3],[2,1],[1,1,1]]};
-// The chart text as raw bars: [{label, toks}]. "[A]" labels attach to the next bar.
-// Shared by parseChart and the chart editor, so bar indexes always agree.
+// The chart text as raw bars: [{label, toks, rs, re, end}]. "[A]" labels attach to the next bar.
+// Repeats are written as on paper: "|:" starts a repeat (rs), ":|" ends one (re), and "1." / "2."
+// at the start of a bar begins that ending (end). Shared by parseChart and the chart editor, so
+// bar indexes always agree.
 function splitChart(text){
-  const out=[];let label=null;
+  const out=[];let label=null,rsNext=false;
   for(const part of text.replace(/\[([^\]]*)\]/g,'|\u00a7$1|').split(/[|\n]/)){
     const s=part.trim();if(!s)continue;
     if(s[0]==='\u00a7'){label=s.slice(1).trim()||null;continue;}
-    out.push({label,toks:s.split(/\s+/).filter(Boolean)});label=null;
+    const toks=s.split(/\s+/).filter(Boolean);let rs=false,re=false,end=null;
+    if(toks[0][0]===':'){rs=true;toks[0]=toks[0].slice(1);if(!toks[0])toks.shift();}
+    const L=toks.length-1;
+    if(L>=0&&toks[L].endsWith(':')){re=true;toks[L]=toks[L].slice(0,-1);if(!toks[L])toks.pop();}
+    if(toks.length&&/^[1-9]\.$/.test(toks[0])){end=+toks[0][0];toks.shift();}
+    if(!toks.length){                       // a repeat sign with no chords: it belongs to a neighbour
+      if(re&&out.length)out[out.length-1].re=true;
+      if(rs)rsNext=true;
+      continue;
+    }
+    out.push({label,toks,rs:rs||rsNext,re,end});label=null;rsNext=false;
+  }
+  return out;
+}
+// The order bars are played in, following repeats and endings (each repeat is played twice).
+// reps: [{rs,re,end}] per bar; labels: section labels (an ending stops at a new section).
+function playOrder(reps,labels=[]){
+  const n=reps.length,order=[];
+  // an ending runs to its ":|", or up to the next ending, repeat or section
+  const regionEnd=i=>{let j=i;while(j<n-1&&!reps[j].re&&!reps[j+1].end&&!reps[j+1].rs&&!labels[j+1])j++;return j;};
+  let i=0,start=0,pass=1,endPass=1,jumped=false,guard=0;
+  while(i<n&&guard++<5000){
+    const r=reps[i];
+    if(r.rs&&!jumped){start=i;pass=1;endPass=1;}
+    jumped=false;
+    if(r.end&&r.end!==endPass){i=regionEnd(i)+1;continue;}
+    order.push(i);
+    if(r.re&&pass<2){pass++;endPass=pass;i=start;jumped=true;continue;}
+    if(r.re){start=i+1;pass=1;}       // done; the endings after it still count as pass 2
+    i++;
+  }
+  return order;
+}
+// Where each ending's bracket starts and how far it reaches, for drawing: [{num, first, last, closed}]
+function endingMarks(reps,labels=[]){
+  const n=reps.length,out=[];let len1=1;
+  for(let i=0;i<n;i++){
+    if(!reps[i].end)continue;
+    let j=i;while(j<n-1&&!reps[j].re&&!reps[j+1].end&&!reps[j+1].rs&&!labels[j+1]&&(reps[i].end===1||j-i+1<len1))j++;
+    if(reps[i].end===1)len1=j-i+1;
+    for(let k=i;k<=j;k++)out[k]={num:reps[i].end,first:k===i,last:k===j,closed:k===j&&!!reps[j].re};
+    i=j;
   }
   return out;
 }
 function parseChart(text,bpb=4){
   const errors=[];
   const raw=splitChart(text);
-  const bars=[],segs=[],segOfBeat=[],labels=[],src=[];
+  const bars=[],segs=[],segOfBeat=[],labels=[],src=[],reps=[];
   let prevTokens=null,lastChord=null;
   for(let ri=0;ri<raw.length;ri++){
     const rb=raw[ri].toks.join(' ');
@@ -170,6 +213,7 @@ function parseChart(text,bpb=4){
     });
     if(segOfBeat[barStart]===undefined) continue;
     bars.push(display);labels.push(raw[ri].label);src.push(ri);   // src: index into splitChart()
+    reps.push({rs:!!raw[ri].rs,re:!!raw[ri].re,end:raw[ri].end||null});
     prevTokens=toks;
   }
   // Lead-sheet display: the chords actually sounding in each bar (so % shows real chords).
@@ -180,10 +224,18 @@ function parseChart(text,bpb=4){
     const d=[];let prev=null;
     for(let b=i*bpb;b<i*bpb+bpb;b++){const sy=symAt(b);if(sy!==prev){d.push({t:sy,dim:false,beat:b-i*bpb});prev=sy;}}
     d.forEach((x,j)=>{x.len=(j+1<d.length?d[j+1].beat:bpb)-x.beat;});
-    const held=i>0&&!labels[i]&&d[0].t===symAt(i*bpb-1);
+    // a repeat or an ending is jumped to: it always names its chord too
+    const held=i>0&&!labels[i]&&!reps[i].rs&&!reps[i].end&&d[0].t===symAt(i*bpb-1);
     bars[i]=held?(d.length===1?[]:(d[0].dim=true,d)):d;
   }
-  return {bars,segs,segOfBeat,beats:bars.length*bpb,bpb,errors,labels,src};
+  const song={bars,segs,segOfBeat,beats:bars.length*bpb,bpb,errors,labels,src,reps};
+  // map: played bar -> written bar. Without repeats the song plays as written; with them,
+  // song.played is the tune in playing order (what the band follows).
+  const order=playOrder(reps,labels);
+  if(order.length===bars.length&&order.every((b,k)=>b===k)){song.map=order;song.played=song;}
+  else{song.map=bars.map((_,k)=>k);song.played=songFromBars(song,order);}
+  song.endings=endingMarks(reps,labels);
+  return song;
 }
 // ---------- Walking bass ----------
 const BLO=31,BHI=52;
@@ -334,15 +386,21 @@ function planCompBar(song,bar,busy){
 // walking bass, fills and chorus count all treat it as the whole tune. Short loops are
 // repeated until they fill at least minBars, so fills and dynamics happen once per
 // 16-ish bars instead of every pass. loopLen = bars in one pass of the loop.
+// src = the written song; a..b = positions in its playing order (src.played).
 function sliceSong(src,a,b,minBars=16){
-  const bpb=src.bpb,n=b-a+1,reps=Math.max(1,Math.ceil(minBars/n)),segs=[],segOfBeat=[];let last=-1,y=0;
-  for(let r=0;r<reps;r++)for(let x=a*bpb;x<(b+1)*bpb;x++,y++){
+  const pl=src.played||src,list=pl.map.slice(a,b+1),n=list.length,reps=Math.max(1,Math.ceil(minBars/n));
+  const all=[];for(let r=0;r<reps;r++)all.push(...list);
+  return Object.assign(songFromBars(src,all),{loopLen:n});
+}
+// A song made of written bars in the given order (repeats unrolled, or a loop).
+// map: played bar -> written bar.
+function songFromBars(src,list){
+  const bpb=src.bpb,segs=[],segOfBeat=[];let last=-1,y=0;
+  for(const wb of list)for(let x=wb*bpb;x<(wb+1)*bpb;x++,y++){
     const si=src.segOfBeat[x];
     if(si!==last){segs.push({chord:src.segs[si].chord,start:y,len:0});last=si;}
     segs[segs.length-1].len++;segOfBeat.push(segs.length-1);
   }
-  // one held chord across the whole phrase: let it wrap as a single segment
-  const bars=[];for(let r=0;r<reps;r++)bars.push(...src.bars.slice(a,b+1));
-  return{bars,segs,segOfBeat,beats:y,bpb,errors:[],offset:a,loopLen:n};
+  return{bars:list.map(b=>src.bars[b]),segs,segOfBeat,beats:y,bpb,errors:[],map:[...list]};
 }
 /*CORE-END*/

@@ -7,7 +7,10 @@ function barsToText(raw){
   const lines=[];let cur=[];
   for(const b of raw){if((b.label||cur.length===4)&&cur.length){lines.push(cur);cur=[];}cur.push(b);}
   if(cur.length)lines.push(cur);
-  return lines.map(l=>(l[0].label?`[${l[0].label}] `:'')+'| '+l.map(b=>b.toks.join(' ')).join(' | ')+' |').join('\n');
+  // barlines carry the repeat signs: "|:" before a bar starting a repeat, ":|" after one ending it
+  const bar=b=>(b.end?b.end+'. ':'')+b.toks.join(' ');
+  return lines.map(l=>(l[0].label?`[${l[0].label}] `:'')+
+    l.map((b,k)=>(k&&l[k-1].re?':|':'|')+(b.rs?':':'')+' '+bar(b)+' ').join('')+(l[l.length-1].re?':|':'|')).join('\n');
 }
 // a bar's chord tokens with "%" resolved to the bar it repeats
 function resolveToks(raw,i){
