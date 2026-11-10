@@ -536,6 +536,25 @@ async def repeats_and_endings(c):
     ok(not pg.errors, pg.errors)
 
 @test
+async def bars_menu_stays_on_screen(c):
+    # the menu must be fully visible: above the button, below it, or scrolling if neither fits
+    vis = """(()=>{const m=$("barsMenu").getBoundingClientRect();let t=0,b=innerHeight;
+      for(let el=$("edBars").parentElement;el&&el!==document.body;el=el.parentElement){const o=getComputedStyle(el);
+        if(/(auto|scroll|hidden|clip)/.test(o.overflowY)){const r=el.getBoundingClientRect();t=Math.max(t,r.top);b=Math.min(b,r.bottom);}}
+      return [Math.round(m.top),Math.round(m.bottom),Math.round(t),Math.round(b),$("barsMenu").classList.contains("down")]})()"""
+    for vp, scroll in ((dict(width=1280, height=800), False), (dict(width=1280, height=800), True), (dict(width=1280, height=520), False), (dict(width=1280, height=420), True), (dict(width=390, height=844), False)):
+        pg = await c.page(dict(viewport=vp), storage={'chart': BLUES})
+        await pg.locator('#grid .cell').nth(0).click()
+        if scroll:   # footer near the top of the panel
+            await ev(pg, '$("edBars").scrollIntoView({block:"start"})')
+        await pg.click('#edBars')
+        r = await ev(pg, vis)
+        ok(r[0] >= r[2] - 1 and r[1] <= r[3] + 1, '%s scroll=%s: menu %s' % (vp, scroll, r))
+        ok(await ev(pg, '$("barsMenu").scrollHeight<=$("barsMenu").clientHeight+1||getComputedStyle($("barsMenu")).overflowY==="auto"'), 'scrolls if cut')
+        if vp['height'] == 420: await c.shot(pg, 'bars_menu_short')
+        ok(not pg.errors, pg.errors)
+
+@test
 async def editor_copy_cut_paste(c):
     chart = '[A] C | Am7 | Dm7 | G7 |\n[B] F | % | E7 | Am7 |'
     pg = await c.page(PHONE, storage={'chart': chart, 'melody': {'pickup': '', 'bars': ['C5w', 'A4w', '', '', 'F4h & C4h', '', '', '/']}})

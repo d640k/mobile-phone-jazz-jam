@@ -590,7 +590,23 @@ function barsMenu(open){
   $('mnEnd2').setAttribute('aria-label',`Make ${rangeText(a,b)} the 2nd ending`);
   $('mnNoRep').setAttribute('aria-label',`Remove repeat signs and endings from ${rangeText(a,b)}`);
   $('edDelete').disabled=pick||b-a+1>=rawBars().length;
+  placeMenu($('barsMenu'),$('edBars'));
   $('mnSelect').focus();
+}
+// Open a pop-up menu above its button if it fits there, else below; if neither has room it
+// takes the bigger side and scrolls. "Room" is what's visible: the screen and any panel that clips.
+function placeMenu(m,btn){
+  m.classList.remove('down');m.style.maxHeight='';
+  let top=0,bottom=innerHeight;
+  for(let el=btn.parentElement;el&&el!==document.body;el=el.parentElement){
+    const o=getComputedStyle(el);
+    if(/(auto|scroll|hidden|clip)/.test(o.overflowY)){const r=el.getBoundingClientRect();top=Math.max(top,r.top);bottom=Math.min(bottom,r.bottom);}
+  }
+  const b=btn.getBoundingClientRect(),h=m.offsetHeight+8,above=b.top-top,below=bottom-b.bottom;
+  if(h<=above)return;
+  if(h<=below||below>above)m.classList.add('down');
+  const room=Math.max(above,below)-8;
+  if(h>room+8)m.style.maxHeight=room+'px';
 }
 
 // ---------- Melody entry (bar editor, Melody) ----------
