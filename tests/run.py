@@ -435,6 +435,24 @@ async def editor_two_chords_and_text_toggle(c):
     ok(not pg.errors, pg.errors)
 
 @test
+async def editor_split_bar_holds_last_chord(c):
+    # a new song is | Cmaj7 | % | % | %: two chords in bar 1 must not repeat into bars 2-4
+    pg = await c.page(storage={'chart': '| Cmaj7 | % | % | % |'})
+    await pg.locator('#grid .cell').nth(0).click()
+    await pg.get_by_role('button', name='+ Chord').click()
+    await chip(pg, 'edRoots', 'D').click()
+    await chip(pg, 'edQuals', 'm7').click()
+    ok(await ev(pg, 'S.chart.replace(/\\s+/g," ").trim()') == '| Cmaj7 Dm7 | / | / | / |', await ev(pg, 'S.chart'))
+    await c.shot(pg, 'split_bar_after')
+    ok(await ev(pg, 'chartSong.segs.map(s=>s.chord.sym+":"+s.len).join()') == 'Cmaj7:2,Dm7:14', await ev(pg, 'chartSong.segs.map(s=>s.chord.sym+":"+s.len).join()'))
+    # a % after a bar that already had two chords still repeats the whole bar
+    pg = await c.page(storage={'chart': '| C7 F7 | % | G7 |'})
+    await pg.locator('#grid .cell').nth(0).click()
+    await chip(pg, 'edRoots', 'D').click()
+    ok(await ev(pg, 'splitChart(S.chart)[1].toks') == ['%'], await ev(pg, 'S.chart'))
+    ok(not pg.errors, pg.errors)
+
+@test
 async def editor_insert_delete_move_add(c):
     pg = await c.page(storage={'chart': BLUES})
     await pg.locator('#grid .cell').nth(0).click()

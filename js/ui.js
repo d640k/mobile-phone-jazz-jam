@@ -356,6 +356,10 @@ function closeEditor(){
 // write one raw bar's tokens back to the chart
 function setBarToks(toks){
   const raw=rawBars();if(!raw[ED.bar])return;
+  const chords=t=>t.filter(x=>x!=='/'&&x!=='%'),before=chords(resolveToks(raw,ED.bar)),after=chords(toks);
+  // "%" after a one-chord bar means "that chord carries on". If the bar now has several chords,
+  // the next bars hold its last chord ("/") rather than repeating the whole bar.
+  if(before.length<=1&&after.length>1)for(let j=ED.bar+1;raw[j]&&raw[j].toks.join(' ')==='%'&&!raw[j].label;j++)raw[j].toks=['/'];
   raw[ED.bar].toks=toks.length?toks:['%'];
   applyChartText(barsToText(raw));renderEditor();
 }
