@@ -685,6 +685,27 @@ async def chord_types_complete(c):
     ok(not pg.errors, pg.errors)
 
 @test
+async def add_bar_beside_last_bar(c):
+    pos = '(()=>{const a=$("addBar").getBoundingClientRect(),c=CELLS[CELLS.length-1].getBoundingClientRect(),w=$("chartWrap");return [a.top<c.bottom&&a.bottom>c.top, a.left>=c.right, a.right<=w.getBoundingClientRect().left+w.clientWidth]})()'
+    for mel in (False, True):
+        st = {'showMel': mel, 'melody': {'pickup': '', 'bars': ['C5w']}}
+        # short last line: the button sits right after the last bar
+        pg = await c.page(PHONE, storage=dict(st, chart='| C | F | G | C |\n| F | G |'))
+        if mel: await pg.wait_for_function('document.querySelector("#grid .staff")')
+        r = await ev(pg, pos)
+        ok(r == [True, True, True], '%s short line: %s' % (mel, r))
+        n = await ev(pg, 'CELLS.length')
+        await pg.click('#addBar')
+        ok(await ev(pg, 'CELLS.length') == n + 1, 'adds a bar')
+        # a full last line: the button goes below it
+        pg = await c.page(PHONE, storage=dict(st, chart='| C | F | G | C |\n| F | G | C | C |'))
+        if mel: await pg.wait_for_function('document.querySelector("#grid .staff")')
+        r = await ev(pg, pos)
+        ok(r[0] is False and await ev(pg, '$("addBar").getBoundingClientRect().top>=CELLS[CELLS.length-1].getBoundingClientRect().bottom-1'), '%s full line: %s' % (mel, r))
+        await c.shot(pg, 'add_bar_full_' + str(mel))
+        ok(not pg.errors, pg.errors)
+
+@test
 async def editor_copy_cut_paste(c):
     chart = '[A] C | Am7 | Dm7 | G7 |\n[B] F | % | E7 | Am7 |'
     pg = await c.page(PHONE, storage={'chart': chart, 'melody': {'pickup': '', 'bars': ['C5w', 'A4w', '', '', 'F4h & C4h', '', '', '/']}})

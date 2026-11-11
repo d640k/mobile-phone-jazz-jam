@@ -159,7 +159,13 @@ function layoutLines(){
     }
     g.appendChild(row);rows.push([row,items.slice(a,b)]);
   });
-  g.appendChild(addBarBtn());
+  // "+ Bar" goes right after the last bar when the last line has room for it, else on a line of its own
+  const add=addBarBtn();g.appendChild(add);
+  const lastRow=rows.length&&rows[rows.length-1][0],aw=add.offsetWidth+12;
+  if(lastRow&&parseFloat(lastRow.style.width)+aw<=W){
+    const wrap=document.createElement('div');wrap.className='lastLine';
+    g.insertBefore(wrap,lastRow);wrap.append(lastRow,add);
+  }
   if(mel)rows.forEach(([row,its],li)=>{try{drawStaffRow(row,its,li===0);}catch(e){console.error(e);}});
   $('chartWrap').scrollTop=top;
   if(focused&&g.contains(focused))focused.focus({preventScroll:true});
