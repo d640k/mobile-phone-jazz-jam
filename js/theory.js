@@ -14,31 +14,45 @@ const KINDS={
   dom:{arp:[0,4,7,10],guide:[4,10],comp:[4,10,2,9],scale:[0,2,4,5,7,9,10]},
   sus:{arp:[0,5,7,10],guide:[5,10],comp:[5,10,2,9],scale:[0,2,4,5,7,9,10]},
   aug:{arp:[0,4,8,10],guide:[4,10],comp:[4,8,10,2],scale:[0,2,4,6,8,10]},
+  augmaj7:{arp:[0,4,8,11],guide:[4,11],comp:[4,8,11,2],scale:[0,2,4,6,8,9,11]},
+  // triads written as triads: the band plays just those notes (C and Cm keep the jazz habit of a 6th)
+  dimT:{arp:[0,3,6],guide:[3,6],comp:[0,3,6],scale:[0,2,3,5,6,8,9,11]},
+  augT:{arp:[0,4,8],guide:[4,8],comp:[0,4,8],scale:[0,2,4,6,8,10]},
+  sus2:{arp:[0,2,7],guide:[2,7],comp:[0,2,7],scale:[0,2,4,5,7,9,11]},
+  // Cadd9 / Cm(add9): exactly the triad and the 9, no 6th or 7th
+  majAdd9:{arp:[0,4,7],guide:[4,7],comp:[4,7,2,0],scale:[0,2,4,5,7,9,11]},
+  mAdd9:{arp:[0,3,7],guide:[3,7],comp:[3,7,2,0],scale:[0,2,3,5,7,8,10]},
 };
 function classify(raw){
   const q=raw.replace(/[()\s]/g,'');
   let kind;
   if(/^[øØ]/.test(q)||/^(min|mi|m|-)(7|9|11)?b5/.test(q)) kind='m7b5';
-  else if(/^(dim|o|°)/.test(q)) kind='dim';
-  else if(/^(maj|Maj|MAJ|Δ|\^|M(?!in|i))/.test(q)) kind=/6/.test(q)?'maj6':'maj7';
+  else if(/^(dim|o|°)/.test(q)) kind=/7/.test(q)?'dim':'dimT';        // C° is a triad, C°7 the 4-note chord
+  else if(/^(maj|Maj|MAJ|Δ|\^|M(?!in|i))/.test(q)) kind=/6/.test(q)?'maj6':/#5|\+5|aug/.test(q)?'augmaj7':'maj7';
   else if(/^(min|Min|mi|Mi|m|-)/.test(q)){
     const r=q.replace(/^(min|Min|mi|Mi|m|-)/,'');
     if(/^(maj|Maj|M|Δ|\^)/.test(r)) kind='mmaj7';
+    else if(/^add/.test(r)) kind='mAdd9';
     else if(/6/.test(r)) kind='m6';
     else if(/7|9|11|13/.test(r)) kind='m7';
     else if(r==='') kind='m6';
     else return null;
   }
+  else if(/^sus2$/.test(q)) kind='sus2';
   else if(/sus/.test(q)) kind='sus';
-  else if(/^(\+|aug)/.test(q)) kind='aug';
+  else if(/^(\+|aug)/.test(q)){
+    const r=q.replace(/^(\+|aug)/,'');
+    kind=/^(maj|Maj|M|Δ|\^)/.test(r)?'augmaj7':/7|9|11|13/.test(r)?'aug':'augT';
+  }
   else if(/6/.test(q)&&!/7/.test(q)) kind='maj6';
-  else if(/^(add9|add2|2)$/.test(q)) kind='maj6';
+  else if(/^(add9|add2|2)$/.test(q)) kind='majAdd9';
   else if(/7|9|11|13|alt/.test(q)) kind='dom';
   else if(q===''||/^(add9|add2|2)$/.test(q)) kind='maj6';
   else return null;
   const k=KINDS[kind];
   const c={kind,arp:[...k.arp],guide:[...k.guide],comp:[...k.comp],scale:[...k.scale]};
   if(kind==='maj7'&&/#11/.test(q)) c.comp=[4,11,2,6];
+  if(kind==='aug'){if(/b9/.test(q))c.comp=c.comp.map(i=>i===2?1:i);else if(/#9/.test(q))c.comp=c.comp.map(i=>i===2?3:i);}
   if(kind==='dom'){
     if(/alt/.test(q)){c.comp=[4,10,3,8];c.scale=[0,1,3,4,6,8,10];c.arp=[0,4,8,10];}
     else{
@@ -299,7 +313,7 @@ function perms(a){if(a.length<=1)return[a];const o=[];a.forEach((x,i)=>{for(cons
 function voicingCands(ch,type){
   // major chords stack from lydian (#11) so the natural 4th never lands on a maj7
   const sc=(ch.kind==='maj7'||ch.kind==='maj6'?ch.scale.map(i=>i===5?6:i):ch.scale).map(i=>(ch.root+i)%12);
-  if(type==='quartal'){
+  if(type==='quartal'&&ch.arp.length>=4){   // a triad stays a triad
     const out=[];
     for(const st of [ch.guide[0],ch.guide[1],2,ch.arp[2]]){
       for(let base=50;base<=62;base++){

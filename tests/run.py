@@ -654,6 +654,37 @@ async def new_bar_carries_the_last_chord(c):
     ok(not pg.errors, pg.errors)
 
 @test
+async def chord_types_complete(c):
+    pg = await c.page(storage={'chart': '| C | C |'})
+    # what each written symbol is made of (the chord tones shown and played)
+    want = {'Cdim': 'C E\u266d G\u266d', 'C\u00b0': 'C E\u266d G\u266d', 'Cdim7': 'C E\u266d G\u266d A',
+            'C+': 'C E G\u266f', 'Caug': 'C E G\u266f', 'C+7': 'C E G\u266f B\u266d', 'Cmaj7#5': 'C E G\u266f B',
+            'C+maj7': 'C E G\u266f B', 'Csus2': 'C D G', 'Cadd9': 'C E G D', 'Cm(add9)': 'C E\u266d G D',
+            'C7sus4': 'C F G B\u266d', 'Cm7b5': 'C E\u266d G\u266d B\u266d'}
+    got = await ev(pg, 'Object.fromEntries(%s.map(s=>[s,chordToneNames(s).map(x=>x.name).join(" ")]))' % json.dumps(list(want)))
+    ok(got == want, {k: (got[k], v) for k, v in want.items() if got[k] != v})
+    # the band plays only what's written for triads and added-note chords
+    v = await ev(pg, '["Cdim","C+","Csus2","Cadd9"].map(s=>{const ch=parseChord(s),p=new Set();for(let i=0;i<20;i++)voicingFor(ch,null,"rootless",{}).forEach(m=>p.add(m%12));return [...p].sort((a,b)=>a-b)})')
+    ok(v == [[0, 3, 6], [0, 4, 8], [0, 2, 7], [0, 2, 4, 7]], v)
+    # every type has a button, and each one writes its symbol
+    await pg.locator('#grid .cell').nth(1).click()
+    out = []
+    for label in ('dim', '+', '+7', 'sus2', 'dim7', 'm7\u266d5'):
+        await chip(pg, 'edQuals', label).click()
+        out.append(await ev(pg, 'splitChart(S.chart)[1].toks[0]'))
+    ok(out == ['Cdim', 'C+', 'C+7', 'Csus2', 'Cdim7', 'Cm7b5'], out)
+    # maj + 9 is Cadd9 (not C9, a dominant chord); m + 9 is Cm(add9)
+    await chip(pg, 'edQuals', 'maj').click(); await chip(pg, 'edExts', '9').click()
+    ok(await ev(pg, 'splitChart(S.chart)[1].toks[0]') == 'Cadd9', await ev(pg, 'S.chart'))
+    await chip(pg, 'edQuals', 'm').click()
+    ok(await ev(pg, 'splitChart(S.chart)[1].toks[0]') == 'Cm(add9)', await ev(pg, 'S.chart'))
+    # maj7 + #5
+    await chip(pg, 'edExts', '9').click(); await chip(pg, 'edQuals', 'maj7').click(); await chip(pg, 'edExts', '\u266f5').click()
+    ok(await ev(pg, 'splitChart(S.chart)[1].toks[0]') == 'Cmaj7#5', await ev(pg, 'S.chart'))
+    await c.shot(pg, 'chord_types')
+    ok(not pg.errors, pg.errors)
+
+@test
 async def editor_copy_cut_paste(c):
     chart = '[A] C | Am7 | Dm7 | G7 |\n[B] F | % | E7 | Am7 |'
     pg = await c.page(PHONE, storage={'chart': chart, 'melody': {'pickup': '', 'bars': ['C5w', 'A4w', '', '', 'F4h & C4h', '', '', '/']}})

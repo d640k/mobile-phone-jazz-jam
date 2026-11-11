@@ -26,7 +26,10 @@ const ROOTS_SHARP=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
 const ENHARMONIC={'C#':'Db','D#':'Eb','F#':'Gb','G#':'Ab','A#':'Bb','Db':'C#','Eb':'D#','Gb':'F#','Ab':'G#','Bb':'A#'};
 const spellingOf=n=>n&&n.length===2?(n[1]==='#'?'sharp':'flat'):null;
 // [label shown, quality token]
-const PICK_QUALS=[['maj',''],['maj7','maj7'],['6','6'],['7','7'],['sus','7sus4'],['alt','7alt'],['m','m'],['m7','m7'],['m6','m6'],['mΔ','m(maj7)'],['m7♭5','m7b5'],['dim7','dim7']];
+// rows of six: the everyday ones first (same places as before), then triads and the rest
+const PICK_QUALS=[['maj',''],['maj7','maj7'],['6','6'],['7','7'],['sus','7sus4'],['alt','7alt'],
+  ['m','m'],['m7','m7'],['m6','m6'],['mΔ','m(maj7)'],['m7♭5','m7b5'],['dim7','dim7'],
+  ['dim','dim'],['+','+'],['+7','+7'],['sus2','sus2']];
 const PICK_EXTS=['b5','#5','b9','9','#9','11','#11','13','b13'];
 // quality spellings people type -> [quality token, implied extensions]
 const Q_FORMS=[
@@ -35,11 +38,14 @@ const Q_FORMS=[
   ['maj13','maj7',['9','13']],['maj9','maj7',['9']],['maj7','maj7',[]],['Maj7','maj7',[]],['M7','maj7',[]],['Δ7','maj7',[]],['Δ','maj7',[]],['^7','maj7',[]],
   ['m13','m7',['9','13']],['m11','m7',['9','11']],['m9','m7',['9']],['m7','m7',[]],['-7','m7',[]],['mi7','m7',[]],['min7','m7',[]],
   ['m69','m6',['9']],['m6','m6',[]],['-6','m6',[]],
-  ['dim7','dim7',[]],['o7','dim7',[]],['°7','dim7',[]],['dim','dim7',[]],['o','dim7',[]],
-  ['7sus4','7sus4',[]],['9sus4','7sus4',['9']],['7sus','7sus4',[]],['sus4','7sus4',[]],['sus','7sus4',[]],
+  ['dim7','dim7',[]],['o7','dim7',[]],['°7','dim7',[]],['dim','dim',[]],['o','dim',[]],['°','dim',[]],
+  ['madd9','m',['9']],['-add9','m',['9']],
+  ['sus2','sus2',[]],['7sus4','7sus4',[]],['9sus4','7sus4',['9']],['7sus','7sus4',[]],['sus4','7sus4',[]],['sus','7sus4',[]],
   ['7alt','7alt',[]],['alt','7alt',[]],
+  ['+maj7','maj7',['#5']],['augmaj7','maj7',['#5']],['+7','+7',[]],['aug7','+7',[]],
   ['13','7',['9','13']],['11','7',['9','11']],['9','7',['9']],['69','6',['9']],['6/9','6',['9']],['7','7',[]],['6','6',[]],
-  ['m','m',[]],['-','m',[]],['aug','aug',[]],['+','aug',[]],
+  ['m','m',[]],['-','m',[]],['aug','+',[]],['+','+',[]],
+  ['add9','',['9']],['add2','',['9']],
   ['','',[]],
 ];
 function chordParts(tok){
@@ -75,5 +81,8 @@ function chordFromParts(p){
   else if(q==='7sus4'&&has('9')){q='9sus4';drop('9');}
   else if(q==='6'&&has('9')){q='69';drop('9');}
   else if(q==='m6'&&has('9')){q='m69';drop('9');}
+  // a 9 on a plain triad is added, not a 7th chord: Cadd9, Cm(add9)
+  else if(q===''&&has('9')){q='add9';drop('9');}
+  else if(q==='m'&&has('9')){q='m(add9)';drop('9');}
   return p.root+q+ext.join('')+(p.bass&&p.bass!==p.root?'/'+p.bass:'');
 }
