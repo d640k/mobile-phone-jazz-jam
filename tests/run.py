@@ -555,6 +555,16 @@ async def bars_menu_stays_on_screen(c):
         ok(not pg.errors, pg.errors)
 
 @test
+async def pickup_stays_with_labelled_bar_1(c):
+    for dev in (PHONE, LAPTOP):
+        pg = await c.page(dev, storage={'chart': '[A] | C | F | G | C |\n[B] | F | G |', 'melody': {'pickup': 'G4q A4q', 'bars': ['C5w']}})
+        await pg.wait_for_function('document.querySelector("#grid .staff")')
+        rows = await ev(pg, '[...document.querySelectorAll("#grid .sys")].map(r=>[...r.querySelectorAll(".cell")].map(c=>c===PICK?"p":c.dataset.bar))')
+        ok(rows[0][:2] == ['p', '0'], rows)
+        ok(any(r[0] == '4' for r in rows), 'section B still starts a line: %s' % rows)
+        ok(not pg.errors, pg.errors)
+
+@test
 async def editor_copy_cut_paste(c):
     chart = '[A] C | Am7 | Dm7 | G7 |\n[B] F | % | E7 | Am7 |'
     pg = await c.page(PHONE, storage={'chart': chart, 'melody': {'pickup': '', 'bars': ['C5w', 'A4w', '', '', 'F4h & C4h', '', '', '/']}})

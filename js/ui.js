@@ -138,7 +138,8 @@ function layoutLines(){
   };
   let start=0;
   for(let i=1;i<=items.length;i++){
-    if(i===items.length||chartSong.labels[items[i].bar]||real(start,i)===per){place(start,i,false);start=i;}
+    // a section starts a new line, except right after the pickup: that rides along with bar 1
+    if(i===items.length||(chartSong.labels[items[i].bar]&&real(start,i)>0)||real(start,i)===per){place(start,i,false);start=i;}
   }
   // 3) build the lines; a short line keeps the bar spacing of a full one
   g.innerHTML='';
