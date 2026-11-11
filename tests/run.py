@@ -585,6 +585,33 @@ async def chart_never_scrolls_sideways(c):
         ok(not pg.errors, pg.errors)
 
 @test
+async def repeat_ties_follow_playing_order(c):
+    # bar 2 ends tied; 1st ending (bar 3) and 2nd ending (bar 5) both start on that note
+    chart = '|: C | C | 1. F | G :| 2. F | C |'
+    mel = {'pickup': '', 'bars': ['E5w', 'G4h C5h~', 'C5h A4h', 'B4w', 'C5h D5h', 'E5w']}
+    pg = await c.page(LAPTOP, storage={'chart': chart, 'melody': mel})
+    await pg.wait_for_function('document.querySelector("#grid .staff")')
+    ok(await ev(pg, 'chartSong.played.map') == [0, 1, 2, 3, 0, 1, 4, 5], 'order')
+    ev_ = await ev(pg, 'getTimeline().events.filter(e=>e.voice===1).map(e=>[e.bar,e.wbar,e.midi,e.dur])')
+    # first time: C5 in bar 2 ties into the 1st ending (2 + 2 beats), A4 follows
+    ok([1, 1, 72, 4] in ev_ and not any(e[0] == 2 and e[2] == 72 for e in ev_), ev_)
+    # second time: it ties into the 2nd ending instead; the 2nd ending's C5 isn't struck again
+    ok([5, 1, 72, 4] in ev_ and not any(e[0] == 6 and e[2] == 72 for e in ev_), ev_)
+    ok([6, 4, 74, 2] in ev_, 'D5 in the 2nd ending %s' % ev_)
+    # the staff shows the tie coming into the 2nd ending
+    ok(await ev(pg, 'tieIntoEnding(4,1,melNotesV(S.melody.bars[4],1)[0])'), 'tie arc into the 2nd ending')
+    ok(not await ev(pg, 'tieIntoEnding(2,1,melNotesV(S.melody.bars[2],1)[0])'), 'not on the 1st ending')
+    await c.shot(pg, 'repeat_tie')
+    # Hear from the 2nd ending's bar starts at its first time through... which is after the repeat
+    ok(await ev(pg, 'playedAt(4)') == 6 and await ev(pg, 'playedAt(1)') == 1, 'playedAt')
+    # real playback: the 2nd ending's C5 is never struck (count C5 attacks: bar 2 twice only)
+    await ev(pg, '(()=>{setBpm(300);S.countIn=0;S.melPlay=true;window.HITS=[];const mv=melVoice;window.melVoice=(m,...r)=>{HITS.push(m);return mv(m,...r)}})()')
+    await pg.click('#play'); await pg.wait_for_timeout(7200); await pg.click('#play')
+    hits = await ev(pg, 'HITS')
+    ok(hits.count(72) == 2 and hits.count(74) == 1, hits)
+    ok(not pg.errors, pg.errors)
+
+@test
 async def editor_copy_cut_paste(c):
     chart = '[A] C | Am7 | Dm7 | G7 |\n[B] F | % | E7 | Am7 |'
     pg = await c.page(PHONE, storage={'chart': chart, 'melody': {'pickup': '', 'bars': ['C5w', 'A4w', '', '', 'F4h & C4h', '', '', '/']}})

@@ -66,23 +66,29 @@ const melCap=i=>i<0?curBpb():curBpb();   // a pickup can be up to a full bar lon
 
 // ---- playback timeline: ties merged, positions in beats from the start of bar 1 ----
 let melTimeline=null;
+// The melody in playing order: with repeats, bars come round again and a tie carries on into
+// whichever bar is played next. Each event: bar = its place in the playing order, wbar = the
+// written bar (for the staff and the chart); abs and dur in beats from bar 1.
 function getTimeline(){
-  if(melTimeline)return melTimeline;
+  const pl=chartSong.played||chartSong;
+  if(melTimeline&&melTimeline.src===pl)return melTimeline;
   const bpb=curBpb(),out=[],hold={1:null,2:null};   // ties carry on per voice
-  const push=(barIdx,list,base,v)=>{
+  const push=(barIdx,wbar,list,base,v)=>{
+    if(!list.length){hold[v]=null;return;}           // a tie into an empty bar goes nowhere
     let at=0;
     list.forEach((n,ni)=>{
       const abs=base+at,h=hold[v];
       if(h&&n.p&&n.midis.join()===h.midis.join()){h.dur+=n.beats;if(!n.tie)hold[v]=null;}   // continues a tied note
-      else{hold[v]=null;const e={abs,dur:n.beats,midi:n.midi,midis:n.midis,bar:barIdx,ni,start:at,voice:v};out.push(e);if(n.tie)hold[v]=e;}
+      else{hold[v]=null;const e={abs,dur:n.beats,midi:n.midi,midis:n.midis,bar:barIdx,wbar,ni,start:at,voice:v};out.push(e);if(n.tie)hold[v]=e;}
       at+=n.beats;
     });
   };
   const pk=melNotes(S.melody.pickup),pb=pk.reduce((s,n)=>s+n.beats,0);
-  push(-1,pk,-pb,1);
-  S.melody.bars.forEach((s,i)=>{push(i,melNotesV(s,1),i*bpb,1);push(i,melNotesV(s,2),i*bpb,2);});
+  push(-1,-1,pk,-pb,1);
+  const order=pl.map||S.melody.bars.map((_,i)=>i);
+  order.forEach((w,k)=>{const s=S.melody.bars[w]||'';push(k,w,melNotesV(s,1),k*bpb,1);push(k,w,melNotesV(s,2),k*bpb,2);});
   out.sort((a,b)=>a.abs-b.abs||a.voice-b.voice);
-  melTimeline={events:out,pickupBeats:pb,byBar:new Map()};
+  melTimeline={events:out,pickupBeats:pb,byBar:new Map(),src:pl};
   for(const e of out){if(!melTimeline.byBar.has(e.bar))melTimeline.byBar.set(e.bar,[]);melTimeline.byBar.get(e.bar).push(e);}
   return melTimeline;
 }

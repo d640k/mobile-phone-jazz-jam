@@ -101,6 +101,24 @@ function drawTie(c,first,last){
   const n=Math.min(first?first.getKeys().length:99,last?last.getKeys().length:99),ix=[...Array(n).keys()];
   new NOT.vf.StaveTie({first_note:first,last_note:last,first_indices:ix,last_indices:ix}).setContext(c).draw();
 }
+// The 2nd ending is also reached from the bar before the 1st ending: if that bar ends on a tie
+// to this same note, it's tied in here too (drawn as an arc coming in, as on paper).
+function tieIntoEnding(w,v,n){
+  const E=chartSong.endings||[],em=E[w];if(!em||!em.first||em.num<2)return false;
+  let k=w-1;while(k>=0&&!(E[k]&&E[k].first&&E[k].num===1))k--;
+  if(k<1)return false;
+  const prev=melNotesV(S.melody.bars[k-1]||'',v),last=prev[prev.length-1];
+  return !!(last&&last.tie&&last.p&&last.midis.join()===n.midis.join());
+}
+// a short tie arc coming into a note from the left (a crescent, like VexFlow's ties),
+// on the side away from the stem
+function drawTieIn(c,sn){
+  const x1=sn.getNoteHeadBeginX()-1,x0=x1-14,dir=sn.getStemDirection?sn.getStemDirection():1,s=dir===1?1:-1;
+  for(const y0 of (sn.getYs?sn.getYs():[])){
+    const y=y0+s*5;
+    c.beginPath();c.moveTo(x0,y);c.quadraticCurveTo((x0+x1)/2,y+s*7,x1,y);c.quadraticCurveTo((x0+x1)/2,y+s*5.5,x0,y);c.closePath();c.fill();
+  }
+}
 // per voice: a tie to the next bar in this line / into the next line
 const TIES={1:{pending:null,carry:false},2:{pending:null,carry:false}};
 function drawStaffRow(row,items,first){
@@ -145,6 +163,7 @@ function drawStaffRow(row,items,first){
         // ties, within the line and from the previous bar
         if(i===0&&T.pending){drawTie(c,T.pending,m.n.p&&!m.filler?sn:null);T.pending=null;}
         if(i===0&&T.carry){if(m.n.p&&!m.filler)drawTie(c,null,sn);T.carry=false;}
+        else if(i===0&&m.n.p&&!m.filler&&tieIntoEnding(it.bar,vb.v,m.n))drawTieIn(c,sn);
         if(m.n.tie){   // filler rests don't count: a tie at the end of what you wrote goes on to the next bar
           const nm=vb.meta[i+1],nx=nm&&!nm.filler?vb.notes[i+1]:null;
           if(nx&&nm.n.p)drawTie(c,sn,nx);

@@ -389,8 +389,8 @@ function planCompBar(song,bar,busy){
 // src = the written song; a..b = positions in its playing order (src.played).
 function sliceSong(src,a,b,minBars=16){
   const pl=src.played||src,list=pl.map.slice(a,b+1),n=list.length,reps=Math.max(1,Math.ceil(minBars/n));
-  const all=[];for(let r=0;r<reps;r++)all.push(...list);
-  return Object.assign(songFromBars(src,all),{loopLen:n});
+  const all=[],pidx=[];for(let r=0;r<reps;r++)for(let k=a;k<=b;k++){all.push(pl.map[k]);pidx.push(k);}
+  return Object.assign(songFromBars(src,all),{loopLen:n,pidx});   // pidx: played bar -> place in the whole tune's order
 }
 // A song made of written bars in the given order (repeats unrolled, or a loop).
 // map: played bar -> written bar.

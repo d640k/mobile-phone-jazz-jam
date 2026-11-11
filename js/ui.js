@@ -233,7 +233,7 @@ const MELMARK={1:{keys:[],next:[]},2:{keys:[],next:[]}};
 function showMel(e){
   if(!e){markNote(null,0,1);markNote(null,0,2);for(const k of $('kb').querySelectorAll('.mel,.melnext'))k.classList.remove('mel','melnext');MELMARK[1]={keys:[],next:[]};MELMARK[2]={keys:[],next:[]};return;}
   const v=e.voice||1;
-  markNote(e.midi!=null?e.bar:null,e.ni,v);
+  markNote(e.midi!=null?e.wbar:null,e.ni,v);
   const M=MELMARK[v];
   for(const m of [...M.keys,...M.next])keyEl(m)?.classList.remove('mel','melnext');
   M.keys=[];M.next=[];
@@ -317,9 +317,12 @@ const LOOP={sel:false,first:null};
 // time bar b is (so a loop over a repeat's 2nd ending takes in the whole repeat).
 function loopSong(){
   if(!S.loop)return chartSong.played||chartSong;
+  const [pa,pb]=loopRange();return sliceSong(chartSong,pa,pb);
+}
+function loopRange(){
   const map=(chartSong.played||chartSong).map;let pa=map.indexOf(S.loop.a);if(pa<0)pa=0;
   let pb=map.indexOf(S.loop.b,pa);if(pb<0)pb=Math.max(pa,map.lastIndexOf(S.loop.b));
-  return sliceSong(chartSong,pa,pb);
+  return [pa,pb];
 }
 function loopHint(t){$('loopHint').textContent=t||'';$('loopHint').hidden=!t;}
 function refreshLoopBtn(){
@@ -799,7 +802,7 @@ function hearTick(){
   const now=ctx.currentTime;
   while(PREV.i<PREV.q.length&&PREV.q[PREV.i].t<=now){
     const {e}=PREV.q[PREV.i++];showMel(e);
-    const cell=e.bar<0?PICK:CELLS[e.bar];
+    const cell=e.wbar<0?PICK:CELLS[e.wbar];
     if(cell&&cell!==curCell){setCur(cell);followLine(cell);}
   }
   if(now>=PREV.end+0.1){hearStop();return;}
@@ -816,16 +819,18 @@ function hearUI(){
   $('edHearAll').setAttribute('aria-pressed',String(PREV.on));
   $('edHearAllLabel').textContent=PREV.on?'Stop':(S.loop?'Hear the loop':'Hear from here');
 }
+// the first time a written bar is played (Hear works in playing order, like the band)
+const playedAt=w=>Math.max(0,(chartSong.played||chartSong).map.indexOf(w));
 function hearBar(){
-  const tl=getTimeline(),bpb=curBpb(),a=ED.bar<0?-tl.pickupBeats:ED.bar*bpb;
+  const tl=getTimeline(),bpb=curBpb(),a=ED.bar<0?-tl.pickupBeats:playedAt(ED.bar)*bpb;
   hearRange(a,ED.bar<0?0:a+bpb);
 }
 // from the bar you're on to the end of the song (or just the looped bars)
 function hearFromHere(){
   if(PREV.on){hearStop();return;}
-  const tl=getTimeline(),bpb=curBpb();
-  if(S.loop)return hearRange(S.loop.a*bpb,(S.loop.b+1)*bpb);
-  hearRange(ED.bar<0?-tl.pickupBeats:ED.bar*bpb,chartSong.bars.length*bpb);
+  const tl=getTimeline(),bpb=curBpb(),pl=chartSong.played||chartSong;
+  if(S.loop){const [pa,pb]=loopRange();return hearRange(pa*bpb,(pb+1)*bpb);}
+  hearRange(ED.bar<0?-tl.pickupBeats:playedAt(ED.bar)*bpb,pl.map.length*bpb);
 }
 // ---------- Recording ----------
 function recUI(on){document.body.classList.toggle('recording',on);loopHint(on?`Recording bars ${REC.from+1}–${REC.to+1}. Play along; tap Stop when you’re done.`:'');}

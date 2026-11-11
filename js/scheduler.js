@@ -57,7 +57,10 @@ function scheduleStep(s,t,beatDur){
   for(let i=q;i<P.uiQ.length;i++)P.uiQ[i].song=song;   // the display needs to know which song (chart or loop)
   // melody: where this step is in the chart
   const sb=(gs/2)%song.beats,sBar=Math.floor(sb/song.bpb),bar=song.map[sBar%song.map.length],within=sb-sBar*song.bpb;
-  scheduleMelodyStep(s,bar*song.bpb+within,bar,t,beatDur,sw,audible);
+  // the melody follows the playing order (so a tie reaches whichever bar comes next: after a
+  // repeat, that's the 2nd ending); bar stays the written bar for recording and the display
+  const pbar=song.pidx?song.pidx[sBar%song.pidx.length]:sBar;
+  scheduleMelodyStep(s,pbar*song.bpb+within,pbar,t,beatDur,sw,audible);
   if(s%2===0&&REC.on){
     if(bar!==REC.lastBar){
       if(REC.lastBar===REC.to||(REC.lastBar!=null&&bar<REC.lastBar)){const wait=Math.max(0,(t-ctx.currentTime)*1000);setTimeout(()=>recFinish(),wait);REC.on=false;}
