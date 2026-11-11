@@ -466,7 +466,7 @@ async def editor_insert_delete_move_add(c):
     await pg.click('#edDone')
     await pg.click('#addBar')
     ok(await ev(pg, 'chartSong.bars.length') == 13 and await ev(pg, 'ED.bar') == 12, 'add bar at end')
-    ok(await ev(pg, 'splitChart(S.chart)[12].toks.join(" ")') == 'Gm7 C7', 'new bar copies last')
+    ok(await ev(pg, 'splitChart(S.chart)[12].toks.join(" ")') == 'C7', 'new bar carries the last chord on')
 
 @test
 async def editor_percent_bar_and_labels_survive(c):
@@ -636,6 +636,22 @@ async def section_label_clear_of_chord_after_pickup(c):
         rows = await ev(pg, '[...document.querySelectorAll("#grid .sys")].map(r=>r.classList.contains("lblmid"))')
         ok(rows[0] and not any(rows[1:]), 'only the pickup line moves: %s' % rows)
         ok(not pg.errors, pg.errors)
+
+@test
+async def new_bar_carries_the_last_chord(c):
+    pg = await c.page(LAPTOP, storage={'chart': '| C | Dm7 G7 |'})
+    await pg.locator('#grid .cell').nth(1).click()
+    await pg.click('#edInsert')
+    ok(await ev(pg, 'splitChart(S.chart).map(b=>b.toks.join(" "))') == ['C', 'Dm7 G7', 'G7'], await ev(pg, 'S.chart'))
+    ok(await ev(pg, 'ED.bar') == 2 and await ev(pg, 'chartSong.bars[2].length') == 0, 'shown as the chord carrying on')
+    # one tap on a root changes it: no other chords to delete first
+    await chip(pg, 'edRoots', 'C').click()
+    ok(await ev(pg, 'splitChart(S.chart)[2].toks') == ['C7'], await ev(pg, 'S.chart'))   # the root changes, the quality stays
+    # the + Bar at the end of the chart does the same; a held "/" bar looks back for its chord
+    await ev(pg, 'applyChartText("| C | Dm7 G7 | / |")')
+    await pg.click('#addBar')
+    ok(await ev(pg, 'splitChart(S.chart).map(b=>b.toks.join(" "))') == ['C', 'Dm7 G7', '/', 'G7'], await ev(pg, 'S.chart'))
+    ok(not pg.errors, pg.errors)
 
 @test
 async def editor_copy_cut_paste(c):

@@ -482,9 +482,15 @@ function applyBarText(){
 }
 function moveBar(d){const raw=rawBars();ED.note=null;STACK.ref=null;barMsg('');ED.bar=Math.max(ED.part==='melody'?-1:0,Math.min(raw.length-1,ED.bar+d));ED.slot=0;renderGrid();renderEditor();}
 function setPart(p){ED.part=p;ED.note=null;if(p==='chords'&&ED.bar<0)ED.bar=0;ED.text=false;layout();renderGrid();renderEditor();}
+// The chord still sounding at the end of bar i: a new bar after it carries that chord on
+// (not a copy of the whole bar, which would bring back its other chords too).
+function heldChord(raw,i){
+  for(let k=Math.min(i,raw.length-1);k>=0;k--){const c=resolveToks(raw,k).filter(t=>t!=='/'&&t!=='%');if(c.length)return c[c.length-1];}
+  return 'C';
+}
 function insertBar(){
-  const raw=rawBars(),cur=raw[ED.bar]?resolveToks(raw,ED.bar).filter(t=>t!=='%'):['C'];
-  raw.splice(ED.bar+1,0,{label:null,toks:cur.length?cur:['C']});melInsertBar(ED.bar+1);ED.bar++;ED.slot=0;
+  const raw=rawBars();
+  raw.splice(ED.bar+1,0,{label:null,toks:[heldChord(raw,ED.bar)]});melInsertBar(ED.bar+1);ED.bar++;ED.slot=0;
   applyChartText(barsToText(raw));renderEditor();
 }
 function deleteBar(){
@@ -500,7 +506,7 @@ function deleteBar(){
   applyChartText(barsToText(raw));renderEditor();
 }
 function addBarAtEnd(){
-  const raw=rawBars();raw.push({label:null,toks:raw.length?resolveToks(raw,raw.length-1):['C']});
+  const raw=rawBars();raw.push({label:null,toks:[heldChord(raw,raw.length-1)]});
   applyChartText(barsToText(raw));openEditor(raw.length-1);
 }
 
