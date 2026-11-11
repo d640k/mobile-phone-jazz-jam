@@ -123,6 +123,9 @@ function drawTieIn(c,sn){
 const TIES={1:{pending:null,carry:false},2:{pending:null,carry:false}};
 function drawStaffRow(row,items,first){
   const VF=NOT.vf,K=notationScale();
+  // a section starting mid-line (after a pickup): its label sits right over the chord, so this
+  // line's chords go a little lower (the staff makes room)
+  row.classList.toggle('lblmid',items.some((it,j)=>j>0&&it.bar>=0&&!!chartSong.labels[it.bar]));
   const box=document.createElement('div');box.className='staff';box.setAttribute('aria-hidden','true');
   const W=row.clientWidth,H=Math.round(STAFF_UNITS*K);
   box.style.width=W+'px';box.style.height=H+'px';row.appendChild(box);
@@ -207,7 +210,7 @@ function drawStaffRow(row,items,first){
 // Make room for what the notation actually reaches: high notes and up-stems (forced up in a two-
 // voice bar) would run into the chord symbols, low down-stems into the next line. The line moves
 // down (--lift) and/or grows (--drop) just enough; lines that fit stay compact.
-const STAFF_Y=28,TONES_H=19;
+const STAFF_Y=28,TONES_H=19,LBL_DROP=7;   // LBL_DROP: matches .sys.lblmid in the CSS
 const chordBottom=()=>37+(S.chartTones?TONES_H:0);   // px from the line's top: chord text ends; the staff box starts
 function fitStaffRow(row,box,H){
   row.style.removeProperty('--lift');row.style.removeProperty('--drop');
@@ -217,7 +220,7 @@ function fitStaffRow(row,box,H){
     top=Math.min(top,r.top-bt.top);bot=Math.max(bot,r.bottom-bt.top);
   }
   if(top>1e8)return;
-  const lift=Math.max(0,Math.ceil(chordBottom()-STAFF_Y-top)),drop=Math.max(0,Math.ceil(bot-H+2));
+  const lift=Math.max(0,Math.ceil(chordBottom()+(row.classList.contains('lblmid')?LBL_DROP:0)-STAFF_Y-top)),drop=Math.max(0,Math.ceil(bot-H+2));
   if(lift)row.style.setProperty('--lift',lift+'px');
   if(drop)row.style.setProperty('--drop',drop+'px');
   row.dataset.lift=lift;

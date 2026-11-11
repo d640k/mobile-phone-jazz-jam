@@ -305,6 +305,7 @@ body.melEdit .edFoot{position:static;margin-bottom:0}
 #grid.mel .cell.re{border-right:0}
 #grid.mel .cell .n{position:absolute;top:2px;left:4px}
 #grid.mel .cell .ch{position:absolute;top:13px;left:0;right:0;height:22px}
+#grid.mel .sys.lblmid .cell .ch{top:20px}   /* clear of a section label mid-line (LBL_DROP) */
 #grid.mel .cell .chd{position:absolute;top:0;padding-right:0}
 #grid.mel .cell .gap{display:none}
 .staff{position:absolute;left:0;top:calc(28px + var(--lift,0px));pointer-events:none;color:var(--text)}

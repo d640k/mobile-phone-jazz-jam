@@ -625,6 +625,19 @@ async def section_lines_fill_the_width(c):
             ok(not pg.errors, pg.errors)
 
 @test
+async def section_label_clear_of_chord_after_pickup(c):
+    mel = {'pickup': 'G4e A4e B4e C5e D5e E5e', 'bars': ['F5e E5e D5e C5e B4e A4e G4e F4e', 'E4q G4q B4q D5q', 'C5w', 'A4w']}
+    for dev in (PHONE, LAPTOP):
+        pg = await c.page(dev, storage={'chart': '[A] | Bbmaj7 | Ebm7b5 Ab7 | Dbmaj7 | Gb7 |\n[B] | C | F |', 'melody': mel})
+        await pg.wait_for_function('document.querySelector("#grid .staff")')
+        r = await ev(pg, '(()=>{const l=CELLS[0].querySelector(".lbl").getBoundingClientRect(),c=CELLS[0].querySelector(".chd .cr").getBoundingClientRect();return [l.bottom,c.top]})()')
+        ok(r[0] <= r[1], 'label above the chord: %s' % r)
+        # only that line moves: section B starts its own line as usual
+        rows = await ev(pg, '[...document.querySelectorAll("#grid .sys")].map(r=>r.classList.contains("lblmid"))')
+        ok(rows[0] and not any(rows[1:]), 'only the pickup line moves: %s' % rows)
+        ok(not pg.errors, pg.errors)
+
+@test
 async def editor_copy_cut_paste(c):
     chart = '[A] C | Am7 | Dm7 | G7 |\n[B] F | % | E7 | Am7 |'
     pg = await c.page(PHONE, storage={'chart': chart, 'melody': {'pickup': '', 'bars': ['C5w', 'A4w', '', '', 'F4h & C4h', '', '', '/']}})
