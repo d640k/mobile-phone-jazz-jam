@@ -147,7 +147,9 @@ function layoutLines(){
   lines.forEach(([a,b,split],li)=>{
     const row=document.createElement('div');row.className='sys';
     let sum=head(li);for(let i=a;i<b;i++)sum+=nat[i];
-    const n=real(a,b),share=!split&&n<per?Math.max(sum,W*n/per):W;
+    // a short line ending a section stretches to the edge; only the song's last line stays short
+    // (keeping a full line's bar spacing)
+    const n=real(a,b),last=b===items.length,share=!split&&n<per&&last?Math.max(sum,W*n/per):W;
     row.style.width=Math.min(W,share)+'px';
     for(let i=a;i<b;i++){
       // with the staff, spare width goes mostly to the bars with more in them

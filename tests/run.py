@@ -612,6 +612,19 @@ async def repeat_ties_follow_playing_order(c):
     ok(not pg.errors, pg.errors)
 
 @test
+async def section_lines_fill_the_width(c):
+    chart = '[A] | C | F | G |\n[B] | Am | Dm | G7 | C | F |'
+    for dev in (PHONE, LAPTOP):
+        for mel in (False, True):
+            pg = await c.page(dev, storage={'chart': chart, 'showMel': mel, 'melody': {'pickup': '', 'bars': ['C5w']}})
+            if mel: await pg.wait_for_function('document.querySelector("#grid .staff")')
+            w = await ev(pg, '[...document.querySelectorAll("#grid .sys")].map(r=>[r.querySelectorAll(".cell").length,Math.round(r.getBoundingClientRect().width)])')
+            full = max(x[1] for x in w)
+            ok(w[0][0] == 3 and w[0][1] >= full - 2, 'section A (3 bars) fills the line: %s' % w)
+            ok(w[-1][0] < 4 and w[-1][1] < full - 20, 'the last line stays short: %s' % w)
+            ok(not pg.errors, pg.errors)
+
+@test
 async def editor_copy_cut_paste(c):
     chart = '[A] C | Am7 | Dm7 | G7 |\n[B] F | % | E7 | Am7 |'
     pg = await c.page(PHONE, storage={'chart': chart, 'melody': {'pickup': '', 'bars': ['C5w', 'A4w', '', '', 'F4h & C4h', '', '', '/']}})
