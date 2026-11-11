@@ -359,12 +359,13 @@ body.wide #melKeysBtn,body.short #melKeysBtn{display:inline-flex}
 body.ctones{--tnH:19px}
 .cell .chd{position:relative}
 .cell .tn{position:absolute;left:0;top:calc(100% + 2px);width:max-content;z-index:1;padding:0 5px;border-radius:4px;background:var(--panel);
-  font-size:13px;font-weight:600;line-height:17px;height:17px;white-space:nowrap;visibility:hidden;letter-spacing:0}
+  font-size:13px;font-weight:600;line-height:17px;height:17px;white-space:nowrap;display:none;letter-spacing:0}
 body.wide .cell .tn{font-size:14px}
 .cell .tn span+span{margin-left:.45em}
 .cell .tn.tight{font-size:11px;padding:0 3px}
 .cell .tn.tight span+span{margin-left:.3em}
-.cell.cur .tn{visibility:visible}
+/* hidden ones take no room at all (a hidden one hanging past the line's end made the chart scroll sideways) */
+.cell.cur .tn{display:block}
 .tn .gt{color:var(--tn-gt)}.tn .ct{color:var(--tn-ct)}.tn .ex{color:var(--tn-ex)}
 .staff .vf-stavenote.tcur:not(.cur):not(.selnote) .vf-notehead[data-tone="gt"] path{fill:var(--dot-gt);stroke:var(--dot-gt)}
 .staff .vf-stavenote.tcur:not(.cur):not(.selnote) .vf-notehead[data-tone="ct"] path{fill:var(--dot-ct);stroke:var(--dot-ct)}

@@ -1,3 +1,4 @@
+import json
 #!/usr/bin/env python3
 """Jazz Jam test suite.
 
@@ -324,10 +325,10 @@ async def chart_tones_in_bar_being_played(c):
         pg = await c.page(dev, storage=dict(st, showMel=mel), scheme='light')
         if mel: await pg.wait_for_function('document.querySelector("#grid .staff")')
         ok(await ev(pg, 'CELLS[0].querySelector(".tn").textContent') == 'FACE\u266d', 'F7 spelled')
-        ok(await ev(pg, 'getComputedStyle(CELLS[0].querySelector(".tn")).visibility') == 'hidden', 'hidden until played')
+        ok(await ev(pg, 'getComputedStyle(CELLS[0].querySelector(".tn")).display') == 'none', 'hidden until played')
         h0 = await ev(pg, 'CELLS.map(x=>x.offsetWidth+":"+x.offsetHeight).join()')
         await ev(pg, 'setCur(CELLS[3])')
-        ok(await ev(pg, 'getComputedStyle(CELLS[3].querySelector(".tn")).visibility') == 'visible', 'shown in the bar being played')
+        ok(await ev(pg, 'getComputedStyle(CELLS[3].querySelector(".tn")).display') == 'block', 'shown in the bar being played')
         ok(await ev(pg, 'CELLS.map(x=>x.offsetWidth+":"+x.offsetHeight).join()') == h0, 'nothing moves')
         await c.shot(pg, 'chart_tones_' + ('mel' if mel else 'plain'))
         if mel:
@@ -348,7 +349,7 @@ async def chart_tones_in_bar_being_played(c):
         if mel: await pg.wait_for_function('document.querySelector("#grid .staff")')
         ok(await ev(pg, 'CELLS.map(c=>c.querySelector(".tn")?.textContent||"")') == ['CE\u266dGB\u266d'] * 3 + ['FACE\u266d'], 'held chord tones')
         await ev(pg, 'setCur(CELLS[2])')
-        ok(await ev(pg, 'getComputedStyle(CELLS[2].querySelector(".tn")).visibility') == 'visible', 'shown in a held bar')
+        ok(await ev(pg, 'getComputedStyle(CELLS[2].querySelector(".tn")).display') == 'block', 'shown in a held bar')
         if mel:
             ok(await ev(pg, 'NOT.els.get("2:1:0").querySelector(".vf-notehead").dataset.tone') == 'gt', 'Eb over held Cm7')
         await c.shot(pg, 'chart_tones_held_' + ('mel' if mel else 'plain'))
@@ -562,6 +563,25 @@ async def pickup_stays_with_labelled_bar_1(c):
         rows = await ev(pg, '[...document.querySelectorAll("#grid .sys")].map(r=>[...r.querySelectorAll(".cell")].map(c=>c===PICK?"p":c.dataset.bar))')
         ok(rows[0][:2] == ['p', '0'], rows)
         ok(any(r[0] == '4' for r in rows), 'section B still starts a line: %s' % rows)
+        ok(not pg.errors, pg.errors)
+
+@test
+async def chart_never_scrolls_sideways(c):
+    # nothing on the chart may hang past its right edge (hidden chord tones once did)
+    over = '(()=>{const w=$("chartWrap");return w.scrollWidth-w.clientWidth})()'
+    for dev in (PHONE, dict(viewport=dict(width=844, height=390), has_touch=True, is_mobile=True)):
+        pg = await c.page(dev, storage={'chart': BLUES})
+        for mel in (False, True):
+            for n in await ev(pg, 'Object.keys(PRESETS)'):
+                await ev(pg, 'S.showMel=%s;loadPreset(%s)' % ('true' if mel else 'false', json.dumps(n)))
+                await pg.wait_for_timeout(500 if mel else 80)
+                ok(await ev(pg, over) <= 0, '%s %s: %s px' % ('mel' if mel else 'plain', n, await ev(pg, over)))
+                # the bar being played at the end of each line shows its tones inside the chart
+                ends = await ev(pg, '[...document.querySelectorAll("#grid .sys")].map(r=>[...r.querySelectorAll(".cell")].pop()).map(c=>CELLS.indexOf(c)).filter(i=>i>=0)')
+                for i in ends:
+                    await ev(pg, 'setCur(CELLS[%d])' % i)
+                    ok(await ev(pg, over) <= 0, '%s %s bar %d playing: %s px' % ('mel' if mel else 'plain', n, i + 1, await ev(pg, over)))
+                await ev(pg, 'setCur(null)')
         ok(not pg.errors, pg.errors)
 
 @test

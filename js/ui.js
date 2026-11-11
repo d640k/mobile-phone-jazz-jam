@@ -195,7 +195,7 @@ function spreadTones(cell){
   if(tns.length>1&&tns.reduce((w,t)=>w+t.offsetWidth+4,0)>cell.clientWidth-8)tns.forEach(t=>t.classList.add('tight'));
   let right=-1e9;
   for(const t of tns){const r=t.getBoundingClientRect();if(r.left<right+4)t.style.left=(right+4-r.left)+'px';right=t.getBoundingClientRect().right;}
-  const lim=$('grid').getBoundingClientRect().right-2,over=right-lim;
+  const w=$('chartWrap'),lim=Math.min($('grid').getBoundingClientRect().right,w.getBoundingClientRect().left+w.clientWidth)-2,over=right-lim;
   if(over>0)for(const t of tns)t.style.left=((parseFloat(t.style.left)||0)-over)+'px';
 }
 function setNow(cur,next,pos){
