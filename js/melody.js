@@ -5,7 +5,8 @@
 // A chord joins pitches with +, low to high: "D4+F4+Bb4q".
 // A second voice (its own rhythm, stems down) follows " & ": "F5e G5e A5e Bb5e C6h & A4h F4h".
 const MEL_LEN={w:4,h:2,q:1,e:0.5,s:0.25};
-const MEL_RE=/^(r|[A-G][#b]?\d(?:\+[A-G][#b]?\d)*)([whqes])(\.?)(t?)(~?)$/;
+// pitch(es) or r, length, dotted, triplet, staccato ('), tied (~)
+const MEL_RE=/^(r|[A-G][#b]?\d(?:\+[A-G][#b]?\d)*)([whqes])(\.?)(t?)('?)(~?)$/;
 const PC={C:0,D:2,E:4,F:5,G:7,A:9,B:11};
 function pitchMidi(p){const m=/^([A-G])([#b]?)(\d)$/.exec(p);return 12*(+m[3]+1)+PC[m[1]]+(m[2]==='#'?1:m[2]==='b'?-1:0);}
 function melTok(t){
@@ -13,9 +14,11 @@ function melTok(t){
   let b=MEL_LEN[m[2]];if(m[3])b*=1.5;if(m[4])b*=2/3;
   const p=m[1]==='r'?null:m[1],ps=p?p.split('+').sort((x,y)=>pitchMidi(x)-pitchMidi(y)):[],midis=ps.map(pitchMidi);
   // midi: the top note (the melody); midis: every note of a chord
-  return {tok:t,p:p&&ps.join('+'),ps,midis,midi:p?midis[midis.length-1]:null,d:m[2],dot:!!m[3],tri:!!m[4],tie:!!m[5]&&!!p,beats:b};
+  return {tok:t,p:p&&ps.join('+'),ps,midis,midi:p?midis[midis.length-1]:null,d:m[2],dot:!!m[3],tri:!!m[4],st:!!m[5]&&!!p,tie:!!m[6]&&!!p,beats:b};
 }
 // the token for a note with these pitches (sorted low to high), or a rest
+// what follows the length: staccato, then tie
+function melTail(n){return (n.st?"'":'')+(n.tie?'~':'');}
 function melJoin(ps,len){return (ps.length?[...new Set(ps)].sort((x,y)=>pitchMidi(x)-pitchMidi(y)).join('+'):'r')+len;}
 // Rests that complete a bar after its last note (shown, never stored or played). Finish the
 // current beat first (a sixteenth/eighth, or triplet eighths), then whole beats: a whole-bar rest
@@ -78,8 +81,8 @@ function getTimeline(){
     let at=0;
     list.forEach((n,ni)=>{
       const abs=base+at,h=hold[v];
-      if(h&&n.p&&n.midis.join()===h.midis.join()){h.dur+=n.beats;if(!n.tie)hold[v]=null;}   // continues a tied note
-      else{hold[v]=null;const e={abs,dur:n.beats,midi:n.midi,midis:n.midis,bar:barIdx,wbar,ni,start:at,voice:v};out.push(e);if(n.tie)hold[v]=e;}
+      if(h&&n.p&&n.midis.join()===h.midis.join()){h.dur+=n.beats;h.st=n.st;if(!n.tie)hold[v]=null;}   // continues a tied note
+      else{hold[v]=null;const e={abs,dur:n.beats,midi:n.midi,midis:n.midis,st:n.st,bar:barIdx,wbar,ni,start:at,voice:v};out.push(e);if(n.tie)hold[v]=e;}
       at+=n.beats;
     });
   };
@@ -93,6 +96,9 @@ function getTimeline(){
   return melTimeline;
 }
 // scheduled melody note on the keyboard instrument (used for "Play the melody" and "Hear this bar")
+// How long a note sounds, in beats: a little under its length, or about half for staccato
+// (never more than half a beat, so a staccato quarter is short too).
+function soundBeats(e){return e.st?Math.min(e.dur*0.45,0.45):e.dur*0.92;}
 function melVoice(m,t,dur,vel=82,bus=busKy){
   const k=S.keyInst;
   if((k==='piano'||k==='rhodes')&&keysReady(k)){
@@ -112,7 +118,7 @@ function scheduleMelodyStep(s,beatPos,bar,t,beatDur,sw,audible){
   for(const e of list){
     if(e.start<within-1e-6||e.start>=within+0.5-1e-6)continue;
     const fb=e.start-beat0,tt=beatStart+(Math.abs(fb-0.5)<1e-3?sw:fb)*beatDur;
-    if(audible)for(const m of e.midis)melVoice(m,tt,Math.max(0.08,e.dur*beatDur*0.92),e.voice===2?60:m===e.midi?82:64);
+    if(audible)for(const m of e.midis)melVoice(m,tt,Math.max(0.06,soundBeats(e)*beatDur),e.voice===2?60:m===e.midi?82:64);
     P.uiQ.push({t:tt,mel:e});
   }
 }

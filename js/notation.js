@@ -31,6 +31,7 @@ function vfVoice(list,fill,dir){
     if(dir){opts.stem_direction=dir;opts.auto_stem=false;}else opts.auto_stem=true;
     const sn=new VF.StaveNote(opts);
     if(n.dot)VF.Dot.buildAndAttach([sn],{all:true});
+    if(n.st&&n.p){sn.__st=new VF.Articulation('a.');sn.addModifier(sn.__st,0);}   // staccato (placed in stackDots)
     notes.push(sn);meta.push({n,start:at,ni,filler:!!n.filler});at+=n.beats;
     if(n.tri){tri.push(sn);triBeats+=n.beats;if(Math.abs(triBeats-Math.round(triBeats))<1e-6&&triBeats>0)flush();}
     else flush();
@@ -59,6 +60,13 @@ function vfBar(str,fill=true){
   const live=voices.filter(x=>x.notes.length).map(x=>x.voice);
   if(live.length)VF.Accidental.applyAccidentals(live,S.keySig);
   return {voices};
+}
+// Staccato dots go on the notehead side, away from the stem: placed once the beams have settled
+// which way the stems point (a beam can turn a stem round).
+function stackDots(live){
+  const VF=NOT.vf;
+  for(const vb of live)for(const sn of vb.notes)if(sn.__st)
+    sn.__st.setPosition(sn.getStemDirection()===VF.Stem.UP?VF.Modifier.Position.BELOW:VF.Modifier.Position.ABOVE);
 }
 // Beaming, lead-sheet style: in 4/4 eighths beam by half bar (beats 1-2, 3-4), never across the
 // middle; any half bar with sixteenths or triplets beams beat by beat; in 3/4 the bar beams as one.
@@ -154,6 +162,7 @@ function drawStaffRow(row,items,first){
     }
     const beams=[];
     for(const vb of live)for(const g of beamGroups(vb.meta.map(m=>m.n),vb.meta.map(m=>m.start)))beams.push(new VF.Beam(g.map(i=>vb.notes[i]),!vb.dir));
+    stackDots(live);
     new VF.Formatter().joinVoices(live.map(x=>x.voice)).formatToStave(live.map(x=>x.voice),st);
     for(const vb of live)vb.voice.draw(c,st);
     beams.forEach(x=>x.setContext(c).draw());
@@ -178,7 +187,7 @@ function drawStaffRow(row,items,first){
         NOT.hits.get(it.bar).push({ni:m.filler?null:m.ni,x:hx,y:hy,v:vb.v});
         if(m.filler)return;
         const el=sn.getSVGElement&&sn.getSVGElement();
-        if(el){NOT.els.set(it.bar+':'+vb.v+':'+m.ni,el);toneHeads(el,m.n.midis,it.bar,m.start);
+        if(el){NOT.els.set(it.bar+':'+vb.v+':'+m.ni,el);if(sn.__st)el.dataset.st=sn.getStemDirection()===VF.Stem.UP?'below':'above';toneHeads(el,m.n.midis,it.bar,m.start);
           if(NOT.tbar===it.bar){el.classList.add('tcur');(NOT.tmarked||(NOT.tmarked=[])).push(el);}}
       });
       if(!vb.notes.length){if(T.pending){drawTie(c,T.pending,null);T.pending=null;}T.carry=false;}

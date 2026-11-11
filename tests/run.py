@@ -1065,6 +1065,47 @@ async def editor_hot_keys(c):
     ok(not await pg.is_visible('#edKeys'), 'no ? button on a phone')
 
 @test
+async def melody_staccato(c):
+    pg = await c.page(LAPTOP, storage={'chart': '| C | F |', 'showMel': True, 'melody': {'pickup': '', 'bars': ['']}})
+    await pg.locator('#grid .cell').nth(0).click()
+    await pg.click('#edPartMel')
+    await pg.wait_for_function('document.querySelectorAll(".staff svg").length>0', timeout=8000)
+    # S turns it on for the next notes (stem up E4: dot below; stem down C5: dot above), and off again
+    await pg.keyboard.press('8'); await pg.keyboard.press('s')
+    ok(await ev(pg, '$("edStacc").getAttribute("aria-pressed")') == 'true', 'S on')
+    await key_down(pg, 64); await key_down(pg, 72)
+    await pg.keyboard.press('s'); await key_down(pg, 74)
+    await pg.keyboard.press('r')    # rests are never staccato
+    ok(await ev(pg, 'melGet(0)') == "E4e' C5e' D5e re", await ev(pg, 'melGet(0)'))
+    # select a note and tap the button: just that note changes
+    await ev(pg, 'selectNote(2)'); await pg.click('#edStacc')
+    ok(await ev(pg, 'melGet(0)') == "E4e' C5e' D5e' re", await ev(pg, 'melGet(0)'))
+    await pg.click('#edStacc')
+    ok(await ev(pg, 'melGet(0)') == "E4e' C5e' D5e re", 'off again')
+    # changing a staccato note's length keeps it staccato; it keeps a tie too
+    await ev(pg, 'selectNote(0)'); await pg.click('#edLens [data-len="q"]')
+    ok(await ev(pg, 'melGet(0)') == "E4q' C5e' D5e re", await ev(pg, 'melGet(0)'))
+    ok(await ev(pg, 'melTok("C5q\'~")') is not None and await ev(pg, 'melTok("C5q\'~").st') and await ev(pg, 'melTok("C5q\'~").tie'), 'staccato + tie parses')
+    # the staff: a staccato dot on the notehead side of each staccato note
+    # E4 q (stem up): dot below; C5 e beamed with D5 (stem down): dot above; D5 not staccato
+    pos = await ev(pg, '[0,1,2].map(i=>NOT.els.get("0:1:"+i).dataset.st||"")')
+    ok(pos == ['below', 'above', ''], 'dot away from the stem: %s' % pos)
+    # a beam that turns the stems round takes the dot with it: E4 C5 beamed (stems up) -> both below
+    await ev(pg, 'S.melody.bars[1]="E4e\' C5e\' rq rh";melTimeline=null;renderGrid()')
+    await pg.wait_for_timeout(600)
+    pos = await ev(pg, '[0,1].map(i=>NOT.els.get("1:1:"+i).dataset.st+":"+NOT.els.get("1:1:"+i).querySelector(".vf-stem")?.getBoundingClientRect().top)')
+    ok(all(p.startswith('below') for p in pos), 'beamed up: %s' % pos)
+    await c.shot(pg, 'staccato')
+    # playback: a staccato note sounds about half as long (a staccato quarter at most half a beat)
+    r = await ev(pg, '[soundBeats({dur:0.5,st:true}),soundBeats({dur:1,st:true}),soundBeats({dur:2,st:true}),soundBeats({dur:1,st:false})]')
+    ok(r == [0.225, 0.45, 0.45, 0.92], r)
+    tl = await ev(pg, 'getTimeline().events.filter(e=>e.wbar===0).map(e=>!!e.st)')
+    ok(tl == [True, True, False, False], 'timeline %s' % tl)   # the rest is an event too
+    # the note list says so
+    ok('staccato' in await pg.get_attribute('#edNotes button >> nth=0', 'aria-label'), 'aria')
+    ok(not pg.errors, pg.errors)
+
+@test
 async def melody_step_entry_phone(c):
     pg = await c.page(PHONE, storage={'chart': BLUES, 'keySig': 'F'})
     await pg.locator('#grid .cell').nth(0).click()
