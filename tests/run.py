@@ -1103,6 +1103,18 @@ async def melody_staccato(c):
     ok(tl == [True, True, False, False], 'timeline %s' % tl)   # the rest is an event too
     # the note list says so
     ok('staccato' in await pg.get_attribute('#edNotes button >> nth=0', 'aria-label'), 'aria')
+    # accents: A key / button, alone or with staccato; played louder; on the notehead side
+    await ev(pg, 'ED.bar=0;selectNote(2);renderEditor()'); await pg.keyboard.press('a')
+    ok(await ev(pg, 'melGet(0)') == "E4q' C5e' D5e> re", await ev(pg, 'melGet(0)'))
+    await ev(pg, 'selectNote(1)'); await pg.click('#edAccent')
+    ok(await ev(pg, 'melGet(0)') == "E4q' C5e>' D5e> re", await ev(pg, 'melGet(0)'))
+    ok(await ev(pg, '[melTok("C5e>\'~").acc,melTok("C5e>\'~").st,melTok("C5e>\'~").tie]') == [True, True, True], 'accent + staccato + tie')
+    ok(await ev(pg, 'melTok("C5e\'>")') is None, 'fixed order: accent before staccato')
+    await pg.wait_for_timeout(400)
+    ok(await ev(pg, '[1,2].map(i=>NOT.els.get("0:1:"+i).dataset.st)') == ['above', 'above'], 'accents placed')
+    ok(await ev(pg, '[melVel({voice:1,midi:72,acc:true},72),melVel({voice:1,midi:72},72)]') == [104, 82], 'louder')
+    ok('accented' in await pg.get_attribute('#edNotes button >> nth=1', 'aria-label'), 'aria accent')
+    await c.shot(pg, 'accents')
     ok(not pg.errors, pg.errors)
 
 @test

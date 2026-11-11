@@ -650,8 +650,8 @@ function renderMelEditor(){
     b.setAttribute('aria-pressed',String(ED.note===i));
     const lab=document.createElement('span');lab.textContent=n.p?n.ps.map(showPitch).join(' '):'Rest';b.appendChild(lab);
     const ic=document.querySelector(`#edLens .len[data-len="${n.d}"] svg`);if(ic){const c=ic.cloneNode(true);c.setAttribute('width','13');c.setAttribute('height','16');b.appendChild(c);}
-    if(n.dot||n.tri||n.st||n.tie){const x=document.createElement('span');x.className='mod';x.textContent=(n.dot?'.':'')+(n.tri?'³':'')+(n.st?'ˌ':'')+(n.tie?'‿':'');b.appendChild(x);}
-    b.setAttribute('aria-label',`Note ${i+1}: ${n.p?n.ps.map(x=>x.replace(/^([A-G])b/,'$1 flat').replace('#',' sharp')).join(n.ps.length>1?' and ':''):'rest'}${n.ps.length>1?' (chord)':''}, ${n.dot?'dotted ':''}${LEN_NAME[n.d]}${n.tri?' triplet':''}${n.st?', staccato':''}${n.tie?', tied':''}`);
+    if(n.dot||n.tri||n.acc||n.st||n.tie){const x=document.createElement('span');x.className='mod';x.textContent=(n.dot?'.':'')+(n.tri?'³':'')+(n.acc?'>':'')+(n.st?'ˌ':'')+(n.tie?'‿':'');b.appendChild(x);}
+    b.setAttribute('aria-label',`Note ${i+1}: ${n.p?n.ps.map(x=>x.replace(/^([A-G])b/,'$1 flat').replace('#',' sharp')).join(n.ps.length>1?' and ':''):'rest'}${n.ps.length>1?' (chord)':''}, ${n.dot?'dotted ':''}${LEN_NAME[n.d]}${n.tri?' triplet':''}${n.acc?', accented':''}${n.st?', staccato':''}${n.tie?', tied':''}`);
     b.onclick=()=>selectNote(ED.note===i?null:i);
     box.appendChild(b);
   });
@@ -659,7 +659,7 @@ function renderMelEditor(){
   add.setAttribute('aria-pressed',String(ED.note==null));add.setAttribute('aria-label','Add notes at the end of the bar');
   add.onclick=()=>selectNote(null);box.appendChild(add);
   for(const b of document.querySelectorAll('#edLens .len'))b.setAttribute('aria-pressed',String(b.dataset.len===ED.len));
-  $('edStacc').setAttribute('aria-pressed',String(!!ED.st));
+  $('edStacc').setAttribute('aria-pressed',String(!!ED.st));$('edAccent').setAttribute('aria-pressed',String(!!ED.acc));
   $('edDot').setAttribute('aria-pressed',String(ED.dot));$('edTri').setAttribute('aria-pressed',String(ED.tri));
   const tt=tieTarget();$('edTie').setAttribute('aria-pressed',String(!!(tt&&tt.toks[tt.i].endsWith('~'))));$('edTie').disabled=!tt;
   if(ED.note!=null)$('edRest').setAttribute('aria-label',ED.insert?'Insert a rest':'Make this note a rest');else $('edRest').removeAttribute('aria-label');
@@ -712,13 +712,13 @@ function stepNote(d){
 // selecting a note shows its length on the length buttons
 function selectNote(i){
   ED.note=i;STACK.ref=i==null?null:{bar:ED.bar,i};STACK.held=new Set();
-  if(i!=null){const n=melTok(toksOf(ED.bar)[i]);if(n){ED.len=n.d;ED.dot=n.dot;ED.tri=n.tri;ED.st=n.st;}}
+  if(i!=null){const n=melTok(toksOf(ED.bar)[i]);if(n){ED.len=n.d;ED.dot=n.dot;ED.tri=n.tri;ED.st=n.st;ED.acc=n.acc;}}
   melMsg(i==null?'Adding notes at the end of the bar.':'Tap a key to change this note, or pick a new length.');
   renderMelEditor();
 }
 function toggleInsert(){
   ED.insert=!ED.insert;STACK.ref=null;
-  if(!ED.insert&&ED.note!=null){const n=melTok(toksOf(ED.bar)[ED.note]);if(n){ED.len=n.d;ED.dot=n.dot;ED.tri=n.tri;ED.st=n.st;}}
+  if(!ED.insert&&ED.note!=null){const n=melTok(toksOf(ED.bar)[ED.note]);if(n){ED.len=n.d;ED.dot=n.dot;ED.tri=n.tri;ED.st=n.st;ED.acc=n.acc;}}
   melMsg(ED.insert?'Insert: keys (and Rest) add new notes before the selected one, using the room at the end of the bar.':'Insert off: keys change the selected note.');
   renderMelEditor();
 }
@@ -737,7 +737,7 @@ function toggleTie(){
   renderGrid();renderEditor();
 }
 function melAdd(pitch){   // pitch name, or 'r' for a rest; returns {bar,i} of the note it wrote
-  const tok=pitch+ED.len+(ED.dot?'.':'')+(ED.tri?'t':'')+(ED.st&&pitch!=='r'?"'":''),cap=curBpb();
+  const tok=pitch+ED.len+(ED.dot?'.':'')+(ED.tri?'t':'')+(ED.acc&&pitch!=='r'?'>':'')+(ED.st&&pitch!=='r'?"'":''),cap=curBpb();
   if(ED.note!=null&&ED.insert){   // Insert: a new note before the selected one, using the room at the end of the bar
     const toks=toksOf(ED.bar),free=cap-melBeats(toks.join(' ')),nb=melTok(tok).beats;
     if(nb>free+1e-6){melMsg(free>1e-6?`Only ${fmtBeats(free)} beat${Math.abs(free-1)<1e-6?'':'s'} free in this bar. Pick a shorter length, or shorten or delete a note first.`:'This bar is full. Shorten or delete a note first to make room.');return null;}
@@ -756,7 +756,7 @@ function melAdd(pitch){   // pitch name, or 'r' for a rest; returns {bar,i} of t
     if(melBeats(next.join(' '))>cap+1e-6){melMsg('That won’t fit in this bar.');return null;}
     vSet(ED.bar,next.join(' '));
     ED.note=ED.note+1<toks.length?ED.note+1:null;   // on to the next note, like a notation program
-    if(ED.note!=null){const n=melTok(toks[ED.note]);ED.len=n.d;ED.dot=n.dot;ED.tri=n.tri;ED.st=n.st;}
+    if(ED.note!=null){const n=melTok(toks[ED.note]);ED.len=n.d;ED.dot=n.dot;ED.tri=n.tri;ED.st=n.st;ED.acc=n.acc;}
     melMsg(ED.note!=null?`Changed. Now on note ${ED.note+1}.`:'Changed. Back to adding at the end.');
     renderGrid();renderEditor();return at;
   }
@@ -785,7 +785,7 @@ function melDel(){
   STACK.ref=null;
   if(ED.note!=null){
     const t=toksOf(ED.bar);t.splice(ED.note,1);vSet(ED.bar,t.join(' '));
-    if(ED.note>=t.length)ED.note=null;else{const n=melTok(t[ED.note]);ED.len=n.d;ED.dot=n.dot;ED.tri=n.tri;ED.st=n.st;}
+    if(ED.note>=t.length)ED.note=null;else{const n=melTok(t[ED.note]);ED.len=n.d;ED.dot=n.dot;ED.tri=n.tri;ED.st=n.st;ED.acc=n.acc;}
     melMsg('');renderGrid();renderEditor();return;
   }
   let t=toksOf(ED.bar);
@@ -807,7 +807,7 @@ function hearRange(a,b){
   for(const e of getTimeline().events){
     if(e.midi==null||e.abs>=b-1e-6||e.abs+e.dur<=a+1e-6)continue;
     const from=Math.max(e.abs,a)-a,t=t0+when(from);
-    for(const m of e.midis)melVoice(m,t,Math.max(0.06,(e.st?soundBeats(e):(e.abs+e.dur-a-from)*0.95)*bd),m===e.midi?82:64,bus);
+    for(const m of e.midis)melVoice(m,t,Math.max(0.06,(e.st?soundBeats(e):(e.abs+e.dur-a-from)*0.95)*bd),melVel({voice:1,midi:e.midi,acc:e.acc},m),bus);
     PREV.q.push({t,e});
   }
   hearUI();PREV.raf=requestAnimationFrame(hearTick);
@@ -1275,7 +1275,7 @@ function edKey(e){
   if(e.shiftKey&&(k==='ArrowLeft'||k==='ArrowRight')){moveBar(k==='ArrowLeft'?-1:1);return true;}
   if(!mel)return false;
   if(LEN_KEYS[k]){const b=document.querySelector(`#edLens .len[data-len="${LEN_KEYS[k]}"]`);if(b&&!b.disabled)b.click();return true;}
-  const id={'.':'edDot','3':'edTri',r:'edRest',t:'edTie',s:'edStacc',c:'edChord',h:'edHear',H:'edHearAll'}[k.length===1&&k!=='H'?k.toLowerCase():k];
+  const id={'.':'edDot','3':'edTri',r:'edRest',t:'edTie',s:'edStacc',a:'edAccent',c:'edChord',h:'edHear',H:'edHearAll'}[k.length===1&&k!=='H'?k.toLowerCase():k];
   if(id)return press(id);
   if(k==='v'||k==='V')return press(ED.voice===1?'edV2':'edV1');
   return false;
@@ -1344,14 +1344,17 @@ function init(){
   $('edTri').onclick=()=>{ED.tri=!ED.tri;if(ED.tri){ED.dot=false;if(!['q','e'].includes(ED.len))ED.len='e';}setSelLength();};
   $('edTie').onclick=toggleTie;
   // Staccato: on the selected note, or for the notes you add next (like the dot)
-  $('edStacc').onclick=()=>{
-    ED.st=!ED.st;
+  // Staccato and accent: on the selected note, or for the notes you add next (like the dot)
+  const artic=(k,on,msg)=>{
+    ED[k]=!ED[k];
     if(ED.note!=null&&!ED.insert){
       const toks=toksOf(ED.bar),n=melTok(toks[ED.note]);
-      if(n&&n.p){n.st=ED.st;toks[ED.note]=n.p+n.d+(n.dot?'.':'')+(n.tri?'t':'')+melTail(n);vSet(ED.bar,toks.join(' '));renderGrid();}
+      if(n&&n.p){n[k]=ED[k];toks[ED.note]=n.p+n.d+(n.dot?'.':'')+(n.tri?'t':'')+melTail(n);vSet(ED.bar,toks.join(' '));renderGrid();}
     }
-    melMsg(ED.st?'Staccato: short and detached.':'');renderEditor();
+    melMsg(ED[k]?msg:'');renderEditor();
   };
+  $('edStacc').onclick=()=>artic('st',ED.st,'Staccato: short and detached.');
+  $('edAccent').onclick=()=>artic('acc',ED.acc,'Accent: played louder.');
   $('edRest').onclick=()=>{STACK.ref=null;melAdd('r');};
   $('edSecName').addEventListener('sl-change',e=>setBarLabel(e.target.value));
   $('edSecName').addEventListener('keydown',e=>{if(e.key==='Enter'){setBarLabel(e.target.value);e.preventDefault();}});
@@ -1373,7 +1376,7 @@ function init(){
   $('edInsert').onclick=insertBar;$('edKeys').onclick=showKeys;$('keysClose').onclick=()=>$('keysDlg').hide();
   // the keys in the tooltips
   for(const [k,l] of Object.entries(LEN_KEYS)){const b=document.querySelector(`#edLens .len[data-len="${l}"]`);if(b)b.title=b.getAttribute('aria-label')+` (${k})`;}
-  for(const [id,t] of [['edDot','Dotted (.)'],['edTri','Triplet (3)'],['edRest','Rest (R)'],['edTie','Tie (T)'],['edChord','Chord (C)'],['edHear','Hear this bar (H)'],['edHearAll','Hear from here (Shift+H)']])$(id).title=t;$('edDelete').onclick=deleteBars;
+  for(const [id,t] of [['edDot','Dotted (.)'],['edTri','Triplet (3)'],['edHear','Hear this bar (H)'],['edHearAll','Hear from here (Shift+H)']])$(id).title=t;$('edDelete').onclick=deleteBars;
   $('edBars').onclick=e=>{e.stopPropagation();barsMenu();};
   $('mnSelect').onclick=()=>{barsMenu(false);if(SEL.a!=null){clearSelection();return;}SEL.picking=true;barMsg('Tap the last bar of the selection (this bar is the first).');renderEditor();};
   $('mnCopy').onclick=copyBars;$('mnCut').onclick=cutBars;$('mnPaste').onclick=pasteBars;
