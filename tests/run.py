@@ -706,6 +706,38 @@ async def add_bar_beside_last_bar(c):
         ok(not pg.errors, pg.errors)
 
 @test
+async def staff_chords_never_touch(c):
+    # random two-chord bars over random melodies on narrow phones: no chord symbol may touch the
+    # next one on its line, across barlines too
+    import random
+    CH = ['E7#9', 'Bbmaj7#11', 'Ebm7b5', 'A7b9b13', 'Fmaj7', 'Dm7', 'G13', 'C7alt', 'F#m7b5', 'Abmaj9']
+    LENS = [('s', .25), ('e', .5), ('q', 1), ('h', 2)]
+    def bar(rng):
+        out, left = [], 4.0
+        while left > 1e-9:
+            d, bt = rng.choice([l for l in LENS if l[1] <= left + 1e-9]); out.append(rng.choice('CDEFGAB') + rng.choice('45') + d); left -= bt
+        return ' '.join(out)
+    touch = """(()=>{const bad=[];for(const r of document.querySelectorAll("#grid .sys")){const cs=[...r.querySelectorAll(".chd:not(.held)")].map(c=>c.getBoundingClientRect()).sort((a,b)=>a.left-b.left);
+      for(let i=1;i<cs.length;i++)if(Math.abs(cs[i].top-cs[i-1].top)<4&&cs[i].left<cs[i-1].right+3)bad.push(Math.round(cs[i-1].right-cs[i].left));}return bad})()"""
+    for w in (330, 393):
+        pg = await c.page(dict(viewport=dict(width=w, height=850), is_mobile=True, has_touch=True), storage={'chart': BLUES, 'showMel': True})
+        for seed in range(12):
+            rng = random.Random(seed)
+            bars = ['%s %s' % (rng.choice(CH), rng.choice(CH)) if rng.random() < .7 else rng.choice(CH) for _ in range(8)]
+            chart = '| ' + ' | '.join(bars[:4]) + ' |\n| ' + ' | '.join(bars[4:]) + ' |'
+            await ev(pg, '(([c,m])=>{S.melody={pickup:"",bars:m};melTimeline=null;applyChartText(c)})(%s)' % json.dumps([chart, [bar(rng) for _ in range(8)]]))
+            await pg.wait_for_timeout(200)
+            bad = await ev(pg, touch)
+            ok(not bad, 'width %d seed %d: chords overlap by %s px' % (w, seed, bad))
+        # an ending starting mid-line drops that line's chords below its number
+        await ev(pg, '(([c,m])=>{S.melody={pickup:"",bars:m};melTimeline=null;applyChartText(c)})(%s)' % json.dumps(['|: Fmaj7 E7#9 | 1. E7#9 :| 2. E7#9 |', ['C4q. C4e~ C4e C4e A4q', 'A4q. E4e B4e C5e E4e C4e', 'B4w']]))
+        await pg.wait_for_timeout(300)
+        # (at the start of a line the chord sits after the clef, beside the number instead)
+        r = await ev(pg, '(()=>{const c=CELLS[1],n=c.querySelector(".endn").getBoundingClientRect(),h=c.querySelector(".chd .cr").getBoundingClientRect();return [n.bottom<=h.top,n.right<=h.left]})()')
+        ok(r[0] or r[1], 'ending number clear of its chord: %s' % r)
+        ok(not pg.errors, pg.errors)
+
+@test
 async def editor_copy_cut_paste(c):
     chart = '[A] C | Am7 | Dm7 | G7 |\n[B] F | % | E7 | Am7 |'
     pg = await c.page(PHONE, storage={'chart': chart, 'melody': {'pickup': '', 'bars': ['C5w', 'A4w', '', '', 'F4h & C4h', '', '', '/']}})

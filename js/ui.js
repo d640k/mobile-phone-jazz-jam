@@ -119,11 +119,17 @@ function layoutLines(){
   items.forEach(it=>{it.el.style.cssText='';it.el.querySelectorAll('.chd').forEach(c=>c.style.left='');meas.appendChild(it.el);});
   const W=g.clientWidth-2;
   const nat=items.map(it=>Math.ceil(it.el.getBoundingClientRect().width));
-  // with the staff, chords sit over their notes: a bar needs its chord text (plus gaps), not tile padding
-  if(mel)items.forEach((it,k)=>{
-    const ch=[...it.el.querySelectorAll('.chd')].reduce((w,c)=>w+c.getBoundingClientRect().width+8,8);
-    nat[k]=Math.max(it.bar<0?0:ch,Math.ceil(notationMinWidth(melGet(it.bar),it.bar)));
-  });
+  // with the staff, chords sit over their beats: a bar needs room for each chord between its beat
+  // and the next chord (or the barline), not just for all the chord text added up
+  if(mel){const bpb=curBpb();items.forEach((it,k)=>{
+    const cs=[...it.el.querySelectorAll('.chd')].filter(c=>!c.classList.contains('held'));
+    let ch=cs.reduce((w,c)=>w+c.getBoundingClientRect().width+8,8);
+    cs.forEach((c,j)=>{
+      const f=+c.dataset.beat/bpb,f2=j+1<cs.length?+cs[j+1].dataset.beat/bpb:1;
+      ch=Math.max(ch,(c.getBoundingClientRect().width+12)/Math.max(f2-f,1/8)+(j===0?f*40:0));
+    });
+    nat[k]=Math.max(it.bar<0?0:Math.ceil(ch),Math.ceil(notationMinWidth(melGet(it.bar),it.bar)));
+  });}
   const hw=mel?[Math.ceil(notationHeadWidth(true)),Math.ceil(notationHeadWidth(false))]:[0,0];
   const head=li=>hw[li===0?0:1];
   g.classList.toggle('mel',mel);

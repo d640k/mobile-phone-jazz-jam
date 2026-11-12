@@ -136,7 +136,8 @@ function drawStaffRow(row,items,first){
   const VF=NOT.vf,K=notationScale();
   // a section starting mid-line (after a pickup): its label sits right over the chord, so this
   // line's chords go a little lower (the staff makes room)
-  row.classList.toggle('lblmid',items.some((it,j)=>j>0&&it.bar>=0&&!!chartSong.labels[it.bar]));
+  // (an ending's number does the same)
+  row.classList.toggle('lblmid',items.some((it,j)=>j>0&&it.bar>=0&&(!!chartSong.labels[it.bar]||!!(chartSong.endings[it.bar]&&chartSong.endings[it.bar].first))));
   const box=document.createElement('div');box.className='staff';box.setAttribute('aria-hidden','true');
   const W=row.clientWidth,H=Math.round(STAFF_UNITS*K);
   box.style.width=W+'px';box.style.height=H+'px';row.appendChild(box);
@@ -210,11 +211,17 @@ function drawStaffRow(row,items,first){
     };
     chords.forEach(ch=>{ch.style.left=Math.round(xAt(+ch.dataset.beat)-2)+'px';});
   });
-  // never let two chord symbols touch: push a crowded one right
-  items.forEach(it=>{
-    let right=-1e9;
-    for(const ch of it.el.querySelectorAll('.chd')){const l=parseFloat(ch.style.left)||0;if(l<right+6){ch.style.left=Math.round(right+6)+'px';}right=parseFloat(ch.style.left)+ch.offsetWidth;}
-  });
+  // never let two chord symbols touch, across barlines too: push a crowded one right
+  {let right=-1e9;
+    items.forEach(it=>{
+      const base=it.el.offsetLeft;
+      for(const ch of it.el.querySelectorAll('.chd')){
+        if(ch.classList.contains('held'))continue;
+        const l=base+(parseFloat(ch.style.left)||0);
+        if(l<right+8)ch.style.left=Math.round(right+8-base)+'px';
+        right=base+parseFloat(ch.style.left)+ch.offsetWidth;
+      }
+    });}
   // ties running off the end of the line
   for(const v of [1,2]){const T=TIES[v];if(T.pending){drawTie(c,T.pending,null);T.pending=null;T.carry=true;}}
   fitStaffRow(row,box,H);
