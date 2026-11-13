@@ -21,8 +21,10 @@ const vfKey=p=>p[0].toLowerCase()+p.slice(1,-1)+'/'+p.slice(-1);
 function vfVoice(list,fill,dir){
   const VF=NOT.vf,ns=[...list],notes=[],tuplets=[],meta=[];
   if(fill){const used=ns.reduce((s,n)=>s+n.beats,0);for(const d of fillRests(used,curBpb())){const r=melTok('r'+d);r.filler=true;ns.push(r);}}
-  let tri=[],triBeats=0,at=0;
-  const flush=()=>{if(tri.length>1)tuplets.push(new VF.Tuplet(tri,{num_notes:3,notes_occupied:2,location:dir>0?VF.Tuplet.LOCATION_TOP:VF.Tuplet.LOCATION_BOTTOM}));tri=[];triBeats=0;};
+  // a triplet group is three in the time of two: it closes when it spans two of its shortest
+  // plain length (16ths: half a beat, eighths: a beat, quarters: two beats, halves: a 4/4 bar)
+  let tri=[],triBeats=0,triUnit=Infinity,at=0;
+  const flush=()=>{if(tri.length>1)tuplets.push(new VF.Tuplet(tri,{num_notes:3,notes_occupied:2,location:dir>0?VF.Tuplet.LOCATION_TOP:VF.Tuplet.LOCATION_BOTTOM}));tri=[];triBeats=0;triUnit=Infinity;};
   ns.forEach((n,ni)=>{
     const whole=!n.p&&n.d==='w'&&ns.length===1;   // a whole-bar rest sits in the middle of the bar
     // with two voices, rests move up (voice 1) or down (voice 2) out of each other's way
@@ -36,7 +38,10 @@ function vfVoice(list,fill,dir){
     if(n.st&&n.p){const a=new VF.Articulation('a.');sn.addModifier(a,0);sn.__arts.push(a);}
     if(n.acc&&n.p){const a=new VF.Articulation('a>');sn.addModifier(a,0);sn.__arts.push(a);}
     notes.push(sn);meta.push({n,start:at,ni,filler:!!n.filler});at+=n.beats;
-    if(n.tri){tri.push(sn);triBeats+=n.beats;if(Math.abs(triBeats-Math.round(triBeats))<1e-6&&triBeats>0)flush();}
+    if(n.tri){
+      tri.push(sn);triBeats+=n.beats;triUnit=Math.min(triUnit,2*MEL_LEN[n.d]);
+      const k=triBeats/triUnit;if(triBeats>0&&Math.abs(k-Math.round(k))<1e-6)flush();
+    }
     else flush();
   });
   flush();

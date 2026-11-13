@@ -1150,6 +1150,35 @@ async def melody_staccato(c):
     ok(not pg.errors, pg.errors)
 
 @test
+async def triplets_of_every_length(c):
+    pg = await c.page(LAPTOP, storage={'chart': '| C | F | G |', 'showMel': True, 'melody': {'pickup': '', 'bars': ['']}})
+    await pg.locator('#grid .cell').nth(0).click()
+    await pg.click('#edPartMel')
+    await pg.wait_for_function('document.querySelectorAll(".staff svg").length>0', timeout=8000)
+    # 16th, then 3: stays a 16th triplet (it used to jump to eighths)
+    await pg.click('#edLens [data-len="s"]'); await pg.click('#edTri')
+    ok(await ev(pg, '[ED.len,ED.tri]') == ['s', True], await ev(pg, '[ED.len,ED.tri]'))
+    for m in (64, 65, 67, 69, 71, 72): await key_down(pg, m)
+    ok(await ev(pg, 'melGet(0)') == 'E4st F4st G4st A4st B4st C5st', await ev(pg, 'melGet(0)'))
+    ok(abs(await ev(pg, 'melBeats(melGet(0))') - 1) < 1e-9, 'six 16th triplets fill one beat')
+    # keys: 6 then 3 too
+    await pg.keyboard.press('Shift+ArrowRight'); await ev(pg, 'ED.tri=false;ED.len="q";renderEditor()')
+    await pg.keyboard.press('6'); await pg.keyboard.press('3')
+    ok(await ev(pg, '[ED.len,ED.tri]') == ['s', True], 'keys 6 3')
+    # half-note triplets as well; a whole note can't be a triplet
+    await pg.click('#edLens [data-len="h"]')    # triplet stays on with the new length
+    ok(await ev(pg, '[ED.len,ED.tri]') == ['h', True], 'half triplet')
+    await pg.click('#edLens [data-len="w"]')
+    ok(await ev(pg, 'ED.tri') is False, 'no whole-note triplets')
+    # the staff: a "3" over each group of three, however long the notes
+    groups = await ev(pg, '["C5st D5st E5st F5st G5st A5st rq rh","C5et D5et E5et rq rh","C5qt D5qt E5qt rh","C5ht D5ht E5ht","C5qt D5et rq rh"].map(s=>vfVoice(melNotes(s),true,0).tuplets.map(t=>t.getNotes().length))')
+    ok(groups == [[3, 3], [3], [3], [3], [2]], groups)
+    await ev(pg, 'S.melody.bars=["C5st D5st E5st F5st G5st A5st rq rh","C5ht D5ht E5ht"];melTimeline=null;renderGrid()')
+    await pg.wait_for_timeout(500)
+    await c.shot(pg, 'triplets_16th')
+    ok(not pg.errors, pg.errors)
+
+@test
 async def melody_step_entry_phone(c):
     pg = await c.page(PHONE, storage={'chart': BLUES, 'keySig': 'F'})
     await pg.locator('#grid .cell').nth(0).click()

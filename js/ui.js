@@ -1342,12 +1342,12 @@ function init(){
   $('edPartCh').onclick=()=>setPart('chords');$('edPartMel').onclick=()=>setPart('melody');
   for(const b of document.querySelectorAll('#edLens .len'))b.onclick=()=>{
     if(b.dataset.len!==ED.len)ED.dot=false;   // a new length starts without its dot
-    ED.len=b.dataset.len;if(!['q','e'].includes(ED.len))ED.tri=false;
+    ED.len=b.dataset.len;if(ED.len==='w')ED.tri=false;   // triplets: halves, quarters, eighths, 16ths
     // building chords: a length starts the next chord
     if(ED.chord&&ED.note==null&&STACK.ref){STACK.ref=null;melMsg('Next chord: tap its notes.');}
     setSelLength();};
   $('edDot').onclick=()=>{ED.dot=!ED.dot;if(ED.dot)ED.tri=false;setSelLength();};
-  $('edTri').onclick=()=>{ED.tri=!ED.tri;if(ED.tri){ED.dot=false;if(!['q','e'].includes(ED.len))ED.len='e';}setSelLength();};
+  $('edTri').onclick=()=>{ED.tri=!ED.tri;if(ED.tri){ED.dot=false;if(ED.len==='w')ED.len='h';}setSelLength();};
   $('edTie').onclick=toggleTie;
   // Staccato: on the selected note, or for the notes you add next (like the dot)
   // Staccato and accent: on the selected note, or for the notes you add next (like the dot)
