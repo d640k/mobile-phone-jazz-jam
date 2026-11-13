@@ -1252,6 +1252,34 @@ async def swipe_up_from_keys_writes_nothing(c):
     ok(not pg.errors, pg.errors)
 
 @test
+async def melody_editor_compact(c):
+    pg = await c.page(dict(viewport=dict(width=360, height=760), is_mobile=True, has_touch=True), storage={'chart': '| C | F |', 'showMel': True, 'melody': {'pickup': '', 'bars': ['C5h']}, 'kbH': {'port': 125}})
+    await pg.locator('#grid .cell').nth(0).click(); await pg.click('#edPartMel')
+    await pg.wait_for_function('document.querySelectorAll(".staff svg").length>0', timeout=8000)
+    rows = await ev(pg, '[".voiceRow",".edFoot"].map(s=>new Set([...document.querySelector(s).children].filter(e=>e.offsetParent&&e.getBoundingClientRect().height).map(e=>{const r=e.getBoundingClientRect();return Math.round((r.top+r.bottom)/20)})).size)')
+    ok(rows == [1, 1], 'one line each on a 360-wide phone: %s' % rows)
+    ok(await ev(pg, '$("editor").getBoundingClientRect().height') < 300, 'drawer height %s' % await ev(pg, '$("editor").getBoundingClientRect().height'))
+    # hints are for screen readers; the note count sits under the bar number
+    ok(await ev(pg, 'getComputedStyle($("edMelMsg")).position') == 'absolute' and await ev(pg, '$("edMelMsg").textContent.length>0'), 'hint for screen readers')
+    ok(await pg.text_content('#edFill') == '2/4', await pg.text_content('#edFill'))
+    # Insert / Add at end: in the footer, off until a note is selected
+    ok(await ev(pg, '[$("edInsNote").disabled,$("edAddEnd").disabled]') == [True, True], 'off with no note')
+    await ev(pg, 'selectNote(0)')
+    ok(await ev(pg, '[$("edInsNote").disabled,$("edAddEnd").disabled]') == [False, False], 'on with a note')
+    await pg.click('#edAddEnd')
+    ok(await ev(pg, 'ED.note') is None, 'Add at end')
+    # a warning shows briefly over the drawer
+    await pg.click('#edLens [data-len="w"]'); await key_down(pg, 64)
+    ok(await ev(pg, '$("edWarn").classList.contains("on")&&/fit|free|long/.test($("edWarn").textContent)'), await pg.text_content('#edWarn'))
+    await c.shot(pg, 'melody_editor_compact')
+    await pg.wait_for_timeout(3500)
+    ok(not await ev(pg, '$("edWarn").classList.contains("on")'), 'warning fades')
+    # the chords part has no Insert / Add at end
+    await pg.click('#edPartCh')
+    ok(not await pg.is_visible('#edInsNote'), 'chords: no note buttons')
+    ok(not pg.errors, pg.errors)
+
+@test
 async def melody_step_entry_phone(c):
     pg = await c.page(PHONE, storage={'chart': BLUES, 'keySig': 'F'})
     await pg.locator('#grid .cell').nth(0).click()
@@ -1264,7 +1292,7 @@ async def melody_step_entry_phone(c):
     for m in (67, 69, 67, 64):          # G4 A4 G4 E4 eighths
         await key_down(pg, m)
     ok(await ev(pg, 'melGet(0)') == 'G4e A4e G4e E4e', await ev(pg, 'melGet(0)'))
-    ok(await pg.text_content('#edFill') == '2 of 4 beats', await pg.text_content('#edFill'))
+    ok(await pg.text_content('#edFill') == '2/4' and await pg.get_attribute('#edFill', 'aria-label') == '2 of 4 beats', await pg.text_content('#edFill'))
     await pg.click('#edLens [data-len="h"]')
     await key_down(pg, 65)               # F4 half fills the bar -> moves on
     ok(await ev(pg, 'ED.bar') == 1 and 'full' in await pg.text_content('#edMelMsg'), 'auto-advance')
@@ -1576,7 +1604,7 @@ async def melody_second_voice(c):
     await pg.wait_for_function('document.querySelectorAll(".staff svg").length>0', timeout=8000)
     await pg.locator('#grid .cell:not(.pick)').nth(0).click(); await pg.click('#edPartMel')
     await pg.click('#edV2')
-    ok(await pg.get_attribute('#edV2', 'aria-pressed') == 'true' and await pg.text_content('#edFill') == '0 of 4 beats', 'voice 2 starts empty')
+    ok(await pg.get_attribute('#edV2', 'aria-pressed') == 'true' and await pg.text_content('#edFill') == '0/4', 'voice 2 starts empty')
     await pg.click('#edLens [data-len="h"]'); await key_down(pg, 69); await key_down(pg, 65)
     ok(await ev(pg, 'melGet(0)') == 'C5e D5e E5e F5e G5h & A4h F4h', await ev(pg, 'melGet(0)'))
     ok(await ev(pg, 'ED.bar') == 1 and await ev(pg, 'ED.voice') == 2, 'voice 2 full: on to bar 2, still voice 2')
@@ -1733,7 +1761,7 @@ async def melody_hear_from_here(c):
     ok(await ev(pg, '!PREV.on'), 'Play stops the preview'); await pg.click('#play')
     # with a loop: just the looped bars
     await ev(pg, 'setLoop(1,2)'); await pg.locator('#grid .cell:not(.pick)').nth(0).click(); await pg.click('#edPartMel')
-    ok(await pg.text_content('#edHearAllLabel') == 'Hear the loop', 'loop label')
+    ok(await pg.text_content('#edHearAllLabel') == 'Loop' and await pg.get_attribute('#edHearAll', 'aria-label') == 'Hear the loop', 'loop label')
     await ev(pg, '__v=[]'); await pg.click('#edHearAll')
     ok(await ev(pg, '__v.map(x=>x[0])') == [70, 69], await ev(pg, '__v'))
     ok(not pg.errors, pg.errors)

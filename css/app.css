@@ -388,3 +388,33 @@ table.keys td{padding:4px 0;vertical-align:top}
 table.keys td:first-child{white-space:nowrap;padding-right:14px}
 kbd{display:inline-block;min-width:1.6em;padding:1px 5px;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;
   background:var(--panel);font-family:inherit;font-weight:600;font-size:12px;line-height:1.4;text-align:center}
+
+/* melody editor, compact: Voice and Hear/Record share a row, hints are for screen readers,
+   the beat count sits under the bar number, Insert / Add at end are footer icons */
+.voiceRow{display:flex;align-items:center;gap:6px}
+.voiceRow .sp{flex:1}
+.voiceRow .btn.small{padding-inline:10px;min-width:44px;gap:5px}
+.edTitleBox{display:flex;flex-direction:column;line-height:1.1}
+.edTitleBox .fill{font-size:12px;color:var(--muted);white-space:nowrap}
+.edTitleBox .fill:empty{display:none}
+#editor:not(.mel) .melOnly{display:none}
+.edFoot .melOnly{min-width:40px;padding-inline:8px}
+.barMsg:empty{display:none}
+body.melEdit .edFoot{border-top:0;padding-top:0;padding-bottom:4px}
+body.melEdit #editor{padding-bottom:6px}
+#editor{position:relative}
+.edWarn{position:absolute;left:50%;bottom:calc(100% + 8px);transform:translate(-50%,4px);max-width:calc(100% - 24px);margin:0;padding:6px 12px;border-radius:8px;
+  background:var(--text);color:var(--bg);font-size:13px;line-height:1.3;text-align:center;box-shadow:0 4px 14px rgba(0,0,0,.18);
+  opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;z-index:30}
+.edWarn.on{opacity:1;transform:translate(-50%,0)}
+/* the editor's bottom row stays one row, even with the melody's Insert / Add at end */
+.edFoot{flex-wrap:nowrap;gap:4px}
+.edFoot>.btn,.edFoot>.barsWrap>.btn{padding-inline:7px;min-width:38px;flex:0 1 auto}
+.voiceRow{flex-wrap:nowrap}
+.voiceRow .btn,.edFoot .btn{white-space:nowrap}
+@media (max-width:380px){
+  .voiceRow{gap:4px}
+  .voiceRow .seg2 button{padding-inline:9px}
+  .voiceRow .btn.small{padding-inline:7px;min-width:0}
+  .edFoot>.btn,.edFoot>.barsWrap>.btn{padding-inline:5px;min-width:34px}
+}

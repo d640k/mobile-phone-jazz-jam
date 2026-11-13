@@ -437,6 +437,7 @@ function renderEditor(){
   $('edText').setAttribute('aria-pressed',String(ED.text));
   $('edPartCh').setAttribute('aria-pressed',String(!isMel));$('edPartMel').setAttribute('aria-pressed',String(isMel));$('edPartCh').disabled=ED.bar<0;
   $('edPicker').hidden=ED.text||isMel;$('edMel').hidden=ED.text||!isMel;$('edTextBox').hidden=!ED.text;
+  $('editor').classList.toggle('mel',isMel&&!ED.text);
   $('edInsert').hidden=$('edDelete').hidden=ED.bar<0;
   if(isMel)renderMelEditor();
   const chords=edChords();
@@ -659,6 +660,12 @@ function placeMenu(m,btn){
 // ---------- Melody entry (bar editor, Melody) ----------
 const fmtBeats=b=>{const w=Math.floor(b+1e-6),f=b-w,fr=f>0.7?'¾':f>0.6?'⅔':f>0.4?'½':f>0.3?'⅓':f>0.2?'¼':'';return (w||!fr?String(w):'')+fr;};
 function melMsg(t){$('edMelMsg').textContent=t;}
+// a warning you need to see (the hints are for screen readers): a notice over the drawer's top edge
+let WARN_T=0;
+function melWarn(t){
+  melMsg(t);const w=$('edWarn');w.textContent=t;w.classList.add('on');
+  clearTimeout(WARN_T);WARN_T=setTimeout(()=>w.classList.remove('on'),3200);
+}
 const LEN_NAME={w:'whole',h:'half',q:'quarter',e:'eighth',s:'sixteenth'};
 // the selected voice of a bar (1, or 2: its own rhythm, stems down)
 const vGet=bar=>splitVoices(melGet(bar))[ED.voice===2?1:0];
@@ -669,7 +676,7 @@ function renderMelEditor(){
   const toks=toksOf(ED.bar);
   if(ED.note!=null&&ED.note>=toks.length)ED.note=null;
   if(ED.note==null)ED.insert=false;
-  $('edAddEnd').hidden=$('edInsNote').hidden=ED.note==null;
+  $('edAddEnd').disabled=$('edInsNote').disabled=ED.note==null;
   $('edInsNote').setAttribute('aria-pressed',String(ED.insert));
   // one button per note; the selected one is the one you're changing
   const box=$('edNotes');box.innerHTML='';
@@ -697,7 +704,7 @@ function renderMelEditor(){
   $('edV1').setAttribute('aria-pressed',String(ED.voice===1));$('edV2').setAttribute('aria-pressed',String(ED.voice===2));$('edV2').disabled=ED.bar<0;
   $('edSlash').setAttribute('aria-pressed',String(isSlashBar(melGet(ED.bar))));$('edSlash').disabled=ED.bar<0;
   const used=melBeats(vGet(ED.bar)),cap=curBpb();
-  $('edFill').textContent=`${fmtBeats(used)} of ${cap} beats`;
+  $('edFill').textContent=`${fmtBeats(used)}/${cap}`;$('edFill').setAttribute('aria-label',`${fmtBeats(used)} of ${cap} beats`);
   $('edRec').setAttribute('aria-label',S.loop?`Record bars ${S.loop.a+1} to ${S.loop.b+1}`:`Record from bar ${Math.max(0,ED.bar)+1}`);
   $('edRec').title=$('edRec').getAttribute('aria-label');hearUI();
   markSelNote();
@@ -769,7 +776,7 @@ function melAdd(pitch){   // pitch name, or 'r' for a rest; returns {bar,i} of t
   const tok=pitch+ED.len+(ED.dot?'.':'')+(ED.tri?'t':'')+(ED.acc&&pitch!=='r'?'>':'')+(ED.st&&pitch!=='r'?"'":''),cap=curBpb();
   if(ED.note!=null&&ED.insert){   // Insert: a new note before the selected one, using the room at the end of the bar
     const toks=toksOf(ED.bar),free=cap-melBeats(toks.join(' ')),nb=melTok(tok).beats;
-    if(nb>free+1e-6){melMsg(free>1e-6?`Only ${fmtBeats(free)} beat${Math.abs(free-1)<1e-6?'':'s'} free in this bar. Pick a shorter length, or shorten or delete a note first.`:'This bar is full. Shorten or delete a note first to make room.');return null;}
+    if(nb>free+1e-6){melWarn(free>1e-6?`Only ${fmtBeats(free)} beat${Math.abs(free-1)<1e-6?'':'s'} free in this bar. Pick a shorter length, or shorten or delete a note first.`:'This bar is full. Shorten or delete a note first to make room.');return null;}
     toks.splice(ED.note,0,tok);vSet(ED.bar,toks.join(' '));
     const at={bar:ED.bar,i:ED.note};ED.note++;   // stay on the same note, now one further along
     melMsg('Inserted. Keep going, or turn Insert off.');renderGrid();renderEditor();return at;
@@ -782,7 +789,7 @@ function melAdd(pitch){   // pitch name, or 'r' for a rest; returns {bar,i} of t
     const toks=toksOf(ED.bar),old=melTok(toks[ED.note]);
     const tied=old.tie&&pitch!=='r'?'~':'';
     const next=[...toks];next[ED.note]=tok+tied;
-    if(melBeats(next.join(' '))>cap+1e-6){melMsg('That won’t fit in this bar.');return null;}
+    if(melBeats(next.join(' '))>cap+1e-6){melWarn('That won’t fit in this bar.');return null;}
     vSet(ED.bar,next.join(' '));
     ED.note=ED.note+1<toks.length?ED.note+1:null;   // on to the next note, like a notation program
     if(ED.note!=null){const n=melTok(toks[ED.note]);ED.len=n.d;ED.dot=n.dot;ED.tri=n.tri;ED.st=n.st;ED.acc=n.acc;}
@@ -792,7 +799,7 @@ function melAdd(pitch){   // pitch name, or 'r' for a rest; returns {bar,i} of t
   let cur=isSlashBar(melGet(ED.bar))?'':vGet(ED.bar),used=melBeats(cur);const nb=melTok(tok).beats;
   // this bar is already full (e.g. you stayed to finish a chord): carry on in the next bar
   if(used>=cap-1e-6&&ED.bar<rawBars().length-1){ED.bar++;cur=isSlashBar(melGet(ED.bar))?'':vGet(ED.bar);used=melBeats(cur);}
-  if(used+nb>cap+1e-6){melMsg(`That won’t fit: ${fmtBeats(cap-used)} beat${Math.abs(cap-used-1)<1e-6?'':'s'} left in this bar.`);return null;}
+  if(used+nb>cap+1e-6){melWarn(`That won’t fit: ${fmtBeats(cap-used)} beat${Math.abs(cap-used-1)<1e-6?'':'s'} left in this bar.`);return null;}
   vSet(ED.bar,(cur+' '+tok).trim());
   const at={bar:ED.bar,i:toksOf(ED.bar).length-1};
   const full=Math.abs(used+nb-cap)<1e-6,last=rawBars().length-1;
@@ -807,7 +814,7 @@ function setSelLength(){
   if(ED.note==null||ED.insert){renderMelEditor();return;}   // in Insert, lengths are for the new notes
   const toks=toksOf(ED.bar),old=melTok(toks[ED.note]);
   const next=[...toks];next[ED.note]=(old.p||'r')+ED.len+(ED.dot?'.':'')+(ED.tri?'t':'')+melTail(old);
-  if(melBeats(next.join(' '))>curBpb()+1e-6){melMsg('That’s too long for the space left in this bar.');ED.len=old.d;ED.dot=old.dot;ED.tri=old.tri;renderMelEditor();return;}
+  if(melBeats(next.join(' '))>curBpb()+1e-6){melWarn('That’s too long for the space left in this bar.');ED.len=old.d;ED.dot=old.dot;ED.tri=old.tri;renderMelEditor();return;}
   vSet(ED.bar,next.join(' '));melMsg('');renderGrid();renderEditor();
 }
 function melDel(){
@@ -861,7 +868,8 @@ function hearStop(){
 }
 function hearUI(){
   $('edHearAll').setAttribute('aria-pressed',String(PREV.on));
-  $('edHearAllLabel').textContent=PREV.on?'Stop':(S.loop?'Hear the loop':'Hear from here');
+  $('edHearAllLabel').textContent=PREV.on?'Stop':(S.loop?'Loop':'All');
+  $('edHearAll').setAttribute('aria-label',PREV.on?'Stop':(S.loop?'Hear the loop':'Hear from here'));
 }
 // the first time a written bar is played (Hear works in playing order, like the band)
 const playedAt=w=>Math.max(0,(chartSong.played||chartSong).map.indexOf(w));
