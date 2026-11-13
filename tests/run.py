@@ -819,6 +819,26 @@ async def performance_head_solos_head_out(c):
     ok(not pg.errors, pg.errors)
 
 @test
+async def pickup_on_the_beat_grid(c):
+    # a three-eighth pickup (starts on an off-beat) into bar 1, which has the same three eighths
+    mel = {'pickup': 'C4e F4e Ab4e', 'bars': ['C4e F4e Ab4e rq. rh', 'rw']}
+    for style, count in (('bossa', True), ('bossa', False), ('swing', True), ('swing', False)):
+        pg = await c.page(LAPTOP, storage={'chart': '| Fm7 | Fm7 |', 'melody': mel, 'bpm': 120, 'countIn': count, 'melPlay': True})
+        await ev(pg, 'setStyle(%s)' % json.dumps(style))
+        await ev(pg, '(()=>{window.__T=[];const mv=melVoice;window.melVoice=(m,t,...r)=>{__T.push(t);return mv(m,t,...r)}})()')
+        await pg.click('#play'); await pg.wait_for_timeout(3600 if count else 1800); await pg.click('#play')
+        t = await ev(pg, '__T')
+        ok(len(t) >= 6, '%s %s: %s' % (style, count, t))
+        bd, sw = 0.5, await ev(pg, 'swingNow()')
+        pick = [x - t[3] for x in t[:3]]          # relative to bar 1's downbeat
+        bar1 = [x - t[3] for x in t[3:6]]
+        want = [-(2 - sw) * bd, -1 * bd, -(1 - sw) * bd]   # the "and" of beat 3, beat 4, the "and" of 4
+        ok(all(abs(p - w) < 0.004 for p, w in zip(pick, want)), '%s count=%s pickup %s want %s' % (style, count, pick, want))
+        # bar 1's same notes: on the beat, the "and" (swung or straight), the next beat
+        ok(all(abs(x - w) < 0.004 for x, w in zip(bar1, [0, sw * bd, bd])), '%s count=%s bar 1 %s' % (style, count, bar1))
+        ok(not pg.errors, pg.errors)
+
+@test
 async def editor_copy_cut_paste(c):
     chart = '[A] C | Am7 | Dm7 | G7 |\n[B] F | % | E7 | Am7 |'
     pg = await c.page(PHONE, storage={'chart': chart, 'melody': {'pickup': '', 'bars': ['C5w', 'A4w', '', '', 'F4h & C4h', '', '', '/']}})

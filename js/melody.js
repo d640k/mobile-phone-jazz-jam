@@ -119,11 +119,12 @@ function melVoice(m,t,dur,vel=82,bus=busKy){
 function scheduleMelodyStep(s,beatPos,bar,t,beatDur,sw,audible,pl){
   const tl=getTimeline(pl);
   const list=tl.byBar.get(bar);if(!list)return;
-  const barStart=bar<0?-tl.pickupBeats:bar*curBpb();
-  const within=beatPos-barStart,beatStart=s%2?t-sw*beatDur:t,beat0=Math.floor(within+1e-6);
+  // notes are placed by where they fall in the song (e.abs), on its beat grid: a pickup that
+  // starts on an off-beat lines up with the beats too (and isn't swung in a straight groove)
+  const beatStart=s%2?t-sw*beatDur:t,beat0=Math.floor(beatPos+1e-6);
   for(const e of list){
-    if(e.start<within-1e-6||e.start>=within+0.5-1e-6)continue;
-    const fb=e.start-beat0,tt=beatStart+(Math.abs(fb-0.5)<1e-3?sw:fb)*beatDur;
+    if(e.abs<beatPos-1e-6||e.abs>=beatPos+0.5-1e-6)continue;
+    const fb=e.abs-beat0,tt=beatStart+(Math.abs(fb-0.5)<1e-3?sw:fb)*beatDur;
     if(audible)for(const m of e.midis)melVoice(m,tt,Math.max(0.06,soundBeats(e)*beatDur),melVel(e,m));
     P.uiQ.push({t:tt,mel:e});
   }

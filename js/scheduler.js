@@ -14,7 +14,8 @@ function start(fromBar=0,count=false){
   const pb=getTimeline().pickupBeats;
   P.pickup=!S.loop&&fromBar===0&&pb>0;
   P.counting=S.countIn||count;
-  P.countSteps=P.counting?Math.max(song.bpb*2,Math.ceil(pb*2)):P.pickup?Math.ceil(pb*2):0;
+  // whole beats, so bar 1 lands on a downbeat of the swing pattern (a pickup can start on an off-beat)
+  P.countSteps=P.counting?Math.max(song.bpb*2,Math.ceil(pb-1e-6)*2):P.pickup?Math.ceil(pb-1e-6)*2:0;
   // fromBar is a written bar: start from the first time it's played
   P.startStep=S.loop?0:Math.max(0,song.map.indexOf(fromBar))*song.bpb*2;P.walker=makeWalker();P.compPrev=null;P.compPlan=null;P.two=null;P.stroll=false;P.lastStroll=-9;P.drop=false;P.lastDrop=-9;P.pedal=null;P.xr=null;P.roll=null;P.lastBass=null;P.bossaComp=null;P.bRoot=null;P.uiQ=[];
   P.timer=setInterval(tick,25);tick();
