@@ -22,6 +22,7 @@ function layout(){
   const body=$('panelBody'),ed=$('editor'),cb=$('compBtn');
   if(short&&cb.parentElement!==$('topbar'))$('topbar').insertBefore(cb,$('loopBtn'));
   if(!short&&cb.parentElement!==$('now'))$('now').insertBefore(cb,$('status'));
+  if($('outBtn').parentElement!==cb.parentElement)cb.parentElement.insertBefore($('outBtn'),cb);
   if(wide){
     if(body.parentElement!==$('panel'))$('panel').appendChild(body);
     if(ed.parentElement!==body)body.insertBefore(ed,body.firstChild);
@@ -79,7 +80,10 @@ function renderGrid(){
     else if(chartSong.labels[i+1])c.classList.add('secend');   // double bar line before a new section
     const n=document.createElement('span');n.className='n';
     const lab=chartSong.labels[i];
-    if(lab){const l=document.createElement('span');l.className='lbl';l.textContent=lab;n.appendChild(l);c.classList.add('secstart');}
+    if(lab){
+      const sp=secParts(lab),l=document.createElement('span');l.className='lbl';l.textContent=sp.name||'';if(sp.name)n.appendChild(l);c.classList.add('secstart');
+      if(sp.role){const r=document.createElement('span');r.className='roleTag';r.textContent=sp.role==='head'?'head':'end';n.appendChild(r);}
+    }
     // repeat signs and ending brackets
     const rp=chartSong.reps[i]||{},em=chartSong.endings[i];
     if(rp.rs)c.classList.add('rs');if(rp.re)c.classList.add('re');
@@ -103,7 +107,8 @@ function renderGrid(){
     c.append(n,ch);
     const words=b.length?b.map(x=>x.t).join(', '):'same chord';
     const repTxt=(rp.rs?', start of repeat':'')+(em&&em.first?`, ${em.num===1?'1st':em.num===2?'2nd':em.num+'th'} ending`:'')+(rp.re?', end of repeat':'');
-    c.setAttribute('aria-label',`Bar ${i+1}${lab?', section '+lab:''}${repTxt}: ${words}. ${LOOP.sel?'Choose for the loop':'Edit'}`);
+    const sp=secParts(lab),labTxt=lab?`, section ${sp.name||''}${sp.role==='head'?' (first time only)':sp.role==='end'?' (ending)':''}`:'';
+    c.setAttribute('aria-label',`Bar ${i+1}${labTxt}${repTxt}: ${words}. ${LOOP.sel?'Choose for the loop':'Edit'}`);
     CELLS.push(c);
   });
   curCell=null;layoutLines();
@@ -235,6 +240,22 @@ function spreadTones(cell){
   const w=$('chartWrap'),lim=Math.min($('grid').getBoundingClientRect().right,w.getBoundingClientRect().left+w.clientWidth)-2,over=right-lim;
   if(over>0)for(const t of tns)t.style.left=((parseFloat(t.style.left)||0)-over)+'px';
 }
+// "Head", "Solo 2/4", "Head out" in a performance (with a set number of solos, or sections with
+// a part to play); plain "Chorus 3" otherwise
+function partText(ev){
+  const f=ev.part;
+  if(f&&(f.solos||(chartSong.roles||[]).some(Boolean)))
+    return ' · '+(f.phase==='head'?'Head':f.phase==='out'?'Head out':`Solo ${f.done+1}${f.solos?'/'+f.solos:''}`);
+  return ev.chorus!=null?` · Chorus ${ev.chorus+1}`:'';
+}
+// Out: finish this chorus, play the head out, stop (shown while a performance is playing)
+function outUI(){
+  const b=$('outBtn'),f=P.playing&&P.form;
+  b.hidden=!f||f.phase==='out'||P.ending;
+  b.setAttribute('aria-pressed',String(!!(f&&f.out)));
+  b.querySelector('span').textContent=f&&f.out?'Out next':'Out';
+  if(!b.hidden&&b.parentElement===$('now')){const cb=$('compBtn');b.style.right=`calc(var(--sp-4) + ${cb.hidden?0:cb.offsetWidth+8}px)`;}
+}
 function setNow(cur,next,pos){
   const put=(id,t)=>{const e=$(id);if(e.dataset.v===t)return;e.dataset.v=t;if(/^[A-G]/.test(t))chordInto(e,t);else e.textContent=t;};
   put('cur',cur);put('curS',cur);
@@ -256,7 +277,8 @@ function showBeat(ev){
   const si=sg.segOfBeat[ev.beat],seg=sg.segs[si];
   const nseg=sg.segs[(si+1)%sg.segs.length];
   setNow(seg.chord.sym,nseg!==seg?'→ '+nseg.chord.sym:'',
-    `Bar ${wb+1}/${chartSong.bars.length} · Beat ${ev.beat%sg.bpb+1}`+(ev.chorus!=null?` · Chorus ${ev.chorus+1}`:''));
+    `Bar ${wb+1}/${chartSong.bars.length} · Beat ${ev.beat%sg.bpb+1}`+partText(ev));
+  outUI();
   const feel=ev.stroll?'comp out':(ev.feel||'');
   $('feelChip').textContent=feel;$('feelChip').hidden=!feel;
   const cell=CELLS[wb];
@@ -304,6 +326,7 @@ function followLine(cell){
 function setPlayUI(on){
   $('play').classList.toggle('playing',on);$('playLabel').textContent=on?'Stop':'Play';
   $('play').setAttribute('aria-label',on?'Stop (Space)':'Play (Space)');
+  outUI();
 }
 
 // Replace the chart text and everything that depends on it.
@@ -353,7 +376,7 @@ const LOOP={sel:false,first:null};
 // The loop is chosen on written bars; it plays from the first time bar a is played to the next
 // time bar b is (so a loop over a repeat's 2nd ending takes in the whole repeat).
 function loopSong(){
-  if(!S.loop)return chartSong.played||chartSong;
+  if(!S.loop)return formSong(chartSong,(P.form&&P.form.phase)||'head');
   const [pa,pb]=loopRange();return sliceSong(chartSong,pa,pb);
 }
 function loopRange(){
@@ -370,15 +393,17 @@ function refreshLoopBtn(){
 function applyLoopLive(resumeBar){if(P.playing)P.pending={song:loopSong(),bar:resumeBar||0};}
 function setLoop(a,b){
   S.loop={a:Math.min(a,b),b:Math.max(a,b)};LOOP.sel=false;LOOP.first=null;loopHint('');
+  if(P.playing)P.form=null;   // a loop just loops
   renderGrid();refreshLoopBtn();applyLoopLive(0);if(!P.playing)showBeat(null);
 }
 function clearLoop(silent){
   const was=S.loop;S.loop=null;LOOP.sel=false;LOOP.first=null;loopHint('');
   if(!silent){
     let bar=0;
-    if(was&&P.playing&&song.loopLen){   // carry on from the bar after the one playing now
+    if(was&&P.playing&&song.loopLen){   // carry on from the bar after the one playing now, soloing
       const cur=Math.floor(((P.step-P.countSteps)/2)%song.beats/song.bpb),wb=song.map[cur%song.map.length];
-      bar=Math.max(0,(chartSong.played||chartSong).map.indexOf((wb+1)%chartSong.bars.length));
+      P.form={phase:'solo',solos:S.solos||0,done:0,out:false};
+      bar=Math.max(0,formSong(chartSong,'solo').map.indexOf((wb+1)%chartSong.bars.length));
     }
     if(was)applyLoopLive(bar);
     renderGrid();if(!P.playing)showBeat(null);
@@ -478,11 +503,14 @@ function renderEditor(){
     if(implied){b.onclick=()=>updateSlot(x=>{x.q='m7';});exts.appendChild(b);return;}
     b.onclick=()=>updateSlot(x=>{x.ext=x.ext.includes(e)?x.ext.filter(y=>y!==e):[...x.ext,e];if(x.q==='7alt')x.q='7';});exts.appendChild(b);});
   // section label (starts a new line on the chart)
-  const lab=raw[ED.bar]?raw[ED.bar].label:null,secs=$('edSecs');secs.innerHTML='';
+  const full=raw[ED.bar]?raw[ED.bar].label:null,{name:lab,role}=secParts(full),secs=$('edSecs');secs.innerHTML='';
+  // when it plays: every time, the first time only (intro, interlude), or the ending
+  $('edSecRole').hidden=!lab;
+  for(const b of $('edSecRole').children){b.setAttribute('aria-pressed',String((role||'')===b.dataset.role));b.onclick=()=>setBarLabel(lab,b.dataset.role||null);}
   [['','None'],['A','A'],['B','B'],['C','C'],['D','D']].forEach(([v,t])=>{
     const b=document.createElement('button');b.type='button';b.className='chip';b.textContent=t;
     if(!v)b.setAttribute('aria-label','No section label');
-    b.setAttribute('aria-pressed',String((lab||'')===v));b.onclick=()=>setBarLabel(v);secs.appendChild(b);});
+    b.setAttribute('aria-pressed',String((lab||'')===v));b.onclick=()=>setBarLabel(v,v?undefined:null);secs.appendChild(b);});
   if(document.activeElement!==$('edSecName'))$('edSecName').value=lab&&!['A','B','C','D'].includes(lab)?lab:'';
   // text mode
   if(document.activeElement!==$('edInput')){$('edInput').value=isMel?vGet(ED.bar):(raw[ED.bar]?resolveToks(raw,ED.bar):[]).join(' ');$('edErr').textContent='';}
@@ -492,9 +520,13 @@ function renderEditor(){
   $('edDelete').disabled=raw.length<2;
 }
 // label the selected bar as the start of a section ('' removes it)
-function setBarLabel(v){
+function setBarLabel(v,role){
   const raw=rawBars();if(!raw[ED.bar])return;
+  const cur=secParts(raw[ED.bar].label);
   v=(v||'').replace(/[\[\]|]/g,'').trim().slice(0,12);
+  v=secParts(v).name||'';   // a typed "head" / "end" word is the role, set with the chips
+  if(role===undefined)role=cur.role;
+  if(v&&role)v+=' '+role;
   if((raw[ED.bar].label||'')===v)return;   // unchanged (e.g. the text box losing focus): don't redraw mid-tap
   raw[ED.bar].label=v||null;
   applyChartText(barsToText(raw));renderEditor();
@@ -1192,6 +1224,7 @@ function saveSong(){
   if(S.songs[name]&&name!==S.songName&&!confirm(`Replace the saved “${name}”?`))return;
   S.songs[name]={chart:S.chart,bpm:S.bpm,swingAdj:S.swingAdj,style:S.style,feel:S.bassFeel,dynamics:S.dynamics,section:S.section,saved:Date.now()};
   if(S.composer)S.songs[name].composer=S.composer;
+  if(S.solos)S.songs[name].solos=S.solos;
   if(melHas())Object.assign(S.songs[name],{melody:JSON.parse(JSON.stringify(S.melody)),keySig:S.keySig});
   if(!store.set('songs',S.songs)){delete S.songs[name];songMsg('Couldn’t save: this browser is blocking storage.',true);return;}
   delete S.songsDeleted[name];store.set('songsDeleted',S.songsDeleted);songsChanged();
@@ -1208,12 +1241,13 @@ function loadChart(chart,name,opts={}){
   $('chartWrap').scrollTop=0;   // a different song starts at the top
   queueMicrotask(histReset);
   if(opts.bpm)setBpm(opts.bpm);
+  if(opts.solos!=null){S.solos=opts.solos;store.set('solos',S.solos);$('solos').value=String(S.solos);}
   if(opts.swingAdj!=null)setSlider('Swing',opts.swingAdj);else if(opts.swing)setSlider('Swing',swingAdjFrom(opts.swing));
 }
 function loadSong(name){
   const s=S.songs[name];if(!s)return;
   setStyle(s.style||'swing');
-  loadChart(s.chart,name,{bpm:s.bpm,swing:s.swing,swingAdj:s.swingAdj,melody:s.melody,keySig:s.keySig,composer:s.composer});
+  loadChart(s.chart,name,{bpm:s.bpm,swing:s.swing,swingAdj:s.swingAdj,melody:s.melody,keySig:s.keySig,composer:s.composer,solos:s.solos||0});
   setSection(s.section||'std',false);if(s.feel)setFeel(s.feel);if(s.dynamics!=null)setDynamics(s.dynamics);
   songMsg(`Loaded “${name}”.`);
 }
@@ -1476,6 +1510,9 @@ function init(){
   $('output').addEventListener('sl-change',e=>setOutput(e.target.value));$('output').value=S.output;
   for(const k of ['dr','bs','cp']){refreshMute(k);$(MUTE_BTNS[k]).onclick=()=>setMute(k,!S.mute[k]);}
   $('compBtn').onclick=()=>setMute('cp',!S.mute.cp);
+  $('outBtn').onclick=()=>{if(P.form){P.form.out=!P.form.out;outUI();}};
+  $('solos').value=String(S.solos||0);
+  $('solos').addEventListener('sl-change',e=>{S.solos=+e.target.value||0;store.set('solos',S.solos);if(P.form)P.form.solos=S.solos;});
   for(const [id,k] of MIX_SLIDERS)
     bindSlider(id,()=>S.vol[k],v=>{S.vol[k]=v;store.set('vol_'+S.output,S.vol);applyVolumes();},['dr','bs','cp','ky'].includes(k)?dbLabel:null);
   $('resetMix').onclick=()=>{for(const [id,k] of MIX_SLIDERS)setSlider(id,VOL_DEF[k]);songMsg('');};

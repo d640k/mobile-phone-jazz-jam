@@ -18,7 +18,8 @@ function coverPlan(plan,bar,bpb=4){
 }
 const pickPlan=pats=>new Map(pats[Math.floor(Math.random()*pats.length)]);
 
-const chorusOf=gs=>Math.floor(gs/(song.beats*2));
+// which chorus of the performance (the head is 0); a part swap starts gs again at 0
+const chorusOf=gs=>(P.chorusBase||0)+Math.floor(gs/(song.beats*2));
 const isTwoFeel=ch=>S.bassFeel==='2'||(S.bassFeel==='24'&&ch===0);
 
 // Two-feel bass: plan one bar of half notes (beats 1 and 3), the next downbeat, and pickups.

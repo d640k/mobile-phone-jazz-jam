@@ -162,6 +162,30 @@ function splitChart(text){
   }
   return out;
 }
+// A section label can carry its part in a performance as a last word:
+//   [Intro head], [C head]  played the first time through only (an intro, an interlude)
+//   [Coda end]              played only at the very end, after the head out
+function secParts(label){
+  if(!label)return {name:null,role:null};
+  const m=/^(.*?)\s+(head|end)$/i.exec(label);
+  return m?{name:m[1].trim()||null,role:m[2].toLowerCase()}:{name:label,role:null};
+}
+// The tune for one part of a performance, in playing order:
+//   'head' (the first time through): everything but the ending
+//   'solo' (each solo chorus): only the sections with no role
+//   'out'  (the head out): everything but the head-only sections, then the ending
+// Without roles all three are just the song. Cached on the song.
+function formSong(src,phase){
+  const pl=src.played||src;
+  if(!src.roles||!src.roles.some(Boolean))return pl;
+  src._forms=src._forms||{};
+  if(src._forms[phase])return src._forms[phase];
+  const keep={head:r=>r!=='end',solo:r=>!r,out:r=>r!=='head'}[phase]||(()=>true);
+  let order=pl.map.filter(b=>keep(src.roles[b]));
+  if(!order.length)order=pl.map;
+  const f=order.length===pl.map.length&&order.every((b,k)=>b===pl.map[k])?pl:Object.assign(songFromBars(src,order),{phase});
+  return src._forms[phase]=f;
+}
 // The order bars are played in, following repeats and endings (each repeat is played twice).
 // reps: [{rs,re,end}] per bar; labels: section labels (an ending stops at a new section).
 function playOrder(reps,labels=[]){
@@ -249,6 +273,8 @@ function parseChart(text,bpb=4){
   if(order.length===bars.length&&order.every((b,k)=>b===k)){song.map=order;song.played=song;}
   else{song.map=bars.map((_,k)=>k);song.played=songFromBars(song,order);}
   song.endings=endingMarks(reps,labels);
+  // each bar's section role ('head', 'end' or none), carried on from the last label
+  let role=null;song.roles=labels.map(l=>{if(l)role=secParts(l).role;return role;});
   return song;
 }
 // ---------- Walking bass ----------

@@ -355,6 +355,11 @@ async def chart_tones_in_bar_being_played(c):
         await c.shot(pg, 'chart_tones_held_' + ('mel' if mel else 'plain'))
         ok(not pg.errors, pg.errors)
     # a crowded bar (4 chords) on a phone: tones never overlap and stay on screen
+    # in the plain lead sheet the tones stay inside the playing bar (not over the next line)
+    pg = await c.page(PHONE, storage={'chart': '[Intro head] | Fm7 | Fm7 |\n[A] | Eb7 | Dm7 |', 'showMel': False})
+    await ev(pg, 'setCur(CELLS[0])')
+    r = await ev(pg, '(()=>{const c=CELLS[0].getBoundingClientRect(),t=CELLS[0].querySelector(".tn").getBoundingClientRect();return [t.bottom<=c.bottom+1,t.top>=CELLS[0].querySelector(".chd").getBoundingClientRect().bottom-1]})()')
+    ok(r == [True, True], 'tones under the chord, inside the bar: %s' % r)
     for scheme in ('light', 'dark'):
         pg = await c.page(PHONE, storage={'chart': TEO, 'showMel': False}, scheme=scheme)
         await ev(pg, 'setCur(CELLS[19]);CELLS[19].scrollIntoView()'); await pg.wait_for_timeout(300)
@@ -761,6 +766,56 @@ async def crowded_bar_lines(c):
     await pg.wait_for_timeout(500)
     r = await ev(pg, lines)
     ok([x[0] for x in r][1:3] == ['4,5', '6,7'], '2 + 2: %s' % r)
+    ok(not pg.errors, pg.errors)
+
+@test
+async def performance_head_solos_head_out(c):
+    chart = '[Intro head] | Fm7 | Fm7 |\n[A] | Eb7 | Dm7 |\n[B] | Gm7 | C7 |\n[C head] | Bb7 | A7 |\n[Coda end] | F |'
+    mel = {'pickup': '', 'bars': ['', '', 'C5w', 'D5w', '', '', '', '', '']}
+    pg = await c.page(LAPTOP, storage={'chart': chart, 'melody': mel, 'bpm': 320, 'countIn': False, 'melPlay': True, 'solos': 1})
+    # the three parts of the tune
+    ok(await ev(pg, '["head","solo","out"].map(p=>formSong(chartSong,p).map.join(","))') == ['0,1,2,3,4,5,6,7', '2,3,4,5', '2,3,4,5,8'], 'parts')
+    # the lead sheet tags the sections; screen readers hear it
+    ok(await ev(pg, '[...document.querySelectorAll("#grid .roleTag")].map(t=>t.textContent)') == ['head', 'head', 'end'], 'tags')
+    ok('first time only' in await pg.get_attribute('#grid .cell >> nth=6', 'aria-label'), 'aria')
+    # play it through: head (with intro and interlude), one solo chorus, head out with the coda, stop
+    await ev(pg, """window.SEEN=[];window.PARTS=new Set();window.HITS=[];const mv=melVoice;window.melVoice=(m,...r)=>{HITS.push(m);return mv(m,...r)};
+      setInterval(()=>{const i=CELLS.indexOf(curCell);if(i>=0&&SEEN[SEEN.length-1]!==i)SEEN.push(i);PARTS.add($("pos").textContent.split(" · ").pop())},25)""")
+    await pg.click('#play')
+    await pg.wait_for_timeout(1500)
+    ok(await pg.is_visible('#outBtn'), 'Out shows while playing')
+    await pg.wait_for_function('!P.playing', timeout=25000)
+    seen = await ev(pg, 'SEEN')
+    ok(seen == [0, 1, 2, 3, 4, 5, 6, 7, 2, 3, 4, 5, 2, 3, 4, 5, 8], seen)
+    parts = await ev(pg, '[...PARTS]')
+    ok('Head' in parts and 'Solo 1/1' in parts and 'Head out' in parts, parts)
+    # the melody plays on the heads only: C5 and D5 twice each (head, head out), not in the solo
+    hits = await ev(pg, 'HITS')
+    ok(hits.count(72) == 2 and hits.count(74) == 2, hits)
+    ok(not await pg.is_visible('#outBtn'), 'Out hides when stopped')
+    # keep going + Out: after the head (Out pressed during it), straight to the head out, then stop
+    await ev(pg, 'S.solos=0;SEEN.length=0')
+    await pg.click('#play'); await pg.wait_for_timeout(600)
+    await pg.click('#outBtn')
+    ok(await pg.text_content('#outBtn') == 'Out next' and await pg.get_attribute('#outBtn', 'aria-pressed') == 'true', 'Out pressed')
+    await pg.wait_for_function('!P.playing', timeout=25000)
+    ok(await ev(pg, 'SEEN') == [0, 1, 2, 3, 4, 5, 6, 7, 2, 3, 4, 5, 8], await ev(pg, 'SEEN'))
+    # a loop just loops (no parts)
+    await ev(pg, 'S.loop={a:2,b:3}')
+    ok(await ev(pg, 'loopSong().map.slice(0,4)') == [2, 3, 2, 3], 'loop')
+    await ev(pg, 'S.loop=null')
+    # the editor sets a section's part
+    await ev(pg, 'openEditor(chartSong.src[4],"chords")'); await pg.wait_for_timeout(300)
+    ok(await pg.is_visible('#edSecRole'), 'role chips on a labelled bar')
+    await pg.click('#edSecRole [data-role="head"]')
+    ok('[B head]' in await ev(pg, 'S.chart'), await ev(pg, 'S.chart'))
+    await chip(pg, 'edSecs', 'C').click()
+    ok('[C head] | Gm7' in await ev(pg, 'S.chart'), 'renaming keeps the part: %s' % await ev(pg, 'S.chart'))
+    await pg.click('#edSecRole [data-role=""]')
+    ok('[C] | Gm7' in await ev(pg, 'S.chart'), await ev(pg, 'S.chart'))
+    # the solo count is saved with the song
+    await ev(pg, 'S.solos=4;$("songName").value="Tunisia";saveSong();S.solos=0;loadSong("Tunisia")')
+    ok(await ev(pg, '[S.solos,$("solos").value]') == [4, '4'], 'saved with the song')
     ok(not pg.errors, pg.errors)
 
 @test

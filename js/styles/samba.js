@@ -29,7 +29,7 @@ function scheduleSamba(gs,t,beatDur){
   else if(s8===4&&starts){bn=bossaRoot(ch);len=1.6;vel=0.58;}
   else if(s8===3||s8===4){const r=P.bRoot??bossaRoot(ch);bn=sambaFifth(r);len=s8===3?0.4:1.6;vel=s8===3?0.4:0.58;}
   if(bn!==null){bassNote(bn,T(t-0.002),beatDur*len,vel*rnd(0.92,1.05));P.lastBass=bn;}
-  if(gs%2===0)P.uiQ.push({t,beat,bar,chorus:Math.floor(gs/(song.beats*2))});
+  if(gs%2===0)P.uiQ.push({t,beat,bar,chorus:chorusOf(gs)});
   // comping
   if(s16===0||!P.bossaComp)P.bossaComp=s16===0?planBossa(song,bar,SAMBA_COMP):null;
   if(P.bossaComp&&P.bossaComp.has(s16)){

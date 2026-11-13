@@ -14,7 +14,7 @@ function swingTypical(bpm){
 function swingPct(bpm,adj){return adj<=SWING_MIN?50:Math.max(50,Math.min(78,swingTypical(bpm)+adj));}
 // songs saved before swing followed the tempo kept a fixed %, where 62 was the default
 function swingAdjFrom(pct){return Math.max(SWING_MIN,Math.min(SWING_MAX,pct<=50?SWING_MIN:Math.round(pct-62)));}
-const APP_V='56';   // keep in step with ?v= in index.html and the cache name in sw.js
+const APP_V='58';   // keep in step with ?v= in index.html and the cache name in sw.js
 // Mix defaults (slider positions) and per-output voicing: bus trims and bass EQ.
 // "phone" was tuned by ear on a phone speaker; "head" (headphones/speakers) is calibrated
 // to the same perceived balance using K-weighted loudness.
@@ -40,7 +40,7 @@ const S={
   theme:store.get('theme','system'),panelOpen:store.get('panelOpen',true),
   kbH:store.get('kbH',{}),kbLast:store.get('kbLast',{}),   // keyboard height per orientation (port/land); 0 = hidden
   melody:Object.assign({pickup:'',bars:[]},store.get('melody',{})),keySig:store.get('keySig','C'),
-  showMel:store.get('showMel',true),chartTones:store.get('chartTones',true),melKeys:store.get('melKeys',true),melPlay:store.get('melPlay',false),
+  showMel:store.get('showMel',true),solos:store.get('solos',0),chartTones:store.get('chartTones',true),melKeys:store.get('melKeys',true),melPlay:store.get('melPlay',false),
 };
 S.vol=S.vols[S.output];S.bassSound=S.bassSounds[S.output];
 // beats per bar for each style (default 4)

@@ -5,6 +5,9 @@ function start(fromBar=0,count=false){
   if(typeof hearStop==='function')hearStop();
   if(!chartSong.segs.length){openSheet();return;}
   initAudio();
+  // a performance: the head, solo choruses (S.solos of them, or until Out; 0 = keep going),
+  // the head out, then stop. A loop just loops.
+  P.form=S.loop?null:{phase:'head',solos:S.solos||0,done:0,out:false};P.chorusBase=0;P.ending=false;
   song=loopSong();P.pending=null;
   P.playing=true;P.step=0;P.nextTime=ctx.currentTime+0.08;
   // the pickup plays at the end of the count-in (or alone, just before bar 1, without one)
@@ -35,6 +38,17 @@ function tick(){
     P.step++;
   }
 }
+// What comes after this chorus: solos after the head (the set number, or until Out), then the
+// head out, then the end (null).
+function nextPart(f){
+  if(f.phase==='out')return null;
+  if(f.phase==='solo')f.done++;
+  const solosDone=f.out||(f.solos&&f.done>=f.solos);
+  f.phase=solosDone?'out':'solo';
+  return f.phase;
+}
+// the performance is over: let the last notes ring, then stop
+function finishAt(t){setTimeout(()=>{if(P.playing&&P.ending)stop();},Math.max(0,(t-ctx.currentTime)*1000)+1600);}
 function swingNow(){return (STYLES[S.style]||{}).straight?0.5:swingPct(S.bpm,S.swingAdj)/100;}
 // Grooves register themselves in STYLES (see js/styles/). straight:true = even eighths.
 const STYLES={};
@@ -46,7 +60,14 @@ function scheduleStep(s,t,beatDur){
     return;
   }
   let gs=s-P.countSteps+(P.startStep||0);
-  if(!song.beats)return;
+  if(!song.beats||P.ending)return;
+  // the end of a chorus: on to the next part of the performance
+  if(P.form&&!P.pending&&gs>0&&gs%(song.beats*2)===0){
+    const next=nextPart(P.form);
+    if(!next){P.ending=true;finishAt(t);return;}
+    song=formSong(chartSong,next);P.countSteps=s;P.startStep=0;gs=0;P.chorusBase+=1;
+    P.compPlan=null;P.bossaComp=null;P.two=null;P.fill=null;P.roll=null;P.pedal=null;P.xr=null;P.walker.target=null;
+  }
   // a loop change takes effect on the next downbeat
   if(P.pending&&gs%(song.bpb*2)===0){
     song=P.pending.song;P.countSteps=s-P.pending.bar*song.bpb*2;P.startStep=0;gs=s-P.countSteps;P.pending=null;
@@ -54,13 +75,15 @@ function scheduleStep(s,t,beatDur){
   }
   const q=P.uiQ.length;
   (STYLES[S.style]||STYLES.swing).schedule(gs,t,beatDur);
-  for(let i=q;i<P.uiQ.length;i++)P.uiQ[i].song=song;   // the display needs to know which song (chart or loop)
+  for(let i=q;i<P.uiQ.length;i++){P.uiQ[i].song=song;P.uiQ[i].part=P.form&&{...P.form};}   // the display needs to know which song (chart, loop or part)
   // melody: where this step is in the chart
   const sb=(gs/2)%song.beats,sBar=Math.floor(sb/song.bpb),bar=song.map[sBar%song.map.length],within=sb-sBar*song.bpb;
   // the melody follows the playing order (so a tie reaches whichever bar comes next: after a
   // repeat, that's the 2nd ending); bar stays the written bar for recording and the display
   const pbar=song.pidx?song.pidx[sBar%song.pidx.length]:sBar;
-  scheduleMelodyStep(s,pbar*song.bpb+within,pbar,t,beatDur,sw,audible);
+  // in a performance with a set number of solos, the melody plays on the heads only (you solo)
+  const mAud=audible&&!(P.form&&P.form.solos&&P.form.phase==='solo');
+  scheduleMelodyStep(s,pbar*song.bpb+within,pbar,t,beatDur,sw,mAud,song.pidx?null:song);
   if(s%2===0&&REC.on){
     if(bar!==REC.lastBar){
       if(REC.lastBar===REC.to||(REC.lastBar!=null&&bar<REC.lastBar)){const wait=Math.max(0,(t-ctx.currentTime)*1000);setTimeout(()=>recFinish(),wait);REC.on=false;}

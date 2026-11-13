@@ -72,9 +72,12 @@ let melTimeline=null;
 // The melody in playing order: with repeats, bars come round again and a tie carries on into
 // whichever bar is played next. Each event: bar = its place in the playing order, wbar = the
 // written bar (for the staff and the chart); abs and dur in beats from bar 1.
-function getTimeline(){
-  const pl=chartSong.played||chartSong;
+// pl: a version of the tune in playing order (the head, a solo chorus, the head out); the whole
+// song by default. Each is cached until the melody or the chart changes.
+function getTimeline(pl){
+  const main=chartSong.played||chartSong;pl=pl||main;
   if(melTimeline&&melTimeline.src===pl)return melTimeline;
+  if(pl!==main){const m=getTimeline(main);if(m.others.has(pl))return m.others.get(pl);}
   const bpb=curBpb(),out=[],hold={1:null,2:null};   // ties carry on per voice
   const push=(barIdx,wbar,list,base,v)=>{
     if(!list.length){hold[v]=null;return;}           // a tie into an empty bar goes nowhere
@@ -91,9 +94,10 @@ function getTimeline(){
   const order=pl.map||S.melody.bars.map((_,i)=>i);
   order.forEach((w,k)=>{const s=S.melody.bars[w]||'';push(k,w,melNotesV(s,1),k*bpb,1);push(k,w,melNotesV(s,2),k*bpb,2);});
   out.sort((a,b)=>a.abs-b.abs||a.voice-b.voice);
-  melTimeline={events:out,pickupBeats:pb,byBar:new Map(),src:pl};
-  for(const e of out){if(!melTimeline.byBar.has(e.bar))melTimeline.byBar.set(e.bar,[]);melTimeline.byBar.get(e.bar).push(e);}
-  return melTimeline;
+  const tl={events:out,pickupBeats:pb,byBar:new Map(),src:pl,others:new Map()};
+  for(const e of out){if(!tl.byBar.has(e.bar))tl.byBar.set(e.bar,[]);tl.byBar.get(e.bar).push(e);}
+  if(pl===main)melTimeline=tl;else getTimeline(main).others.set(pl,tl);
+  return tl;
 }
 // scheduled melody note on the keyboard instrument (used for "Play the melody" and "Hear this bar")
 // How long a note sounds, in beats: a little under its length, or about half for staccato
@@ -112,8 +116,8 @@ function melVoice(m,t,dur,vel=82,bus=busKy){
 // Schedule the melody notes that start inside one eighth-note step.
 // beatPos: position of the step in beats, relative to bar 1 of the chart (negative during the count-in);
 // t: the step's time; odd steps start at the swung off-beat.
-function scheduleMelodyStep(s,beatPos,bar,t,beatDur,sw,audible){
-  const tl=getTimeline();
+function scheduleMelodyStep(s,beatPos,bar,t,beatDur,sw,audible,pl){
+  const tl=getTimeline(pl);
   const list=tl.byBar.get(bar);if(!list)return;
   const barStart=bar<0?-tl.pickupBeats:bar*curBpb();
   const within=beatPos-barStart,beatStart=s%2?t-sw*beatDur:t,beat0=Math.floor(within+1e-6);

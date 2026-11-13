@@ -418,3 +418,12 @@ body.melEdit #editor{padding-bottom:6px}
   .voiceRow .btn.small{padding-inline:7px;min-width:0}
   .edFoot>.btn,.edFoot>.barsWrap>.btn{padding-inline:5px;min-width:34px}
 }
+
+/* a section's part in a performance: "head" (first time only) or "end" */
+.cell .roleTag{font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--teal-text,var(--teal));
+  border:1px solid currentColor;border-radius:4px;padding:0 3px;margin-left:4px;line-height:13px}
+#now>#outBtn{position:absolute;top:21px}
+#outBtn{padding:0 12px 0 10px;flex-shrink:0;gap:6px}
+#outBtn[aria-pressed="true"]{background:var(--teal-bg,#d6efe9);color:var(--teal-text,#1d6356);border-color:currentColor}
+/* the room kept for the chord tones is under the chords (they're pinned to the bottom of the bar) */
+#grid:not(.mel) .cell{padding-bottom:calc(4px + var(--tnH,0px))}
