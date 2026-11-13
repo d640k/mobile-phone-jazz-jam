@@ -163,10 +163,13 @@ body.short .lastLine>.addBar{margin-bottom:8px}
 #kbHandle{height:22px;display:flex;align-items:center;justify-content:center;cursor:ns-resize;touch-action:none}
 #kbHandle:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
 #kbHandle span{width:56px;height:5px;border-radius:3px;background:var(--grab)}
+/* On touch screens a strip along the bottom of the keyboard plays nothing: that's where a swipe up
+   to switch apps starts (Android's gesture bar sits over it). The phone's own safe area, if it has one, counts. */
+@media (pointer:coarse){#kb{--kbDead:max(20px, env(safe-area-inset-bottom))}}
 #kb{position:relative;touch-action:none;background:#000;overflow:hidden;height:220px;-webkit-user-select:none;user-select:none}
 .k{position:absolute;top:0}
-.w{background:#f4f1ea;height:100%;border-radius:0 0 7px 7px;box-shadow:inset 0 -6px 0 #ddd7cb}
-.b{background:#1b1b1d;height:60%;z-index:2;border-radius:0 0 5px 5px;box-shadow:inset 0 -4px 0 #333}
+.w{background:#f4f1ea;height:calc(100% - var(--kbDead,0px));border-radius:0 0 7px 7px;box-shadow:inset 0 -6px 0 #ddd7cb}
+.b{background:#1b1b1d;height:calc((100% - var(--kbDead,0px)) * .6);z-index:2;border-radius:0 0 5px 5px;box-shadow:inset 0 -4px 0 #333}
 .w.down{background:#f2cd85}.b.down{background:#9a7430}
 .k .clbl{position:absolute;bottom:10px;left:0;right:0;text-align:center;font-size:11px;color:#5c574d;pointer-events:none}
 .dot{position:absolute;left:50%;width:12px;height:12px;margin-left:-6px;pointer-events:none;display:none}

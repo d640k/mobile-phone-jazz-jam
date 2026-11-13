@@ -1179,6 +1179,53 @@ async def triplets_of_every_length(c):
     ok(not pg.errors, pg.errors)
 
 @test
+async def swipe_up_from_keys_writes_nothing(c):
+    pg = await c.page(PHONE, storage={'chart': '| C | F |', 'showMel': True, 'melody': {'pickup': '', 'bars': ['']}})
+    await pg.locator('#grid .cell').nth(0).click()
+    await pg.click('#edPartMel')
+    await pg.wait_for_function('document.querySelectorAll(".staff svg").length>0', timeout=8000)
+    # touch events on a key: down at (dx,dy) from the key's lower part, then moves / up / cancel
+    async def touch(m, steps, id=7, low=40, from_kb=False):
+        return await ev(pg, f"""(async()=>{{const k=$("kb").querySelector('[data-m="{m}"]'),r=k.getBoundingClientRect(),x=r.left+r.width/2,y=({'$("kb").getBoundingClientRect().bottom' if from_kb else 'r.bottom'})-{low};
+          const fire=(t,yy)=>$("kb").dispatchEvent(new PointerEvent(t,{{pointerId:{id},pointerType:"touch",clientX:x,clientY:yy,bubbles:true,cancelable:true}}));
+          fire("pointerdown",y);const was=$("kb").querySelector('[data-m="{m}"]').classList.contains("down");
+          for(const s of {json.dumps(steps)}){{if(s[0]==="wait")await new Promise(r=>setTimeout(r,s[1]));else fire(s[0],y-s[1]);}}
+          return [was,melGet(0),$("kb").querySelectorAll(".down").length]}})()""")
+    ok(await ev(pg, 'matchMedia("(pointer:coarse)").matches'), 'phone emulation is a touch screen')
+    # a tap: sounds at once, written when the finger lifts
+    r = await touch(60, [['wait', 60], ['pointerup', 0]])
+    ok(r == [True, 'C4q', 0], 'tap %s' % r)
+    # a swipe up (the switch-apps gesture): silenced, not written
+    r = await touch(62, [['pointermove', 10], ['pointermove', 30], ['pointermove', 60], ['pointercancel', 60]])
+    ok(r[1] == 'C4q' and r[2] == 0, 'swipe up %s' % r)
+    # the system takes the touch over (pointercancel straight away): not written
+    r = await touch(64, [['wait', 30], ['pointercancel', 0]])
+    ok(r[1] == 'C4q' and r[2] == 0, 'cancel %s' % r)
+    # the app hidden mid-touch
+    await ev(pg, 'Object.defineProperty(document,"hidden",{configurable:true,get:()=>window.__h||false})')
+    r = await touch(65, [['wait', 30]])
+    await ev(pg, 'window.__h=true;document.dispatchEvent(new Event("visibilitychange"));window.__h=false')
+    ok(await ev(pg, 'melGet(0)') == 'C4q' and await ev(pg, '$("kb").querySelectorAll(".down").length') == 0, 'hidden %s' % await ev(pg, 'melGet(0)'))
+    await ev(pg, '$("kb").dispatchEvent(new PointerEvent("pointerup",{pointerId:7,pointerType:"touch",bubbles:true}))')
+    # held: written while still down (so held keys still stack into chords)
+    r = await touch(67, [['wait', 320]], id=8)
+    ok(r[1] == 'C4q G4q', 'held %s' % r)
+    await ev(pg, '$("kb").dispatchEvent(new PointerEvent("pointerup",{pointerId:8,pointerType:"touch",bubbles:true}))')
+    # a two-finger chord held together stacks into one note
+    await ev(pg, 'ED.chord=false')
+    await ev(pg, """(async()=>{const fire=(t,id,m)=>{const r=$("kb").querySelector('[data-m="'+m+'"]').getBoundingClientRect();$("kb").dispatchEvent(new PointerEvent(t,{pointerId:id,pointerType:"touch",clientX:r.left+r.width/2,clientY:r.bottom-40,bubbles:true}))};
+      fire("pointerdown",11,60);fire("pointerdown",12,64);await new Promise(r=>setTimeout(r,320));fire("pointerup",11,60);fire("pointerup",12,64)})()""")
+    await pg.wait_for_timeout(350)
+    ok(await ev(pg, 'melGet(0)') == 'C4q G4q C4+E4q', await ev(pg, 'melGet(0)'))
+    # the strip along the bottom of the keys plays nothing
+    r = await touch(69, [['pointerup', 0]], id=9, low=8, from_kb=True)
+    ok(r[0] is False and r[1] == 'C4q G4q C4+E4q', 'dead strip %s' % r)
+    # the P-145 (and a mouse) still write straight away
+    await key_down(pg, 71)
+    ok((await ev(pg, 'melGet(0)')).endswith('B4q'), await ev(pg, 'melGet(0)'))
+    ok(not pg.errors, pg.errors)
+
+@test
 async def melody_step_entry_phone(c):
     pg = await c.page(PHONE, storage={'chart': BLUES, 'keySig': 'F'})
     await pg.locator('#grid .cell').nth(0).click()

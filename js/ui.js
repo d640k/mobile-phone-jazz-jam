@@ -979,18 +979,38 @@ function release(id){
 }
 function wireKeyboard(){
   const kb=$('kb');
+  // A touch on the keys sounds at once, but in the melody editor it's only written once it's clearly
+  // a key press: when the finger lifts, or after a moment held down (so held chords still stack).
+  // If it turns into a swipe up (Android's switch-apps gesture) or the system takes it over, it's
+  // silenced and never written.
+  const PEND=new Map();   // pointerId -> {m, y, timer}
+  const commit=id=>{const p=PEND.get(id);if(!p)return;PEND.delete(id);clearTimeout(p.timer);melKey(p.m);};
+  const drop=id=>{const p=PEND.get(id);if(p){clearTimeout(p.timer);PEND.delete(id);}};
+  const swiped=id=>{   // a system gesture: stop the sound now, write nothing
+    drop(id);const a=active.get(id);if(!a)return;
+    active.delete(id);markDown(a.m,false);recNoteOff(a.m);a.h.releaseNow();SWIPED.add(id);
+  };
   kb.addEventListener('pointerdown',e=>{
     e.preventDefault();
     try{kb.setPointerCapture(e.pointerId);}catch(_){}
-    const m=keyAt(e.clientX,e.clientY);if(m!=null){press(e.pointerId,m);melKey(m);}
+    const m=keyAt(e.clientX,e.clientY);if(m==null)return;
+    press(e.pointerId,m);
+    if(e.pointerType==='touch'&&melKeyWrites())PEND.set(e.pointerId,{m,x:e.clientX,y:e.clientY,timer:setTimeout(()=>commit(e.pointerId),KEY_SETTLE)});
+    else melKey(m);
   });
   kb.addEventListener('pointermove',e=>{
+    if(SWIPED.has(e.pointerId))return;
+    const p=PEND.get(e.pointerId);
+    if(p&&p.y-e.clientY>SWIPE_UP&&p.y-e.clientY>2*Math.abs(e.clientX-p.x)){swiped(e.pointerId);return;}
     if(!active.has(e.pointerId))return;
     const m=keyAt(e.clientX,e.clientY),a=active.get(e.pointerId);
-    if(m!==a.m){release(e.pointerId);if(m!=null)press(e.pointerId,m);}
+    if(m!==a.m){commit(e.pointerId);release(e.pointerId);if(m!=null)press(e.pointerId,m);}
   });
-  const up=e=>release(e.pointerId);
-  kb.addEventListener('pointerup',up);kb.addEventListener('pointercancel',up);kb.addEventListener('lostpointercapture',up);
+  const up=e=>{SWIPED.delete(e.pointerId);commit(e.pointerId);release(e.pointerId);};
+  const cancel=e=>{if(PEND.has(e.pointerId))swiped(e.pointerId);SWIPED.delete(e.pointerId);release(e.pointerId);};
+  kb.addEventListener('pointerup',up);kb.addEventListener('pointercancel',cancel);kb.addEventListener('lostpointercapture',cancel);
+  // the app going to the background mid-touch: that was a system gesture too
+  document.addEventListener('visibilitychange',()=>{if(document.hidden)for(const id of [...PEND.keys()])swiped(id);});
   kb.addEventListener('contextmenu',e=>e.preventDefault());
   // Cancel the browser's touch gestures on the keys (stops Android's long-press buzz).
   for(const ev of ['touchstart','touchmove','touchend'])kb.addEventListener(ev,e=>{if(e.cancelable)e.preventDefault();},{passive:false});
@@ -1005,6 +1025,9 @@ function melKey(m){
   STACK.ref=melAdd(name);STACK.held=new Set(STACK.ref?[m]:[]);
 }
 function melKeyUp(m){STACK.held.delete(m);}
+// would a key press write a note just now? (the melody editor is open for step entry)
+function melKeyWrites(){return ED.open&&ED.part==='melody'&&!ED.text&&!REC.on;}
+const KEY_SETTLE=220,SWIPE_UP=18,SWIPED=new Set();   // ms before a held touch counts; px up that makes a swipe
 // add (or with Chord on, toggle) a pitch in the note at STACK.ref
 function melStack(name,m){
   const {bar,i}=STACK.ref,toks=toksOf(bar),n=melTok(toks[i]||'');
