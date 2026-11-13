@@ -49,7 +49,8 @@ function togglePanel(){
 // ---------- Chart (lead-sheet layout) ----------
 // Bars sit in lines separated by barlines. Each bar is as wide as its chords need;
 // lines hold 4 bars (8 on a short landscape phone) and break early only when the bars don't fit,
-// splitting 4 into 2+2 rather than 3+1. A section label always starts a new line.
+// onto as few lines as will hold them, as evenly as they'll go (4 alike: 2+2, not 3+1).
+// A section label always starts a new line.
 let CELLS=[],PICK=null;
 // melody view: the staff is shown when the song has a melody (or you're entering one)
 const melOn=()=>S.showMel&&(melHas()||(ED.open&&ED.part==='melody'));
@@ -137,10 +138,29 @@ function layoutLines(){
   const per=document.body.classList.contains('short')?8:4;
   const real=(a,b)=>{let n=0;for(let i=a;i<b;i++)if(items[i].bar>=0)n++;return n;};
   const lines=[];
+  // A group of bars too wide for one line goes onto the fewest lines that fit, split where the
+  // lines come out most even (so four similar bars go 2+2, but one crowded bar doesn't drag a
+  // lonely neighbour onto a line of its own). The pickup stays with bar 1; a single bar wider
+  // than the line gets a line to itself (and shrinks).
   const place=(a,b,split)=>{
-    let sum=head(lines.length);for(let i=a;i<b;i++)sum+=nat[i];
-    if(sum<=W||b-a===1||(b-a===2&&items[a].bar<0)){lines.push([a,b,split]);return;}
-    const mid=a+Math.ceil((b-a)/2);place(a,mid,true);place(mid,b,true);
+    const width=(x,y,li)=>{let s=head(li);for(let i=x;i<y;i++)s+=nat[i];return s;};
+    const fits=(x,y,li)=>width(x,y,li)<=W||y-x===1||(y-x===2&&items[x].bar<0);
+    const L0=lines.length;
+    if(fits(a,b,L0)){lines.push([a,b,split]);return;}
+    // best[k][i]: the most even way to put items a..i-1 on k lines -> {worst, cuts}
+    let best=new Map([[a,{worst:0,cuts:[]}]]);
+    for(let k=1;k<=b-a;k++){
+      const next=new Map();
+      for(const [i,p] of best)for(let j=i+1;j<=b;j++){
+        if(j<b&&items[j-1].bar<0)continue;              // never break between the pickup and bar 1
+        if(!fits(i,j,L0+k-1))break;
+        const w=Math.max(p.worst,width(i,j,L0+k-1)),q=next.get(j);
+        if(!q||w<q.worst)next.set(j,{worst:w,cuts:[...p.cuts,j]});
+      }
+      if(next.has(b)){let x=a;for(const j of next.get(b).cuts){lines.push([x,j,true]);x=j;}return;}
+      best=next;
+    }
+    lines.push([a,b,split]);   // (can't happen: every bar fits on a line of its own)
   };
   let start=0;
   for(let i=1;i<=items.length;i++){
@@ -157,9 +177,12 @@ function layoutLines(){
     // (keeping a full line's bar spacing)
     const n=real(a,b),last=b===items.length,share=!split&&n<per&&last?Math.max(sum,W*n/per):W;
     row.style.width=Math.min(W,share)+'px';
+    // with the staff, spare width goes mostly to the bars with more in them. The shares add up to 1
+    // per line: below 1 the browser hands out only that fraction of the spare room (a lone empty
+    // bar came out short of the line's end).
+    let gsum=0;for(let i=a;i<b;i++)gsum+=mel?nat[i]/50:1;
     for(let i=a;i<b;i++){
-      // with the staff, spare width goes mostly to the bars with more in them
-      const c=items[i].el,extra=i===a?head(li):0;c.style.flex=`${mel?(nat[i]/50).toFixed(2):1} 1 ${nat[i]+extra}px`;
+      const c=items[i].el,extra=i===a?head(li):0;c.style.flex=`${((mel?nat[i]/50:1)/gsum).toFixed(4)} 1 ${nat[i]+extra}px`;
       if(b-a===1&&nat[i]>W)c.style.setProperty('--k',Math.max(0.6,W/nat[i]).toFixed(2));
       row.appendChild(c);
     }

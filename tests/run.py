@@ -738,6 +738,32 @@ async def staff_chords_never_touch(c):
         ok(not pg.errors, pg.errors)
 
 @test
+async def crowded_bar_lines(c):
+    # Song for My Father: pickup + a crowded bar 1, then empty bars
+    mel = {'pickup': 'C4e F4e Ab4e', 'bars': ['C5et Db5st C5st Bb4st Ab4e Bb4e~ Bb4et C5st Bb4st Ab4st F4e Ab4e'] + [''] * 7}
+    chart = '[A] |: Fm7 | % | Eb7 | % |\n| Db7 C7sus4 | Fm7 | % | % :|'
+    lines = '[...document.querySelectorAll("#grid .sys")].map(r=>[[...r.querySelectorAll(".cell")].map(c=>c===PICK?"p":c.dataset.bar).join(","),Math.round(r.getBoundingClientRect().width),Math.round([...r.querySelectorAll(".cell")].reduce((w,c)=>w+c.getBoundingClientRect().width,0))])'
+    pg = await c.page(PHONE, storage={'chart': chart, 'keySig': 'Ab', 'melody': mel, 'showMel': True})
+    await pg.wait_for_function('document.querySelector("#grid .staff")')
+    r = await ev(pg, lines)
+    ok([x[0] for x in r] == ['p,0', '1,2,3', '4,5,6,7'], 'the empty bars share a line: %s' % r)
+    ok(all(abs(x[2] - x[1]) <= 2 for x in r), 'every line full: %s' % r)
+    # a lone bar between two crowded ones still fills its line
+    crowd = 'C5s D5s E5s F5s G5s A5s B5s C6s C5s D5s E5s F5s G5s A5s B5s C6s'
+    await ev(pg, '(m=>{S.melody=m;melTimeline=null;applyChartText("| C | F | G | C |")})(%s)' % json.dumps({'pickup': '', 'bars': [crowd, '', crowd, '']}))
+    await pg.wait_for_timeout(500)
+    r = await ev(pg, lines)
+    ok(all(abs(x[2] - x[1]) <= 2 for x in r[:-1]), 'lines full: %s' % r)
+    # four similar bars that don't fit go 2 + 2, not 3 + 1
+    half = 'C5e D5e E5e F5e G5e A5e B5e C6e'
+    # (on the second line group: the first line also carries the time signature)
+    await ev(pg, '(m=>{S.melody=m;melTimeline=null;applyChartText("| C | C | C | C |\\n| C | F | G | C |\\n| C |")})(%s)' % json.dumps({'pickup': '', 'bars': [''] * 4 + [half] * 4}))
+    await pg.wait_for_timeout(500)
+    r = await ev(pg, lines)
+    ok([x[0] for x in r][1:3] == ['4,5', '6,7'], '2 + 2: %s' % r)
+    ok(not pg.errors, pg.errors)
+
+@test
 async def editor_copy_cut_paste(c):
     chart = '[A] C | Am7 | Dm7 | G7 |\n[B] F | % | E7 | Am7 |'
     pg = await c.page(PHONE, storage={'chart': chart, 'melody': {'pickup': '', 'bars': ['C5w', 'A4w', '', '', 'F4h & C4h', '', '', '/']}})
