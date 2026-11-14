@@ -427,3 +427,6 @@ body.melEdit #editor{padding-bottom:6px}
 #outBtn[aria-pressed="true"]{background:var(--teal-bg,#d6efe9);color:var(--teal-text,#1d6356);border-color:currentColor}
 /* the room kept for the chord tones is under the chords (they're pinned to the bottom of the bar) */
 #grid:not(.mel) .cell{padding-bottom:calc(4px + var(--tnH,0px))}
+/* the bottom row (and the Bars menu in it) sits above the editor's contents: being sticky it makes
+   its own layer, which Shoelace's selected Root/Bass button (a z-index of its own) used to draw over */
+.edFoot{z-index:5}

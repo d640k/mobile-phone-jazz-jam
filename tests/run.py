@@ -839,6 +839,27 @@ async def pickup_on_the_beat_grid(c):
         ok(not pg.errors, pg.errors)
 
 @test
+async def bars_menu_on_top(c):
+    # nothing in the editor may draw over the open Bars menu (the Root/Bass switch once did)
+    import io
+    from PIL import Image
+    for dev in (PHONE, LAPTOP):
+        pg = await c.page(dev, storage={'chart': '[Intro] | Eb7 | Dm | Eb7 | Dm |\n[A] | Eb7 | Dm | Eb7 | Dm |', 'showMel': False})
+        await ev(pg, 'openEditor(4,"chords")'); await pg.wait_for_timeout(300)
+        await pg.click('#edBars'); await pg.wait_for_timeout(300)
+        # no pixel of the selected Root button's amber shows through the menu
+        box = await pg.locator('#barsMenu').bounding_box()
+        im = Image.open(io.BytesIO(await pg.screenshot(clip=box))).convert('RGB')
+        acc = await ev(pg, 'getComputedStyle(document.documentElement).getPropertyValue("--accent").trim()')
+        ar, ag, ab = (int(acc[i:i + 2], 16) for i in (1, 3, 5))
+        n = sum(1 for (r, g, b_) in im.getdata() if abs(r - ar) + abs(g - ag) + abs(b_ - ab) < 40)
+        ok(n < 20, 'something amber draws over the menu: %d px (%s)' % (n, acc))
+        hits = await ev(pg, """[...$("barsMenu").querySelectorAll("button")].filter(b=>b.offsetParent).map(b=>{const r=b.getBoundingClientRect();
+          return [[r.left+8,r.top+r.height/2],[r.left+r.width/2,r.top+r.height/2],[r.right-8,r.top+r.height/2]].every(([x,y])=>{const e=document.elementFromPoint(x,y);return e&&$("barsMenu").contains(e)})?"":b.textContent.trim()}).filter(Boolean)""")
+        ok(not hits, 'covered: %s' % hits)
+        ok(not pg.errors, pg.errors)
+
+@test
 async def editor_copy_cut_paste(c):
     chart = '[A] C | Am7 | Dm7 | G7 |\n[B] F | % | E7 | Am7 |'
     pg = await c.page(PHONE, storage={'chart': chart, 'melody': {'pickup': '', 'bars': ['C5w', 'A4w', '', '', 'F4h & C4h', '', '', '/']}})
