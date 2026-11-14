@@ -422,7 +422,11 @@ function loopTap(i){
 // ---------- Bar editor ----------
 const ED={open:false,bar:0,slot:0,mode:'root',text:false,part:'chords',len:'q',dot:false,tri:false,note:null,chord:false,insert:false,voice:1};   // insert: keys add before the selected note   // note: selected note in the bar (null = adding at the end)
 const rawBars=()=>splitChart(S.chart);
-function edToks(){const raw=rawBars();return raw[ED.bar]?resolveToks(raw,ED.bar):[];}
+function edToks(){
+  const raw=rawBars();if(!raw[ED.bar])return [];
+  const t=resolveToks(raw,ED.bar);
+  return t.every(x=>x==='/'||x==='%')?[heldChord(raw,ED.bar)]:t;   // a held bar shows the chord it holds
+}
 function edChords(){return edToks().filter(t=>t!=='/'&&t!=='%');}
 function openEditor(rawIndex,part){
   if(LOOP.sel||REC.review)return;
@@ -447,15 +451,18 @@ function setBarToks(toks){
   raw[ED.bar].toks=toks.length?toks:['%'];
   applyChartText(barsToText(raw));renderEditor();
 }
-// the chord made by + Chord / + Bar, until it's first changed
+// the chord made by + Chord / + Bar (or held from the bar before), until it's first changed
 function markFresh(bar,slot){ED.fresh={bar,slot};}
 function isFresh(){return !!ED.fresh&&ED.fresh.bar===ED.bar&&ED.fresh.slot===ED.slot;}
 function updateSlot(fn){
+  const raw=rawBars(),held=!!raw[ED.bar]&&raw[ED.bar].toks.every(t=>t==='%'||t==='/');
   const toks=edToks(),idx=toks.map((t,i)=>t!=='/'&&t!=='%'?i:-1).filter(i=>i>=0);
-  if(!idx.length){toks.splice(0,toks.length,'C');idx.push(0);}
+  // a bar that only holds the chord before ("%" or "/") starts from that chord
+  if(!idx.length){toks.splice(0,toks.length,heldChord(raw,ED.bar));idx.push(0);}
   const ti=idx[Math.min(ED.slot,idx.length-1)];
   const p=chordParts(toks[ti])||{root:'C',q:'',ext:[],bass:null};
-  const r0=p.root,q0=p.q,e0=(p.ext||[]).join(),fresh=isFresh();
+  // ...and, like a chord just added, it's a copy: the first change makes a new chord
+  const r0=p.root,q0=p.q,e0=(p.ext||[]).join(),fresh=isFresh()||held;
   fn(p);delete p.raw;if(p.q==null)p.q='';
   // a chord just added copies the one before; making it a new chord (another root or quality)
   // starts it plain: the quality stays, its extensions and slash bass don't (E7#9, + Chord, A: A7)

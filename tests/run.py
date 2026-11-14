@@ -883,6 +883,15 @@ async def new_chord_starts_plain(c):
     # on a fresh chord, tapping an extension first is kept
     await pg.click('#edInsert'); await chip(pg, 'edExts', '9').click(); await chip(pg, 'edRoots', 'G').click()
     ok(await bar(3) == 'Gm9', await bar(3))
+    # a bar that just holds the chord before (a new song's | % | bars, or | / |) is a copy too:
+    # a new quality drops the extensions
+    for hold in ('%', '/'):
+        await ev(pg, 'applyChartText("| D7#9 | %s | %s |")' % (hold, hold)); await ev(pg, 'openEditor(1,"chords")')
+        ok(await ev(pg, 'edChords()') == ['D7#9'], 'starts from the held chord (%s): %s' % (hold, await ev(pg, 'edChords()')))
+        await chip(pg, 'edQuals', 'm7').click()
+        ok(await bar(1) == 'Dm7', '%s: %s' % (hold, await bar(1)))
+        # (the bar after still holds: it follows the new chord)
+        ok(await bar(2) == hold, await bar(2))
     # respelling a fresh chord's root isn't a new chord
     await ev(pg, 'applyChartText("| Gb7#11 |")'); await ev(pg, 'openEditor(0,"chords")')
     await pg.get_by_role('button', name='+ Chord').click(); await pg.click('#edSharp')
