@@ -860,6 +860,36 @@ async def bars_menu_on_top(c):
         ok(not pg.errors, pg.errors)
 
 @test
+async def new_chord_starts_plain(c):
+    pg = await c.page(LAPTOP, storage={'chart': '| E7#9 | Cmaj7/E |', 'showMel': False})
+    bar = lambda i: ev(pg, 'splitChart(S.chart)[%d].toks.join(" ")' % i)
+    await ev(pg, 'openEditor(0,"chords")'); await pg.wait_for_timeout(200)
+    # + Chord copies E7#9; a new root makes it A7 (the quality stays, the #9 doesn't)
+    await pg.get_by_role('button', name='+ Chord').click()
+    ok(await bar(0) == 'E7#9 E7#9', await bar(0))
+    await chip(pg, 'edRoots', 'A').click()
+    ok(await bar(0) == 'E7#9 A7', await bar(0))
+    # after that it's an ordinary chord: add a 9, change the root, the 9 stays
+    await chip(pg, 'edExts', '9').click(); await chip(pg, 'edRoots', 'D').click()
+    ok(await bar(0) == 'E7#9 D9', await bar(0))
+    # an existing chord keeps its extensions when its root changes (as before)
+    await ev(pg, 'ED.slot=0;renderEditor()'); await chip(pg, 'edRoots', 'F').click()
+    ok((await bar(0)).startswith('F7#9 '), await bar(0))
+    # + Bar after Cmaj7/E: the new bar holds Cmaj7/E; a new quality starts it plain (no slash bass)
+    await ev(pg, 'ED.bar=1;ED.slot=0;renderEditor()'); await pg.click('#edInsert')
+    ok(await bar(2) == 'Cmaj7/E', await bar(2))
+    await chip(pg, 'edQuals', 'm7').click()
+    ok(await bar(2) == 'Cm7', await bar(2))
+    # on a fresh chord, tapping an extension first is kept
+    await pg.click('#edInsert'); await chip(pg, 'edExts', '9').click(); await chip(pg, 'edRoots', 'G').click()
+    ok(await bar(3) == 'Gm9', await bar(3))
+    # respelling a fresh chord's root isn't a new chord
+    await ev(pg, 'applyChartText("| Gb7#11 |")'); await ev(pg, 'openEditor(0,"chords")')
+    await pg.get_by_role('button', name='+ Chord').click(); await pg.click('#edSharp')
+    ok(await bar(0) == 'Gb7#11 F#7#11', await bar(0))
+    ok(not pg.errors, pg.errors)
+
+@test
 async def editor_copy_cut_paste(c):
     chart = '[A] C | Am7 | Dm7 | G7 |\n[B] F | % | E7 | Am7 |'
     pg = await c.page(PHONE, storage={'chart': chart, 'melody': {'pickup': '', 'bars': ['C5w', 'A4w', '', '', 'F4h & C4h', '', '', '/']}})

@@ -447,12 +447,22 @@ function setBarToks(toks){
   raw[ED.bar].toks=toks.length?toks:['%'];
   applyChartText(barsToText(raw));renderEditor();
 }
+// the chord made by + Chord / + Bar, until it's first changed
+function markFresh(bar,slot){ED.fresh={bar,slot};}
+function isFresh(){return !!ED.fresh&&ED.fresh.bar===ED.bar&&ED.fresh.slot===ED.slot;}
 function updateSlot(fn){
   const toks=edToks(),idx=toks.map((t,i)=>t!=='/'&&t!=='%'?i:-1).filter(i=>i>=0);
   if(!idx.length){toks.splice(0,toks.length,'C');idx.push(0);}
   const ti=idx[Math.min(ED.slot,idx.length-1)];
   const p=chordParts(toks[ti])||{root:'C',q:'',ext:[],bass:null};
+  const r0=p.root,q0=p.q,e0=(p.ext||[]).join(),fresh=isFresh();
   fn(p);delete p.raw;if(p.q==null)p.q='';
+  // a chord just added copies the one before; making it a new chord (another root or quality)
+  // starts it plain: the quality stays, its extensions and slash bass don't (E7#9, + Chord, A: A7)
+  // (respelling the root, Gb <-> F#, isn't a new chord)
+  const newChord=(p.root!==r0&&ENHARMONIC[r0]!==p.root)||p.q!==q0;
+  if(fresh&&(p.ext||[]).join()===e0&&newChord){p.ext=[];p.bass=null;}
+  if(newChord||(p.ext||[]).join()!==e0)ED.fresh=null;
   toks[ti]=chordFromParts(p);setBarToks(toks);
 }
 function renderEditor(){
@@ -473,7 +483,7 @@ function renderEditor(){
   chords.forEach((c,j)=>{const b=document.createElement('button');b.type='button';b.className='slot';b.textContent=pretty(c);
     b.setAttribute('aria-pressed',String(j===ED.slot));b.setAttribute('aria-label',`Chord ${j+1}: ${c}`);b.onclick=()=>{ED.slot=j;renderEditor();};slots.appendChild(b);});
   if(chords.length<curBpb()){const a=document.createElement('button');a.type='button';a.className='btn small';a.textContent='+ Chord';
-    a.onclick=()=>{const c=chords[chords.length-1]||'C';setBarToks([...chords,c]);ED.slot=chords.length;renderEditor();};slots.appendChild(a);}
+    a.onclick=()=>{const c=chords[chords.length-1]||'C';setBarToks([...chords,c]);ED.slot=chords.length;markFresh(ED.bar,ED.slot);renderEditor();};slots.appendChild(a);}
   if(chords.length>1){const r=document.createElement('button');r.type='button';r.className='btn small';r.textContent='Remove chord';
     r.onclick=()=>{const c=[...chords];c.splice(ED.slot,1);ED.slot=Math.max(0,ED.slot-1);setBarToks(c);};slots.appendChild(r);}
   const p=chordParts(chords[ED.slot])||{root:null,q:null,ext:[],bass:null};
@@ -558,7 +568,7 @@ function heldChord(raw,i){
 }
 function insertBar(){
   const raw=rawBars();
-  raw.splice(ED.bar+1,0,{label:null,toks:[heldChord(raw,ED.bar)]});melInsertBar(ED.bar+1);ED.bar++;ED.slot=0;
+  raw.splice(ED.bar+1,0,{label:null,toks:[heldChord(raw,ED.bar)]});melInsertBar(ED.bar+1);ED.bar++;ED.slot=0;markFresh(ED.bar,0);
   applyChartText(barsToText(raw));renderEditor();
 }
 function deleteBar(){
@@ -575,7 +585,7 @@ function deleteBar(){
 }
 function addBarAtEnd(){
   const raw=rawBars();raw.push({label:null,toks:[heldChord(raw,raw.length-1)]});
-  applyChartText(barsToText(raw));openEditor(raw.length-1);
+  applyChartText(barsToText(raw));openEditor(raw.length-1);markFresh(raw.length-1,0);
 }
 
 // ---------- Selecting bars; copy, cut, paste ----------
